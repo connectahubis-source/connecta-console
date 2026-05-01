@@ -7742,6 +7742,8 @@ function PageEventCreate(){
   const [capacity, setCapacity] = useState("");
   const [regOpenDate, setRegOpenDate] = useState("");
   const [regCloseDate, setRegCloseDate] = useState("");
+  // 公開予約日時 (Phase 6.2): ISO 形式 'YYYY-MM-DDTHH:mm'
+  const [publishAt, setPublishAt] = useState("");
   const [requirements, setRequirements] = useState("");
   const [customQuestions, setCustomQuestions] = useState("");
   // 決済
@@ -7756,9 +7758,12 @@ function PageEventCreate(){
   // 公開
   const [status, setStatus] = useState("下書き");
   const [snsCopy, setSnsCopy] = useState("");
-  // ポスター画像 (Phase 6)
+  // ポスター画像 (Phase 6) - 縦長ポスター
   const [posterUrl, setPosterUrl] = useState("");
   const [posterUploading, setPosterUploading] = useState(false);
+  // ヒーロー画像 (Phase 6.1) - 横長ヒーロー画像
+  const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [heroUploading, setHeroUploading] = useState(false);
 
   // 通信state
   const [loading, setLoading] = useState(false);
@@ -7795,6 +7800,7 @@ function PageEventCreate(){
         setCapacity(ev.capacity ? String(ev.capacity) : "");
         setRegOpenDate(ev.regOpenDate || "");
         setRegCloseDate(ev.regCloseDate || "");
+        setPublishAt(ev.publishAt || "");
         setRequirements(ev.requirements || "");
         setCustomQuestions(ev.customQuestions || "");
         setFee(ev.fee ? String(ev.fee) : "");
@@ -7803,6 +7809,7 @@ function PageEventCreate(){
         setStatus(ev.status || "下書き");
         setSnsCopy(ev.snsCopy || "");
         setPosterUrl(ev.posterUrl || "");
+        setHeroImageUrl(ev.heroImageUrl || "");
         setOnline(ev.online === true || ev.online === 'true');
         setZoomURL(ev.zoomURL || "");
         setFormat(ev.format || 'single');
@@ -7868,6 +7875,7 @@ function PageEventCreate(){
       capacity: Number(capacity) || 0,
       regOpenDate: regOpenDate || '',
       regCloseDate: regCloseDate || '',
+      publishAt: publishAt || '',
       requirements: requirements || '',
       customQuestions: customQuestions || '',
       fee: Number(fee) || 0,
@@ -7876,6 +7884,7 @@ function PageEventCreate(){
       cancelPolicy: cancelPolicy || '',
       snsCopy: snsCopy || '',
       posterUrl: posterUrl || '',
+      heroImageUrl: heroImageUrl || '',
       online: online,
       zoomURL: online ? (zoomURL || '') : '',
       format: format,
@@ -8406,6 +8415,46 @@ function PageEventCreate(){
                       <option value="満員">満員</option>
                     </select>
                   </div>
+                  <div className="field-hint">「下書き」のままでも、下の「公開予約日時」を設定すれば自動的に公開されます。</div>
+                </div>
+
+                {/* 公開予約日時 (Phase 6.2) */}
+                <div className="field">
+                  <label className="field-label">公開予約日時 (任意)</label>
+                  <input
+                    className="input"
+                    type="datetime-local"
+                    value={publishAt}
+                    onChange={e=>setPublishAt(e.target.value)}
+                  />
+                  <div className="field-hint">
+                    {publishAt ? (
+                      (() => {
+                        const dt = new Date(publishAt);
+                        const now = new Date();
+                        if (isNaN(dt.getTime())) return '日時の形式が不正です';
+                        if (dt <= now) {
+                          return `📅 設定日時を既に過ぎています (${dt.toLocaleString('ja-JP')}) → 既に公開扱いです`;
+                        }
+                        const diffMs = dt - now;
+                        const diffH = Math.floor(diffMs / (1000 * 60 * 60));
+                        const diffD = Math.floor(diffH / 24);
+                        const remain = diffD > 0 ? `${diffD}日${diffH % 24}時間後` : `${diffH}時間後`;
+                        return `📅 ${dt.toLocaleString('ja-JP')} (${remain}) に自動公開`;
+                      })()
+                    ) : (
+                      'ステータスが「下書き」でも、この日時を過ぎれば参加者サイトで公開されます。空欄ならステータス通りに動作します。'
+                    )}
+                  </div>
+                  {publishAt && (
+                    <button
+                      type="button"
+                      className="btn btn-soft btn-sm"
+                      onClick={() => setPublishAt('')}
+                      style={{marginTop:8,color:'var(--coral)'}}>
+                      <Icon n="x" s={12}/> 公開予約をクリア
+                    </button>
+                  )}
                 </div>
                 <div className="field">
                   <label className="field-label">SNS告知文 (任意)</label>
@@ -8413,13 +8462,13 @@ function PageEventCreate(){
                   <div className="field-hint">Twitter/Instagram 用、240字以内推奨</div>
                 </div>
 
-                {/* ポスター画像 (Phase 6) */}
+                {/* ポスター画像 (Phase 6) - 縦長ポスター */}
                 <div className="field" style={{padding:16,background:'var(--bg2)',borderRadius:10,border:'1px solid var(--line)'}}>
                   <label className="field-label" style={{fontWeight:700,fontSize:13,marginBottom:6}}>
-                    🖼 ポスター画像 (任意)
+                    🖼 ポスター画像 (縦長 / 任意)
                   </label>
                   <div className="field-hint" style={{marginBottom:10}}>
-                    参加者ページのヒーローに表示されます。URL を貼り付けるか、ファイルをアップロードしてください (最大 5MB、JPG/PNG/WebP)。
+                    参加者ページの「近日開催」一覧で左に表示されます (縦長推奨、A4比率など)。URL を貼り付けるか、ファイルをアップロードしてください (最大 5MB、JPG/PNG/WebP)。
                   </div>
 
                   {/* URL入力 */}
@@ -8497,19 +8546,87 @@ function PageEventCreate(){
                       </button>
                     )}
                   </div>
+                </div>
 
-                  {/* プレビュー */}
-                  {posterUrl && (
-                    <div style={{marginTop:14,padding:10,background:'var(--white)',borderRadius:8,border:'1px solid var(--line)'}}>
-                      <div style={{fontSize:11,color:'var(--ink4)',marginBottom:6}}>プレビュー</div>
-                      <img
-                        src={posterUrl}
-                        alt="ポスタープレビュー"
-                        style={{maxWidth:'100%',maxHeight:240,borderRadius:6,display:'block'}}
-                        onError={(e) => { e.target.style.display = 'none'; }}
+                {/* ヒーロー画像 (Phase 6.1) - 横長ヒーロー画像 */}
+                <div className="field" style={{padding:16,background:'var(--bg2)',borderRadius:10,border:'1px solid var(--line)'}}>
+                  <label className="field-label" style={{fontWeight:700,fontSize:13,marginBottom:6}}>
+                    🖼 ヒーロー画像 (横長 / 任意)
+                  </label>
+                  <div className="field-hint" style={{marginBottom:10}}>
+                    参加者ページの背景・ヒーロースライドに使用されます (横長推奨、16:9 程度)。雰囲気を伝える写真を選んでください (最大 5MB、JPG/PNG/WebP)。
+                  </div>
+
+                  <input
+                    className="input"
+                    value={heroImageUrl}
+                    onChange={e=>setHeroImageUrl(e.target.value)}
+                    placeholder="https://... または下のボタンからアップロード"
+                    style={{marginBottom:10}}
+                  />
+
+                  <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                    <label className={clsx("btn", heroUploading ? "btn-soft" : "btn-soft")} style={{cursor:heroUploading?'wait':'pointer',opacity:heroUploading?0.6:1}}>
+                      <Icon n="upload" s={14}/>
+                      {heroUploading ? ' アップロード中…' : ' ファイルを選択'}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        style={{display:'none'}}
+                        disabled={heroUploading}
+                        onChange={async (e) => {
+                          const file = e.target.files && e.target.files[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) {
+                            window.toast.error('画像が大きすぎます (最大 5MB)');
+                            e.target.value = '';
+                            return;
+                          }
+                          setHeroUploading(true);
+                          try {
+                            const dataBase64 = await new Promise((resolve, reject) => {
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const result = reader.result;
+                                const base64 = result.split(',')[1] || '';
+                                resolve(base64);
+                              };
+                              reader.onerror = () => reject(new Error('ファイル読み込みエラー'));
+                              reader.readAsDataURL(file);
+                            });
+
+                            const result = await window.postData('uploadPosterImage', {
+                              filename: 'hero-' + file.name,
+                              mimeType: file.type,
+                              dataBase64: dataBase64,
+                              eventId: editId || '',
+                            });
+
+                            if (result && result.url) {
+                              setHeroImageUrl(result.url);
+                              window.toast.success('ヒーロー画像をアップロードしました');
+                            } else {
+                              throw new Error('アップロード結果が不正です');
+                            }
+                          } catch (err) {
+                            window.toast.error('アップロード失敗: ' + (err.message || err));
+                          } finally {
+                            setHeroUploading(false);
+                            e.target.value = '';
+                          }
+                        }}
                       />
-                    </div>
-                  )}
+                    </label>
+                    {heroImageUrl && (
+                      <button
+                        type="button"
+                        className="btn btn-soft btn-sm"
+                        onClick={() => setHeroImageUrl('')}
+                        style={{color:'var(--coral)'}}>
+                        <Icon n="x" s={12}/> クリア
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
