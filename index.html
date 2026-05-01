@@ -1173,6 +1173,120 @@ svg{display:block}
   };
 </script>
 
+<!-- ============================================================
+     IMAGE COMPRESSION — クライアント側で画像をリサイズ + JPEG 圧縮
+     ============================================================
+     Phase 6.5: 5MB 上限超過と Drive アップロード失敗を未然に防ぐ。
+     ヒーロー画像、ポスター画像、HeroSlides 画像の3箇所で使う共通処理。
+
+     使い方:
+       const compressed = await window.compressImage(file, { maxLong: 2000, quality: 0.82 });
+       // compressed: { dataBase64, mimeType, originalSize, compressedSize, ratio }
+     失敗時 (canvas未対応など) は元ファイルの Base64 を返す。 ============================================================ -->
+<script>
+  /**
+   * 画像ファイルをリサイズ + 再エンコードして Base64 で返す。
+   *
+   * @param {File} file               File API のファイル
+   * @param {Object} opts
+   * @param {number} opts.maxLong     長辺の最大ピクセル (default: 2000)
+   * @param {number} opts.quality     JPEG quality 0-1 (default: 0.82)
+   * @param {string} opts.mimeType    出力 MIME (default: image/jpeg)
+   * @returns {Promise<{dataBase64:string, mimeType:string, originalSize:number, compressedSize:number, ratio:number}>}
+   */
+  window.compressImage = async function compressImage(file, opts) {
+    opts = opts || {};
+    const maxLong = opts.maxLong || 2000;
+    const quality = typeof opts.quality === 'number' ? opts.quality : 0.82;
+    const outMime = opts.mimeType || 'image/jpeg';
+
+    // SVG は圧縮しない (ベクター)
+    if (file.type === 'image/svg+xml') {
+      return await readFileAsBase64_(file);
+    }
+
+    try {
+      // 1. ファイル → Image オブジェクト
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(new Error('読み込み失敗'));
+        r.readAsDataURL(file);
+      });
+
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('画像のデコード失敗'));
+        i.src = dataUrl;
+      });
+
+      // 2. リサイズ後のサイズを計算 (アスペクト維持)
+      let { width, height } = img;
+      const long = Math.max(width, height);
+      if (long > maxLong) {
+        const scale = maxLong / long;
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+
+      // 3. canvas に描画
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context 取得失敗');
+
+      // PNG/JPEG どちらでも下地は白で (透過 → 黒くなる事故を防ぐ)
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // 4. JPEG として再エンコード
+      const compressedDataUrl = canvas.toDataURL(outMime, quality);
+      const dataBase64 = compressedDataUrl.split(',')[1] || '';
+      const compressedSize = Math.round(dataBase64.length * 0.75);  // base64 → bytes 概算
+
+      return {
+        dataBase64,
+        mimeType: outMime,
+        originalSize: file.size,
+        compressedSize,
+        ratio: file.size > 0 ? compressedSize / file.size : 1,
+      };
+    } catch (err) {
+      console.warn('[compressImage] 圧縮失敗、元ファイルを使用:', err);
+      // フォールバック: 元ファイルをそのまま base64 化
+      return await readFileAsBase64_(file);
+    }
+  };
+
+  // 内部: 元ファイルを base64 で返す (圧縮失敗時のフォールバック)
+  async function readFileAsBase64_(file) {
+    const r = new FileReader();
+    const dataUrl = await new Promise((resolve, reject) => {
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error('読み込み失敗'));
+      r.readAsDataURL(file);
+    });
+    return {
+      dataBase64: dataUrl.split(',')[1] || '',
+      mimeType: file.type,
+      originalSize: file.size,
+      compressedSize: file.size,
+      ratio: 1,
+    };
+  }
+
+  // ファイルサイズを人間可読形式に
+  window.formatBytes = function (bytes) {
+    if (!bytes && bytes !== 0) return '?';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  };
+</script>
+
 <!-- ============ React + Babel (CDN) ============ -->
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
@@ -8524,7 +8638,7 @@ function PageEventCreate(){
                     🖼 ポスター画像 (縦長 / 任意)
                   </label>
                   <div className="field-hint" style={{marginBottom:10}}>
-                    参加者ページの「近日開催」一覧で左に表示されます (縦長推奨、A4比率など)。URL を貼り付けるか、ファイルをアップロードしてください (最大 5MB、JPG/PNG/WebP)。
+                    参加者ページの「近日開催」一覧で左に表示されます (縦長推奨、A4比率など)。URL を貼り付けるか、ファイルをアップロードしてください (最大 15MB、JPG/PNG/WebP — 自動で 1600px に圧縮されます)。
                   </div>
 
                   {/* URL入力 */}
@@ -8549,37 +8663,35 @@ function PageEventCreate(){
                         onChange={async (e) => {
                           const file = e.target.files && e.target.files[0];
                           if (!file) return;
-                          // サイズチェック (5MB)
-                          if (file.size > 5 * 1024 * 1024) {
-                            window.toast.error('画像が大きすぎます (最大 5MB)');
+                          // 元ファイルの上限 (圧縮しても巨大すぎる場合のガード)
+                          if (file.size > 15 * 1024 * 1024) {
+                            window.toast.error('画像が大きすぎます (最大 15MB)');
                             e.target.value = '';
                             return;
                           }
                           setPosterUploading(true);
                           try {
-                            // FileReader で Base64 化
-                            const dataBase64 = await new Promise((resolve, reject) => {
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const result = reader.result;
-                                // 'data:image/jpeg;base64,XXX...' から XXX 部分のみ取得
-                                const base64 = result.split(',')[1] || '';
-                                resolve(base64);
-                              };
-                              reader.onerror = () => reject(new Error('ファイル読み込みエラー'));
-                              reader.readAsDataURL(file);
+                            // クライアント側でリサイズ + JPEG 圧縮 (Phase 6.5)
+                            // ポスターは縦長 → 長辺 1600px で十分。上限超え対策。
+                            const compressed = await window.compressImage(file, {
+                              maxLong: 1600,
+                              quality: 0.82,
                             });
 
                             const result = await window.postData('uploadPosterImage', {
-                              filename: file.name,
-                              mimeType: file.type,
-                              dataBase64: dataBase64,
+                              filename: file.name.replace(/\.[^.]+$/, '.jpg'),
+                              mimeType: compressed.mimeType,
+                              dataBase64: compressed.dataBase64,
                               eventId: editId || '',
                             });
 
                             if (result && result.url) {
                               setPosterUrl(result.url);
-                              window.toast.success('ポスターをアップロードしました');
+                              const saved = compressed.originalSize - compressed.compressedSize;
+                              const msg = saved > 50 * 1024
+                                ? `ポスターをアップロードしました (${window.formatBytes(compressed.originalSize)} → ${window.formatBytes(compressed.compressedSize)})`
+                                : 'ポスターをアップロードしました';
+                              window.toast.success(msg);
                             } else {
                               throw new Error('アップロード結果が不正です');
                             }
@@ -8610,7 +8722,7 @@ function PageEventCreate(){
                     🖼 ヒーロー画像 (横長 / 任意)
                   </label>
                   <div className="field-hint" style={{marginBottom:10}}>
-                    参加者ページの背景・ヒーロースライドに使用されます (横長推奨、16:9 程度)。雰囲気を伝える写真を選んでください (最大 5MB、JPG/PNG/WebP)。
+                    参加者ページの背景・ヒーロースライドに使用されます (横長推奨、16:9 程度)。雰囲気を伝える写真を選んでください (最大 15MB、JPG/PNG/WebP — 自動で 2000px に圧縮されます)。
                   </div>
 
                   <input
@@ -8633,34 +8745,34 @@ function PageEventCreate(){
                         onChange={async (e) => {
                           const file = e.target.files && e.target.files[0];
                           if (!file) return;
-                          if (file.size > 5 * 1024 * 1024) {
-                            window.toast.error('画像が大きすぎます (最大 5MB)');
+                          if (file.size > 15 * 1024 * 1024) {
+                            window.toast.error('画像が大きすぎます (最大 15MB)');
                             e.target.value = '';
                             return;
                           }
                           setHeroUploading(true);
                           try {
-                            const dataBase64 = await new Promise((resolve, reject) => {
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const result = reader.result;
-                                const base64 = result.split(',')[1] || '';
-                                resolve(base64);
-                              };
-                              reader.onerror = () => reject(new Error('ファイル読み込みエラー'));
-                              reader.readAsDataURL(file);
+                            // クライアント側でリサイズ + JPEG 圧縮 (Phase 6.5)
+                            // ヒーローは横長 → 長辺 2000px (高解像度ディスプレイにも耐える)
+                            const compressed = await window.compressImage(file, {
+                              maxLong: 2000,
+                              quality: 0.82,
                             });
 
                             const result = await window.postData('uploadPosterImage', {
-                              filename: 'hero-' + file.name,
-                              mimeType: file.type,
-                              dataBase64: dataBase64,
+                              filename: 'hero-' + file.name.replace(/\.[^.]+$/, '.jpg'),
+                              mimeType: compressed.mimeType,
+                              dataBase64: compressed.dataBase64,
                               eventId: editId || '',
                             });
 
                             if (result && result.url) {
                               setHeroImageUrl(result.url);
-                              window.toast.success('ヒーロー画像をアップロードしました');
+                              const saved = compressed.originalSize - compressed.compressedSize;
+                              const msg = saved > 50 * 1024
+                                ? `ヒーロー画像をアップロードしました (${window.formatBytes(compressed.originalSize)} → ${window.formatBytes(compressed.compressedSize)})`
+                                : 'ヒーロー画像をアップロードしました';
+                              window.toast.success(msg);
                             } else {
                               throw new Error('アップロード結果が不正です');
                             }
@@ -10570,27 +10682,30 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   async function handleFileUpload(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      window.toast.error('画像が大きすぎます (最大 5MB)');
+    if (file.size > 15 * 1024 * 1024) {
+      window.toast.error('画像が大きすぎます (最大 15MB)');
       e.target.value = '';
       return;
     }
     setUploading(true);
     try {
-      const dataBase64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1] || '');
-        reader.onerror = () => reject(new Error('読み込み失敗'));
-        reader.readAsDataURL(file);
+      // クライアント側でリサイズ + JPEG 圧縮 (Phase 6.5)
+      const compressed = await window.compressImage(file, {
+        maxLong: 2000,
+        quality: 0.82,
       });
       const result = await window.postData('uploadPosterImage', {
-        filename: 'hero-slide-' + file.name,
-        mimeType: file.type,
-        dataBase64: dataBase64,
+        filename: 'hero-slide-' + file.name.replace(/\.[^.]+$/, '.jpg'),
+        mimeType: compressed.mimeType,
+        dataBase64: compressed.dataBase64,
       });
       if (result && result.url) {
         setImageUrl(result.url);
-        window.toast.success('画像をアップロードしました');
+        const saved = compressed.originalSize - compressed.compressedSize;
+        const msg = saved > 50 * 1024
+          ? `画像をアップロードしました (${window.formatBytes(compressed.originalSize)} → ${window.formatBytes(compressed.compressedSize)})`
+          : '画像をアップロードしました';
+        window.toast.success(msg);
       }
     } catch (err) {
       window.toast.error('アップロード失敗: ' + (err.message || err));
@@ -10791,7 +10906,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                       fontSize:11,color:'var(--coral)',
                     }}>クリア</button>
                 )}
-                <span style={{fontSize:10,color:'var(--ink5)',marginLeft:'auto'}}>横長 / 16:9 推奨 / 5MB まで</span>
+                <span style={{fontSize:10,color:'var(--ink5)',marginLeft:'auto'}}>横長 / 16:9 推奨 / 自動で 2000px・JPEG に圧縮</span>
               </div>
             </div>
 
