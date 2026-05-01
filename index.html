@@ -1179,6 +1179,8 @@ svg{display:block}
 
 <!-- ============ Application code (order matters) ============ -->
 <script type="text/babel" data-presets="react">
+(function(){
+
 // ==================== DATA (empty by default) ====================
 // データは全て空。Phase 4新で GAS WebApp + Spreadsheet から fetchData() 経由で取得する。
 // 開発時にダミーデータを入れたい場合は、各配列にサンプル要素を追加すれば即時反映される。
@@ -1234,9 +1236,13 @@ window.MOCK = {
     todos:    TODOS,
   },
 };
+
+})();
 </script>
 
 <script type="text/babel" data-presets="react">
+(function(){
+
 // ==================== ICONS ====================
 // Lucide-style stroke icons (1.75px)。OpsConsole の icons.jsx を踏襲。
 // 使い方: <Icon n="plus" s={14}/> — n=アイコン名, s=サイズpx
@@ -1312,9 +1318,13 @@ const Icon = ({n, s=16, cls=""}) => {
   return P[n] || P.circle;
 };
 window.Icon = Icon;
+
+})();
 </script>
 
 <script type="text/babel" data-presets="react">
+(function(){
+
 // ==================== Dashboard ====================
 const {useState, useEffect, useRef, useMemo, Fragment} = React;
 
@@ -1838,8 +1848,17 @@ function PageDashboard(){
                             </div>
                           </td>
                           <td>
-                            <div style={{fontWeight:500}}>{e.date || '—'}</div>
-                            <div style={{fontSize:11,color:'var(--ink4)'}}>{e.time || '—'}</div>
+                            {e.format === 'multi' ? (
+                              <div>
+                                <div style={{fontWeight:500,color:'var(--violet)'}}>{e.sessionCount || '?'}日間</div>
+                                <div style={{fontSize:11,color:'var(--ink4)'}}>複数セッション</div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div style={{fontWeight:500}}>{e.date || '—'}</div>
+                                <div style={{fontSize:11,color:'var(--ink4)'}}>{e.time || '—'}</div>
+                              </div>
+                            )}
                           </td>
                           <td className="right num"><b style={{color:'var(--ink)'}}>{reg}</b> / {cap}</td>
                           <td style={{minWidth:140}}>
@@ -2001,9 +2020,14 @@ window.PageDashboard = PageDashboard;
 window.fmt = fmt; window.yen = yen; window.clsx = clsx;
 window.Spark = Spark; window.ChartCanvas = ChartCanvas;
 window.Kpi = Kpi; window.QuickAct = QuickAct; window.chartFont = chartFont;
+window.IMEInput = IMEInput; window.IMETextarea = IMETextarea;
+
+})();
 </script>
 
 <script type="text/babel" data-presets="react">
+(function(){
+
 // ==================== STUB PAGES (Phase 2 以降で実装) ====================
 // Dashboard 以外の画面はすべて "準備中" 表示。各画面ごとに見出しを変える
 // ことで、ナビゲーションの遷移感は確認できるようにする。
@@ -2058,6 +2082,8 @@ function PageStub({navKey}){
 
 window.PageStub = PageStub;
 window.STUB_META = STUB_META;
+
+})();
 </script>
 
 <!-- ============================================================
@@ -2069,6 +2095,10 @@ window.STUB_META = STUB_META;
      - EventCard, EventCalendar, MiniStat
      ============================================================ -->
 <script type="text/babel" data-presets="react">
+(function(){
+const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
+const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+
 
 // -------------------- 補助コンポーネント --------------------
 
@@ -2197,20 +2227,29 @@ function EventCard({e, onDelete, onMapClick}){
       <div style={{padding:16}}>
         <div style={{fontWeight:700,fontSize:14,color:'var(--ink)',marginBottom:4}}>{e.title}</div>
         <div style={{fontSize:11,color:'var(--ink4)',display:'flex',gap:10,alignItems:'center',marginBottom:12}}>
-          <span style={{display:'flex',alignItems:'center',gap:3}}><Icon n="clock" s={11}/> {e.time || '—'}</span>
           {e.format === 'multi' ? (
-            <span style={{display:'flex',alignItems:'center',gap:3,color:'var(--violet)',fontWeight:500}}>
-              <Icon n="layers" s={11}/> {e.sessionCount || '?'}セッション
-            </span>
-          ) : e.venue && onMapClick && (e.address || e.venue) ? (
-            <span
-              onClick={(ev)=>{ev.stopPropagation(); onMapClick(e);}}
-              style={{display:'flex',alignItems:'center',gap:3,cursor:'pointer',color:`var(--${e.accent})`,textDecoration:'underline',textDecorationStyle:'dotted'}}
-              title="クリックで地図を表示">
-              <Icon n="pin" s={11}/> {(e.venue || '—').slice(0, 12)}
-            </span>
+            <>
+              <span style={{display:'flex',alignItems:'center',gap:3,color:'var(--violet)',fontWeight:500}}>
+                <Icon n="layers" s={11}/> {e.sessionCount || '?'}日間
+              </span>
+              <span style={{display:'flex',alignItems:'center',gap:3,color:'var(--ink5)'}}>
+                <Icon n="clock" s={11}/> 複数日程
+              </span>
+            </>
           ) : (
-            <span style={{display:'flex',alignItems:'center',gap:3}}><Icon n="pin" s={11}/> {(e.venue || '—').slice(0, 12)}</span>
+            <>
+              <span style={{display:'flex',alignItems:'center',gap:3}}><Icon n="clock" s={11}/> {e.time || '—'}</span>
+              {e.venue && onMapClick && (e.address || e.venue) ? (
+                <span
+                  onClick={(ev)=>{ev.stopPropagation(); onMapClick(e);}}
+                  style={{display:'flex',alignItems:'center',gap:3,cursor:'pointer',color:`var(--${e.accent})`,textDecoration:'underline',textDecorationStyle:'dotted'}}
+                  title="クリックで地図を表示">
+                  <Icon n="pin" s={11}/> {(e.venue || '—').slice(0, 12)}
+                </span>
+              ) : (
+                <span style={{display:'flex',alignItems:'center',gap:3}}><Icon n="pin" s={11}/> {(e.venue || '—').slice(0, 12)}</span>
+              )}
+            </>
           )}
         </div>
         <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:5}}>
@@ -2242,9 +2281,13 @@ function EventCard({e, onDelete, onMapClick}){
 }
 
 function EventCalendar({events}){
+  // 単一日程イベントだけをカレンダーに描画。multi はサマリで別表示
+  const singleEvents = events.filter(e => e.format !== 'multi' && e.date);
+  const multiEvents = events.filter(e => e.format === 'multi');
+
   // EVENTS の月から自動的にカレンダー表示月を決める。
   // 複数月にまたがる場合は最初のイベントの月を表示。
-  const firstDate = events[0]?.date || '2026-05-01';
+  const firstDate = singleEvents[0]?.date || '2026-05-01';
   const [yyyy, mm] = firstDate.split('-').map(Number);
   const monthLabel = `${yyyy}年 ${mm}月`;
 
@@ -2257,10 +2300,14 @@ function EventCalendar({events}){
     return d >= 1 && d <= lastDate ? d : null;
   });
 
-  // イベントを日付ごとにマップ
+  // イベントを日付ごとにマップ (空 date は除外、crash 防止)
   const map = {};
-  events.forEach(e => {
-    const d = parseInt(e.date.split('-')[2]);
+  singleEvents.forEach(e => {
+    if (!e.date || typeof e.date !== 'string') return;
+    const parts = e.date.split('-');
+    if (parts.length < 3) return;
+    const d = parseInt(parts[2], 10);
+    if (isNaN(d)) return;
     (map[d] = map[d] || []).push(e);
   });
 
@@ -2300,6 +2347,23 @@ function EventCalendar({events}){
             );
           })}
         </div>
+        {/* 複数日程イベントのサマリ表示 (Phase 6 fix) */}
+        {multiEvents.length > 0 && (
+          <div style={{marginTop:14,padding:12,background:'var(--violet-50)',border:'1px solid var(--violet-100)',borderRadius:8}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--violet)',marginBottom:8,letterSpacing:'.05em'}}>
+              📅 複数日程イベント ({multiEvents.length}件)
+            </div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+              {multiEvents.map(e => (
+                <div key={e.id} title={e.title}
+                  style={{background:'var(--white)',color:`var(--${e.accent})`,padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,borderLeft:`3px solid var(--${e.accent})`,display:'inline-flex',alignItems:'center',gap:6}}>
+                  <span>{e.title}</span>
+                  <span style={{fontSize:10,color:'var(--ink4)',fontWeight:500}}>({e.sessionCount || '?'}日間)</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2313,7 +2377,7 @@ function PageEvents(){
   const [query, setQuery] = useState("");
 
   // データ層: 初期は window.EVENTS (空配列)、マウント時に API から再取得
-  const [events, setEvents] = useState(EVENTS);
+  const [events, setEvents] = useState(window.EVENTS || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -3646,6 +3710,16 @@ function PageSatisfaction(){
 window.PageEvents = PageEvents;
 window.PageRegistrations = PageRegistrations;
 window.PageSatisfaction = PageSatisfaction;
+// 他のスクリプトブロックから参照される共有コンポーネント (Phase 6 fix)
+window.MiniStat = MiniStat;
+window.EventCard = EventCard;
+window.EventCalendar = EventCalendar;
+window.EventMapEmbed = EventMapEmbed;
+window.RegistrationModal = RegistrationModal;
+window.SurveyModal = SurveyModal;
+window.ResponseModal = ResponseModal;
+
+})();
 </script>
 
 <!-- ============================================================
@@ -3656,6 +3730,10 @@ window.PageSatisfaction = PageSatisfaction;
      - PageTemplates  : 定型文ライブラリ (カード一覧)
      ============================================================ -->
 <script type="text/babel" data-presets="react">
+(function(){
+const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
+const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+
 
 // -------------------- PageMail --------------------
 
@@ -5177,6 +5255,8 @@ window.PageMail = PageMail;
 window.PageNews = PageNews;
 window.PageChat = PageChat;
 window.PageTemplates = PageTemplates;
+
+})();
 </script>
 
 <!-- ============================================================
@@ -5188,6 +5268,19 @@ window.PageTemplates = PageTemplates;
      - PageMobile        : 現地オペレーション (4台のスマホモックアップ)
      ============================================================ -->
 <script type="text/babel" data-presets="react">
+(function(){
+const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
+const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+
+
+// 共有コンポーネント (他ブロックから window 経由で取得) — Phase 6 fix
+const MiniStat = window.MiniStat;
+const EventCard = window.EventCard;
+const EventCalendar = window.EventCalendar;
+const EventMapEmbed = window.EventMapEmbed;
+const RegistrationModal = window.RegistrationModal;
+const SurveyModal = window.SurveyModal;
+const ResponseModal = window.ResponseModal;
 
 // -------------------- PageParticipants --------------------
 
@@ -7264,6 +7357,15 @@ function PageMobile(){
   );
 }
 
+// Page を window に公開 (Block 10 から参照される) — Phase 6 fix
+window.PageParticipants = PageParticipants;
+window.PageTodo = PageTodo;
+window.PagePayments = PagePayments;
+window.PageDepartments = PageDepartments;
+window.PageMobile = PageMobile;
+
+
+})();
 </script>
 
 <!-- ============================================================
@@ -7274,6 +7376,13 @@ function PageMobile(){
      - PageSchedule       : スケジュール (タイムライングリッド + 物品管理)
      ============================================================ -->
 <script type="text/babel" data-presets="react">
+(function(){
+const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
+const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+
+
+// 共有コンポーネント (他ブロックから window 経由で取得) — Phase 6 fix
+const EventMapEmbed = window.EventMapEmbed;
 
 // -------------------- PageNotifications --------------------
 
@@ -9005,6 +9114,8 @@ window.PageNotifications = PageNotifications;
 window.PageEventCreate = PageEventCreate;
 window.PageQR = PageQR;
 window.PageSchedule = PageSchedule;
+
+})();
 </script>
 
 <!-- ============================================================
@@ -9015,6 +9126,16 @@ window.PageSchedule = PageSchedule;
      - PageAds       : 広告キャンペーン (KPI + キャンペーン一覧)
      ============================================================ -->
 <script type="text/babel" data-presets="react">
+(function(){
+const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
+const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+
+
+// 共有コンポーネント (他ブロックから window 経由で取得) — Phase 6 fix
+const MiniStat = window.MiniStat;
+const EventCard = window.EventCard;
+const EventCalendar = window.EventCalendar;
+const EventMapEmbed = window.EventMapEmbed;
 
 // -------------------- PageAnalytics --------------------
 
@@ -10339,14 +10460,46 @@ window.PageAnalytics = PageAnalytics;
 window.PagePhotos = PagePhotos;
 window.PageOrg = PageOrg;
 window.PageAds = PageAds;
+window.PageSettings = PageSettings;
+
+})();
 </script>
 
 <script type="text/babel" data-presets="react">
+(function(){
+const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
+const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+
 // ==================== App Root ====================
 // 全21画面実装完了 (Phase 1新 + Phase 2新-A/B/C/D-1/D-2)
 // PageStub は使われない (全画面が実コンポーネント)。STUB_META はコード参照用に残置。
 // このブロック専用に Fragment / useState / useEffect を再 destructure (Babel ブロック境界対策)
 const {Fragment: AppFragment, useState: useStateApp, useEffect: useEffectApp} = React;
+
+// 各 Page コンポーネントを window から取得 (Babel スクリプト境界対策、Phase 6 fix)
+const PageDashboard = window.PageDashboard;
+const PageAnalytics = window.PageAnalytics;
+const PageNotifications = window.PageNotifications;
+const PageEvents = window.PageEvents;
+const PageEventCreate = window.PageEventCreate;
+const PageRegistrations = window.PageRegistrations;
+const PageQR = window.PageQR;
+const PageSchedule = window.PageSchedule;
+const PageSatisfaction = window.PageSatisfaction;
+const PageMail = window.PageMail;
+const PageNews = window.PageNews;
+const PageChat = window.PageChat;
+const PageTemplates = window.PageTemplates;
+const PageParticipants = window.PageParticipants;
+const PageTodo = window.PageTodo;
+const PagePhotos = window.PagePhotos;
+const PagePayments = window.PagePayments;
+const PageDepartments = window.PageDepartments;
+const PageOrg = window.PageOrg;
+const PageAds = window.PageAds;
+const PageMobile = window.PageMobile;
+const PageSettings = window.PageSettings;
+
 const PAGES = {
   // ----- 概要 -----
   dashboard:      () => <PageDashboard/>,
@@ -10773,6 +10926,8 @@ function App({user, onLogout}){
 }
 
 ReactDOM.createRoot(document.getElementById('main')).render(<AuthGate/>);
+
+})();
 </script>
 
 <!-- PWA: Service Worker 登録 (Phase 5新-E) -->
