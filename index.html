@@ -2032,6 +2032,7 @@ function PageDashboard(){
 
 window.PageDashboard = PageDashboard;
 window.fmt = fmt; window.yen = yen; window.clsx = clsx;
+window.fmtTime = fmtTime; window.fmtTimeRange = fmtTimeRange;
 window.Spark = Spark; window.ChartCanvas = ChartCanvas;
 window.Kpi = Kpi; window.QuickAct = QuickAct; window.chartFont = chartFont;
 window.IMEInput = IMEInput; window.IMETextarea = IMETextarea;
@@ -2111,7 +2112,7 @@ window.STUB_META = STUB_META;
 <script type="text/babel" data-presets="react">
 (function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
-const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
 
 
 // -------------------- 補助コンポーネント --------------------
@@ -3750,7 +3751,7 @@ window.ResponseModal = ResponseModal;
 <script type="text/babel" data-presets="react">
 (function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
-const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
 
 
 // -------------------- PageMail --------------------
@@ -5288,7 +5289,7 @@ window.PageTemplates = PageTemplates;
 <script type="text/babel" data-presets="react">
 (function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
-const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
 
 
 // 共有コンポーネント (他ブロックから window 経由で取得) — Phase 6 fix
@@ -7396,7 +7397,7 @@ window.PageMobile = PageMobile;
 <script type="text/babel" data-presets="react">
 (function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
-const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
 
 
 // 共有コンポーネント (他ブロックから window 経由で取得) — Phase 6 fix
@@ -9250,7 +9251,7 @@ window.PageSchedule = PageSchedule;
 <script type="text/babel" data-presets="react">
 (function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
-const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
 
 
 // 共有コンポーネント (他ブロックから window 経由で取得) — Phase 6 fix
@@ -10590,7 +10591,7 @@ window.PageSettings = PageSettings;
 <script type="text/babel" data-presets="react">
 (function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
-const {fmt, yen, clsx, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
 
 // ==================== App Root ====================
 // 全21画面実装完了 (Phase 1新 + Phase 2新-A/B/C/D-1/D-2)
