@@ -1323,18 +1323,14 @@ const fmt = n => n.toLocaleString('ja-JP');
 const yen = n => '¥' + fmt(n);
 const clsx = (...a) => a.filter(Boolean).join(' ');
 
-// 時刻を「HH:MM」形式に正規化 (Sheetsの時刻型 ISO形式に対応)
+// 時刻を「HH:MM」形式に正規化 (Sheetsの時刻型 ISO形式に対応、TZ依存なし)
 const fmtTime = (t) => {
   if (!t && t !== 0) return '';
   if (typeof t === 'string') {
     const simple = t.match(/^(\d{1,2}):(\d{2})/);
     if (simple) return `${simple[1].padStart(2, '0')}:${simple[2]}`;
-    if (t.includes('T')) {
-      const d = new Date(t);
-      if (!isNaN(d.getTime())) {
-        return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
-      }
-    }
+    const isoMatch = t.match(/T(\d{2}):(\d{2})/);
+    if (isoMatch) return `${isoMatch[1]}:${isoMatch[2]}`;
   }
   if (t instanceof Date) {
     return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
@@ -3046,20 +3042,76 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  // セッション別対応 (Phase 6)
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [target, setTarget] = useState(init.kind === 'session' ? 'session_specific' : 'event');
+  // target: 'event' (イベント全体) / 'session_specific' (特定セッション) / 'all_sessions' (全セッション一括)
+  const [sessionId, setSessionId] = useState(init.sessionId || '');
+
+  // 選択中イベントを取得
+  const selectedEvent = events.find(e => e.id === eventId);
+  const isMulti = selectedEvent && selectedEvent.format === 'multi';
+
+  // multi イベントが選ばれたらセッション一覧を取得
+  useEffect(() => {
+    if (!isMulti) {
+      setSessions([]);
+      setSessionId('');
+      // multi でない場合は target を強制的に 'event' に
+      if (target !== 'event') setTarget('event');
+      return;
+    }
+    setLoadingSessions(true);
+    window.fetchData('listEventSessions', { eventId })
+      .then(res => {
+        setSessions(Array.isArray(res) ? res : []);
+        setLoadingSessions(false);
+      })
+      .catch(() => {
+        setSessions([]);
+        setLoadingSessions(false);
+      });
+  }, [eventId, isMulti]);
+
   async function handleSubmit() {
     if (!title.trim()) { setError("タイトルは必須です"); return; }
     if (!eventId) { setError("対象イベントは必須です"); return; }
+
+    // セッション別ターゲットのバリデーション
+    if (isMulti && target === 'session_specific' && !sessionId) {
+      setError("セッションを選択してください");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      await onSave({
-        title: title.trim(),
-        eventId,
-        question1: q1.trim(),
-        question2: q2.trim(),
-        question3: q3.trim(),
-        status,
-      });
+      // ターゲット種別による分岐
+      if (isMulti && target === 'all_sessions') {
+        // 全セッション一括作成
+        await onSave({
+          _action: 'createSurveysForSessions',
+          eventId,
+          titlePrefix: title.trim(),
+          question1: q1.trim(),
+          question2: q2.trim(),
+          question3: q3.trim(),
+          status,
+        });
+      } else {
+        // 通常の単一作成 (event 全体 or 特定セッション)
+        await onSave({
+          title: title.trim(),
+          eventId,
+          sessionId: (isMulti && target === 'session_specific') ? sessionId : '',
+          kind: (isMulti && target === 'session_specific') ? 'session' : 'event',
+          question1: q1.trim(),
+          question2: q2.trim(),
+          question3: q3.trim(),
+          status,
+        });
+      }
     } catch (err) {
       setError(err.message || String(err));
       setSaving(false);
@@ -3068,7 +3120,7 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onCancel}>
-      <div className="card" style={{width:600,maxWidth:'94%',maxHeight:'90vh',overflow:'auto'}} onClick={(e)=>e.stopPropagation()}>
+      <div className="card" style={{width:640,maxWidth:'94%',maxHeight:'90vh',overflow:'auto'}} onClick={(e)=>e.stopPropagation()}>
         <div className="card-head">
           <div className="card-title"><Icon n="star" s={16}/> {mode === "create" ? "アンケートを作成" : "アンケートを編集"}</div>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel}><Icon n="x" s={14}/></button>
@@ -3077,7 +3129,12 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
           {error && <div style={{padding:10,background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:6,color:'var(--red)',fontSize:12}}>{error}</div>}
           <div className="field">
             <label className="field-label">タイトル <span className="field-req">*</span></label>
-            <input className="input input-lg" value={title} onChange={e=>setTitle(e.target.value)} placeholder="例: 2026春IFT 参加後アンケート"/>
+            <input className="input input-lg" value={title} onChange={e=>setTitle(e.target.value)} placeholder={isMulti && target === 'all_sessions' ? "例: IF 8th 満足度 (各セッションのDay名が自動付与されます)" : "例: 2026春IFT 参加後アンケート"}/>
+            {isMulti && target === 'all_sessions' && (
+              <div style={{fontSize:11,color:'var(--ink4)',marginTop:6}}>
+                ⓘ 全セッションに作成: タイトル末尾に「 - Day 1 (日付)」のように自動付与されます
+              </div>
+            )}
           </div>
           <div className="grid-2" style={{gap:14}}>
             <div className="field">
@@ -3086,7 +3143,7 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
                 <select className="input select" value={eventId} onChange={e=>setEventId(e.target.value)}>
                   <option value="">選択してください</option>
                   {events.filter(e => e.status !== "アーカイブ").map(e => (
-                    <option key={e.id} value={e.id}>[{e.id}] {e.title}</option>
+                    <option key={e.id} value={e.id}>[{e.id}] {e.title}{e.format === 'multi' ? ` (${e.sessionCount || '?'}日間)` : ''}</option>
                   ))}
                 </select>
               </div>
@@ -3102,6 +3159,58 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
               </div>
             </div>
           </div>
+
+          {/* multi イベント用: ターゲット選択 */}
+          {isMulti && (
+            <div className="field" style={{padding:14,background:'var(--violet-50)',borderRadius:8,border:'1px solid var(--violet-100)'}}>
+              <label className="field-label" style={{color:'var(--violet)',fontWeight:700,marginBottom:10}}>
+                📅 複数日開催イベント — 対象を選んでください
+              </label>
+              <div style={{display:'flex',flexDirection:'column',gap:8,fontSize:13}}>
+                <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor: mode === 'edit' ? 'not-allowed' : 'pointer',opacity: mode === 'edit' ? 0.6 : 1}}>
+                  <input type="radio" name="surveyTarget" value="event" checked={target === 'event'} onChange={e=>setTarget(e.target.value)} disabled={mode === 'edit'}/>
+                  <div>
+                    <div style={{fontWeight:600}}>イベント全体</div>
+                    <div style={{fontSize:11,color:'var(--ink4)'}}>1つのアンケートで全体の満足度を集約</div>
+                  </div>
+                </label>
+                <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor: mode === 'edit' ? 'not-allowed' : 'pointer',opacity: mode === 'edit' ? 0.6 : 1}}>
+                  <input type="radio" name="surveyTarget" value="session_specific" checked={target === 'session_specific'} onChange={e=>setTarget(e.target.value)} disabled={mode === 'edit'}/>
+                  <div>
+                    <div style={{fontWeight:600}}>特定のセッション</div>
+                    <div style={{fontSize:11,color:'var(--ink4)'}}>1つのセッション専用のアンケート</div>
+                  </div>
+                </label>
+                {mode === 'create' && (
+                  <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer'}}>
+                    <input type="radio" name="surveyTarget" value="all_sessions" checked={target === 'all_sessions'} onChange={e=>setTarget(e.target.value)}/>
+                    <div>
+                      <div style={{fontWeight:600}}>全セッションに一括作成</div>
+                      <div style={{fontSize:11,color:'var(--ink4)'}}>各日ごとに別々のアンケートを {sessions.length} 件まとめて作成</div>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              {/* 特定セッション選択時のドロップダウン */}
+              {target === 'session_specific' && (
+                <div style={{marginTop:12}}>
+                  <label className="field-label" style={{fontSize:11,marginBottom:6}}>セッション選択</label>
+                  <div className="select-wrap">
+                    <select className="input select" value={sessionId} onChange={e=>setSessionId(e.target.value)} disabled={loadingSessions}>
+                      <option value="">{loadingSessions ? '読み込み中...' : '選択してください'}</option>
+                      {sessions.map(s => (
+                        <option key={s.id} value={s.id}>
+                          Day {s.order} — {s.date || '日付未設定'}{s.name ? ` (${s.name})` : ''}{s.venue ? ` @ ${s.venue}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="field">
             <label className="field-label">質問1: NPS (0-10)</label>
             <input className="input" value={q1} onChange={e=>setQ1(e.target.value)}/>
@@ -3118,7 +3227,7 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
         <div style={{padding:14,borderTop:'1px solid var(--line)',display:'flex',justifyContent:'flex-end',gap:8}}>
           <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>キャンセル</button>
           <button className="btn btn-indigo" onClick={handleSubmit} disabled={saving}>
-            {saving ? '保存中…' : (mode === "create" ? '作成' : '更新')}
+            {saving ? '保存中…' : (mode === "create" ? (isMulti && target === 'all_sessions' ? `${sessions.length}件を一括作成` : '作成') : '更新')}
           </button>
         </div>
       </div>
@@ -3276,6 +3385,14 @@ function PageSatisfaction(){
   // ========== CRUD アクション ==========
 
   async function handleCreate(payload) {
+    if (payload._action === 'createSurveysForSessions') {
+      const { _action, ...rest } = payload;
+      const result = await window.postData('createSurveysForSessions', rest);
+      setEditing(null);
+      window.toast.success(`${result.created || ''} 件のアンケートを一括作成しました`);
+      await fetchAll();
+      return;
+    }
     await window.postData('createSurvey', payload);
     setEditing(null);
     window.toast.success('アンケートを作成しました');
@@ -3386,7 +3503,14 @@ function PageSatisfaction(){
                   <div style={{flex:1,display:'flex',alignItems:'center',gap:10}}>
                     <div style={{width:4,height:32,background:`var(--${s.eventAccent})`,borderRadius:2}}></div>
                     <div>
-                      <div style={{fontWeight:700,fontSize:14}}>{s.title}</div>
+                      <div style={{fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        {s.title}
+                        {s.kind === 'session' && s.sessionId && (
+                          <span style={{fontSize:10,padding:'2px 7px',background:'var(--violet-50)',color:'var(--violet)',borderRadius:10,fontWeight:600,border:'1px solid var(--violet-100)'}}>
+                            セッション別
+                          </span>
+                        )}
+                      </div>
                       <div style={{fontSize:11,color:'var(--ink4)'}}>
                         <span className="mono">{s.id}</span> · {s.eventTitle || '—'}
                         {s.publishedAt && ` · 公開: ${s.publishedAt}`}
@@ -8223,6 +8347,8 @@ function PageQR(){
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedEventId, setSelectedEventId] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState("");   // multi イベント時のサブセレクター (Phase 6)
+  const [sessions, setSessions] = useState([]);                     // 選択中イベントのセッション一覧
   const [scanning, setScanning] = useState(false);
   const [lastResult, setLastResult] = useState(null);   // {type: 'success'|'error'|'duplicate', message, regId, name}
   const [manualQuery, setManualQuery] = useState("");
@@ -8230,6 +8356,21 @@ function PageQR(){
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const scanIntervalRef = useRef(null);
+
+  // 選択中イベントが multi なら、セッション一覧を取得
+  const selectedEventForSessions = events.find(e => e.id === selectedEventId);
+  const isMultiEvent = selectedEventForSessions && selectedEventForSessions.format === 'multi';
+
+  useEffect(() => {
+    if (!selectedEventId || !isMultiEvent) {
+      setSessions([]);
+      setSelectedSessionId("");
+      return;
+    }
+    window.fetchData('listEventSessions', { eventId: selectedEventId })
+      .then(res => setSessions(Array.isArray(res) ? res : []))
+      .catch(() => setSessions([]));
+  }, [selectedEventId, isMultiEvent]);
 
   // データ読み込み
   useEffect(() => {
@@ -8336,6 +8477,14 @@ function PageQR(){
       window.toast.warn('別イベントの申込です');
       return;
     }
+    // multi イベントでセッション指定中なら、申込のセッションIDも一致するかチェック
+    if (isMultiEvent && selectedSessionId && reg.sessionId && reg.sessionId !== selectedSessionId) {
+      const regSession = sessions.find(s => s.id === reg.sessionId);
+      const sessionLabel = regSession ? `Day ${regSession.order}` : 'このセッション';
+      setLastResult({type:'error', scanned:data, scannedAt:now, message:'別セッションの申込です', detail:`${sessionLabel} の申込です`});
+      window.toast.warn(`別セッションの申込です: ${sessionLabel}`);
+      return;
+    }
     if (reg.status === 'チェックイン済') {
       setLastResult({type:'duplicate', scanned:data, scannedAt:now, message:'すでにチェックイン済', regId:reg.id, name:reg.userName});
       window.toast.warn(`${reg.userName} さんは既にチェックイン済`);
@@ -8385,12 +8534,18 @@ function PageQR(){
     return () => stopScan();
   }, []);
 
-  // 選択イベントの統計
-  const eventRegs = registrations.filter(r => r.eventId === selectedEventId && r.status !== 'キャンセル');
+  // 選択イベントの統計 (セッション指定があれば、そのセッションの参加者のみ集計)
+  const eventRegs = registrations.filter(r => {
+    if (r.eventId !== selectedEventId) return false;
+    if (r.status === 'キャンセル') return false;
+    if (isMultiEvent && selectedSessionId && r.sessionId !== selectedSessionId) return false;
+    return true;
+  });
   const checkedInCount = eventRegs.filter(r => r.status === 'チェックイン済').length;
   const totalRegCount = eventRegs.length;
   const selectedEvent = events.find(e => e.id === selectedEventId);
   const visibleEvents = events.filter(e => e.status !== "アーカイブ");
+  const selectedSession = sessions.find(s => s.id === selectedSessionId);
 
   return (
     <div className="page" data-page="qr">
@@ -8414,21 +8569,43 @@ function PageQR(){
       {error && <div style={{padding:"10px 14px",marginBottom:14,background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:8,color:'var(--red)',fontSize:12}}><b>読み込みエラー:</b> {error}</div>}
 
       <div className="card mb16">
-        <div className="card-body" style={{display:'flex',gap:14,alignItems:'flex-end'}}>
-          <div className="field" style={{flex:1,marginBottom:0}}>
+        <div className="card-body" style={{display:'flex',gap:14,alignItems:'flex-end',flexWrap:'wrap'}}>
+          <div className="field" style={{flex:1,minWidth:240,marginBottom:0}}>
             <label className="field-label">対象イベント</label>
             <div className="select-wrap">
-              <select className="input select" value={selectedEventId} onChange={e=>{stopScan(); setSelectedEventId(e.target.value);}}>
+              <select className="input select" value={selectedEventId} onChange={e=>{stopScan(); setSelectedEventId(e.target.value); setSelectedSessionId("");}}>
                 <option value="">受付するイベントを選択</option>
                 {visibleEvents.map(e => (
-                  <option key={e.id} value={e.id}>[{e.id}] {e.title} ({e.date || '日付未定'})</option>
+                  <option key={e.id} value={e.id}>[{e.id}] {e.title}{e.format === 'multi' ? ` (${e.sessionCount || '?'}日間)` : ` (${e.date || '日付未定'})`}</option>
                 ))}
               </select>
             </div>
           </div>
+
+          {/* multi イベント選択時: セッションサブセレクター */}
+          {isMultiEvent && (
+            <div className="field" style={{flex:1,minWidth:240,marginBottom:0}}>
+              <label className="field-label" style={{color:'var(--violet)'}}>📅 セッション (Day) を選択</label>
+              <div className="select-wrap">
+                <select className="input select" value={selectedSessionId} onChange={e=>{stopScan(); setSelectedSessionId(e.target.value);}}>
+                  <option value="">全セッション (フィルタなし)</option>
+                  {sessions.map(s => (
+                    <option key={s.id} value={s.id}>
+                      Day {s.order} — {s.date || '日付未設定'}{s.name ? ` (${s.name})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {selectedEvent && (
             <div style={{textAlign:'right',minWidth:140}}>
-              <div style={{fontSize:11,color:'var(--ink4)'}}>受付状況</div>
+              <div style={{fontSize:11,color:'var(--ink4)'}}>
+                受付状況
+                {isMultiEvent && selectedSession && <span style={{color:'var(--violet)'}}> (Day {selectedSession.order})</span>}
+                {isMultiEvent && !selectedSession && <span> (全体)</span>}
+              </div>
               <div style={{fontFamily:'var(--serif)',fontSize:24,letterSpacing:'-.02em'}}>
                 <b style={{color:'var(--green)'}}>{checkedInCount}</b> / {totalRegCount}
               </div>
