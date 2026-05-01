@@ -7766,6 +7766,8 @@ function PageEventCreate(){
   // ヒーロー画像 (Phase 6.1) - 横長ヒーロー画像
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [heroUploading, setHeroUploading] = useState(false);
+  // 部署マスタ (Phase 6.4: イベントカテゴリは部署から動的生成)
+  const [departments, setDepartments] = useState([]);
 
   // 通信state
   const [loading, setLoading] = useState(false);
@@ -7773,8 +7775,44 @@ function PageEventCreate(){
   const [error, setError] = useState(null);
 
   // カテゴリ別アクセント色
-  const accentMap = {"IFT":"indigo","community":"teal","hub":"violet","order made":"amber"};
+  // 部署マスタを取得後は departments[].abbr / departments[].color を使う。
+  // フォールバック: 既存4カテゴリのハードコード (移行期間用)
+  const accentMap = (() => {
+    const map = {};
+    departments.forEach(d => {
+      const key = d.abbr || d.name;
+      if (key && d.color) map[key] = d.color;
+    });
+    // 既存データへのフォールバック
+    if (Object.keys(map).length === 0) {
+      return {"IFT":"indigo","community":"teal","hub":"violet","order made":"amber"};
+    }
+    return map;
+  })();
   const accent = accentMap[category] || "indigo";
+
+  // 部署マスタ取得 (初回 + 編集前) Phase 6.4
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDepts() {
+      try {
+        const list = await window.fetchData('listDepartments');
+        if (!cancelled && Array.isArray(list)) {
+          // active な部署のみ (アーカイブ済みは除外)
+          const active = list.filter(d => d.status !== 'archived' && d.status !== 'アーカイブ');
+          setDepartments(active);
+          // 新規作成モードでカテゴリ未設定なら、最初の部署を初期値に
+          if (!isEditMode && active.length > 0 && !category) {
+            setCategory(active[0].abbr || active[0].name);
+          }
+        }
+      } catch (e) {
+        // サイレント (フォールバックの4カテゴリで動作)
+      }
+    }
+    loadDepts();
+    return () => { cancelled = true; };
+  }, []);
 
   // 編集モードの場合、既存データを取得して入力欄を埋める
   useEffect(() => {
@@ -8025,11 +8063,27 @@ function PageEventCreate(){
                   <label className="field-label">カテゴリ <span className="field-req">*</span></label>
                   <div className="select-wrap">
                     <select className="input select" value={category} onChange={e=>setCategory(e.target.value)}>
-                      <option value="IFT">IFT (International Friendship Tour)</option>
-                      <option value="community">community (コミュニティイベント)</option>
-                      <option value="hub">hub (情報・勉強会)</option>
-                      <option value="order made">order made (オーダーメイド)</option>
+                      {departments.length > 0 ? (
+                        departments.map(d => {
+                          const key = d.abbr || d.name;
+                          const label = d.abbr ? `${d.abbr}${d.name && d.name !== d.abbr ? ` (${d.name})` : ''}` : d.name;
+                          return <option key={d.id} value={key}>{label}</option>;
+                        })
+                      ) : (
+                        // フォールバック (部署が未取得 or 0件)
+                        <>
+                          <option value="IFT">IFT (International Friendship Tour)</option>
+                          <option value="community">community (コミュニティイベント)</option>
+                          <option value="hub">hub (情報・勉強会)</option>
+                          <option value="order made">order made (オーダーメイド)</option>
+                        </>
+                      )}
                     </select>
+                  </div>
+                  <div className="field-hint">
+                    {departments.length > 0
+                      ? `${departments.length} 件の部署から選択 (「部署 / チーム」画面で編集)`
+                      : '部署マスタを取得できなかったため、デフォルトカテゴリを表示しています'}
                   </div>
                 </div>
                 <div className="field">
