@@ -738,6 +738,7 @@ svg{display:block}
 
     <div class="nav-section">
       <div class="nav-label"><span>設定</span></div>
+      <a href="#hero-settings" class="nav-item" data-nav="hero-settings"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>ヒーロー設定</a>
       <a href="#settings" class="nav-item" data-nav="settings"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>通知・PWA</a>
     </div>
   </aside>
@@ -2068,6 +2069,7 @@ const STUB_META = {
   org:            {title:"団体紹介",          icon:"building",  phase:"Phase 2新-D", desc:"団体ページ・採用ページのCMS。多言語対応、公開/下書き管理。"},
   ads:            {title:"広告",              icon:"megaphone", phase:"Phase 2新-D", desc:"参加者向けバナー、外部メディア掲載枠の管理。掲載期間、クリック数の集計。"},
   mobile:         {title:"現地オペレーション", icon:"phone",     phase:"Phase 2新-C", desc:"イベント当日のスマホ向けUI。受付QR、進行スクリプト、緊急連絡先を集約。"},
+  "hero-settings": {title:"ヒーロー設定",      icon:"img",       phase:"Phase 6.3",   desc:"参加者ページのトップに表示する常設ヒーロースライド (最大5枚) を管理。イベントが無い時のデフォルト + 混在表示。"},
 };
 
 function PageStub({navKey}){
@@ -9916,6 +9918,329 @@ function PagePhotos(){
 }
 
 // =================================================================
+// PageHeroSettings — ヒーロースライド管理 (Phase 6.3)
+// 最大5枚の常設ヒーロースライドをCRUD。並び替え・有効/無効切替対応。
+// =================================================================
+function PageHeroSettings(){
+  const [slides, setSlides] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [editing, setEditing] = useState(null);  // null | {mode:'create'} | {mode:'edit', slide}
+
+  async function fetchAll() {
+    setLoading(true);
+    try {
+      const list = await window.fetchData('listHeroSlides');
+      setSlides(Array.isArray(list) ? list : []);
+      setError(null);
+    } catch (e) {
+      setError(e.message || 'スライドの取得に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchAll(); }, []);
+
+  async function handleSave(payload) {
+    try {
+      if (editing && editing.mode === 'edit') {
+        await window.postData('updateHeroSlide', { slideId: editing.slide.id, fields: payload });
+        window.toast.success('スライドを更新しました');
+      } else {
+        await window.postData('createHeroSlide', payload);
+        window.toast.success('スライドを追加しました');
+      }
+      setEditing(null);
+      await fetchAll();
+    } catch (e) {
+      window.toast.error('保存失敗: ' + e.message);
+    }
+  }
+
+  async function handleDelete(slide) {
+    const ok = await window.confirmDialog({
+      title: 'スライドを削除',
+      body: `「${slide.titleEn || slide.eyebrow || slide.id}」を削除しますか?`,
+      confirmText: '削除する',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await window.postData('deleteHeroSlide', { slideId: slide.id });
+      window.toast.success('削除しました');
+      await fetchAll();
+    } catch (e) {
+      window.toast.error('削除失敗: ' + e.message);
+    }
+  }
+
+  async function handleToggleEnabled(slide) {
+    try {
+      await window.postData('updateHeroSlide', { slideId: slide.id, fields: { enabled: !slide.enabled } });
+      await fetchAll();
+    } catch (e) {
+      window.toast.error('変更失敗: ' + e.message);
+    }
+  }
+
+  async function handleMove(slide, direction) {
+    // direction: -1 (上に) / +1 (下に)
+    const sorted = [...slides].sort((a,b) => a.order - b.order);
+    const idx = sorted.findIndex(s => s.id === slide.id);
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= sorted.length) return;
+    const reordered = [...sorted];
+    [reordered[idx], reordered[newIdx]] = [reordered[newIdx], reordered[idx]];
+    try {
+      await window.postData('reorderHeroSlides', { order: reordered.map(s => s.id) });
+      await fetchAll();
+    } catch (e) {
+      window.toast.error('並べ替え失敗: ' + e.message);
+    }
+  }
+
+  return (
+    <div className="ph">
+      <div className="ph-head">
+        <div className="ph-crumbs"><span>設定</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>ヒーロー設定</span></div>
+        <h1 className="ph-title">ヒーロー <span style={{color:'var(--coral)',fontStyle:'italic'}}>設定</span></h1>
+        <p className="ph-sub">参加者ページのトップに表示する常設スライドを管理 (最大 5 枚)。イベント のスライドと混在表示されます。</p>
+      </div>
+
+      {error && <ErrorBanner error={error} onClose={()=>setError(null)}/>}
+
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:13,color:'var(--ink3)'}}>
+          現在 {slides.length} / 5 枚 (有効: {slides.filter(s => s.enabled).length} 枚)
+        </div>
+        <button
+          className="btn btn-indigo"
+          onClick={() => setEditing({mode:'create'})}
+          disabled={slides.length >= 5}>
+          <Icon n="plus" s={14}/> 新規スライドを追加
+        </button>
+      </div>
+
+      {loading ? (
+        <LoadingState label="スライドを読み込んでいます…"/>
+      ) : slides.length === 0 ? (
+        <div className="empty">
+          <Icon n="img" s={28}/>
+          <div>まだスライドがありません</div>
+          <div style={{fontSize:11,color:'var(--ink5)',marginTop:4}}>右上の「新規スライドを追加」から作成してください</div>
+        </div>
+      ) : (
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {[...slides].sort((a,b) => a.order - b.order).map((slide, idx, arr) => (
+            <div key={slide.id} className="card" style={{padding:14,opacity: slide.enabled ? 1 : 0.5}}>
+              <div style={{display:'grid',gridTemplateColumns:'auto 140px 1fr auto',gap:14,alignItems:'center'}}>
+                {/* 並び替えボタン */}
+                <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                  <button className="btn btn-soft btn-sm btn-icon" onClick={() => handleMove(slide, -1)} disabled={idx === 0} title="上に">▲</button>
+                  <button className="btn btn-soft btn-sm btn-icon" onClick={() => handleMove(slide, 1)} disabled={idx === arr.length - 1} title="下に">▼</button>
+                </div>
+
+                {/* サムネイル */}
+                <div style={{width:140,height:80,background:'var(--bg2)',borderRadius:6,overflow:'hidden'}}>
+                  {slide.imageUrl ? (
+                    <img src={slide.imageUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={(e) => { e.target.style.display='none'; }}/>
+                  ) : (
+                    <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--ink5)',fontSize:11}}>NO IMAGE</div>
+                  )}
+                </div>
+
+                {/* テキスト情報 */}
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--coral)',letterSpacing:'0.15em',fontWeight:700,marginBottom:4}}>
+                    {slide.eyebrow || '(eyebrow なし)'}
+                  </div>
+                  <div style={{fontSize:14,fontWeight:700,color:'var(--ink)',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                    {slide.titleEn || '(タイトル英語なし)'} <span style={{fontStyle:'italic',color:'var(--ink3)'}}>{slide.titleEm}</span>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--ink4)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                    {slide.sub || '(サブコピーなし)'}
+                  </div>
+                  <div style={{display:'flex',gap:6,marginTop:6}}>
+                    <span className="badge badge-ink" style={{fontSize:10}}>順番: {slide.order}</span>
+                    <span className="badge" style={{fontSize:10,background:slide.enabled?'var(--green-50)':'var(--bg2)',color:slide.enabled?'var(--green)':'var(--ink5)'}}>
+                      {slide.enabled ? '有効' : '無効'}
+                    </span>
+                    <span className="badge badge-ink" style={{fontSize:10}}>{slide.tone || 'warm'}</span>
+                  </div>
+                </div>
+
+                {/* アクション */}
+                <div style={{display:'flex',gap:6}}>
+                  <button className="btn btn-soft btn-sm" onClick={() => handleToggleEnabled(slide)} title={slide.enabled ? '無効にする' : '有効にする'}>
+                    {slide.enabled ? '🟢' : '⚪'}
+                  </button>
+                  <button className="btn btn-soft btn-sm" onClick={() => setEditing({mode:'edit', slide})}>
+                    <Icon n="edit" s={12}/> 編集
+                  </button>
+                  <button className="btn btn-soft btn-sm btn-icon" onClick={() => handleDelete(slide)} style={{color:'var(--coral)'}} title="削除">
+                    <Icon n="trash" s={12}/>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <HeroSlideEditor
+          mode={editing.mode}
+          slide={editing.mode === 'edit' ? editing.slide : null}
+          onSave={handleSave}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// HeroSlideEditor — モーダル形式のスライド編集フォーム
+function HeroSlideEditor({mode, slide, onSave, onCancel}) {
+  const [imageUrl, setImageUrl] = useState(slide?.imageUrl || '');
+  const [eyebrow, setEyebrow] = useState(slide?.eyebrow || '');
+  const [titleEn, setTitleEn] = useState(slide?.titleEn || '');
+  const [titleEm, setTitleEm] = useState(slide?.titleEm || '');
+  const [sub, setSub] = useState(slide?.sub || '');
+  const [tone, setTone] = useState(slide?.tone || 'warm');
+  const [enabled, setEnabled] = useState(slide?.enabled !== false);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFileUpload(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      window.toast.error('画像が大きすぎます (最大 5MB)');
+      e.target.value = '';
+      return;
+    }
+    setUploading(true);
+    try {
+      const dataBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1] || '');
+        reader.onerror = () => reject(new Error('読み込み失敗'));
+        reader.readAsDataURL(file);
+      });
+      const result = await window.postData('uploadPosterImage', {
+        filename: 'hero-slide-' + file.name,
+        mimeType: file.type,
+        dataBase64: dataBase64,
+      });
+      if (result && result.url) {
+        setImageUrl(result.url);
+        window.toast.success('画像をアップロードしました');
+      }
+    } catch (err) {
+      window.toast.error('アップロード失敗: ' + (err.message || err));
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  }
+
+  function handleSubmit() {
+    onSave({
+      imageUrl: imageUrl.trim(),
+      eyebrow: eyebrow.trim(),
+      titleEn: titleEn.trim(),
+      titleEm: titleEm.trim(),
+      sub: sub.trim(),
+      tone,
+      enabled,
+    });
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal" style={{maxWidth:560}} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">{mode === 'edit' ? 'スライドを編集' : '新規スライドを追加'}</div>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel}><Icon n="x" s={14}/></button>
+        </div>
+
+        <div className="modal-body" style={{display:'flex',flexDirection:'column',gap:14}}>
+          {/* 画像 */}
+          <div className="field">
+            <label className="field-label">画像 (横長推奨、16:9)</label>
+            <input
+              className="input"
+              value={imageUrl}
+              onChange={e => setImageUrl(e.target.value)}
+              placeholder="https://... または下からアップロード"
+              style={{marginBottom:8}}
+            />
+            <label className="btn btn-soft btn-sm" style={{cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.6 : 1}}>
+              <Icon n="upload" s={12}/> {uploading ? ' アップロード中…' : ' ファイルを選択'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{display:'none'}}
+                disabled={uploading}
+                onChange={handleFileUpload}
+              />
+            </label>
+            {imageUrl && (
+              <div style={{marginTop:10,padding:6,background:'var(--bg2)',borderRadius:6}}>
+                <img src={imageUrl} alt="" style={{width:'100%',maxHeight:140,objectFit:'cover',borderRadius:4,display:'block'}} onError={(e) => { e.target.style.display='none'; }}/>
+              </div>
+            )}
+          </div>
+
+          <div className="field">
+            <label className="field-label">eyebrow (上部の英大文字ラベル)</label>
+            <input className="input" value={eyebrow} onChange={e => setEyebrow(e.target.value)} placeholder="例: ENCOUNTERS"/>
+          </div>
+
+          <div className="field">
+            <label className="field-label">メインコピー (英語)</label>
+            <input className="input" value={titleEn} onChange={e => setTitleEn(e.target.value)} placeholder="例: Where strangers become"/>
+          </div>
+
+          <div className="field">
+            <label className="field-label">メインコピー (斜体・色付け)</label>
+            <input className="input" value={titleEm} onChange={e => setTitleEm(e.target.value)} placeholder="例: friends."/>
+          </div>
+
+          <div className="field">
+            <label className="field-label">サブコピー (日本語)</label>
+            <IMEInput className="input" value={sub} onChange={e => setSub(e.target.value)} placeholder="例: 出会いが、まちを変えていく。"/>
+          </div>
+
+          <div className="field">
+            <label className="field-label">トーン (オーバーレイ)</label>
+            <div className="select-wrap">
+              <select className="input select" value={tone} onChange={e => setTone(e.target.value)}>
+                <option value="warm">warm (暖色オーバーレイ — 明るい雰囲気の写真向け)</option>
+                <option value="night">night (濃紺オーバーレイ — 夜空・暗い写真向け)</option>
+                <option value="city">city (黒〜紺グラデ — 都市風景向け)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="field">
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+              <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)}/>
+              <span style={{fontSize:13}}>有効 (参加者サイトに表示)</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onCancel}>キャンセル</button>
+          <button className="btn btn-indigo" onClick={handleSubmit}>保存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =================================================================
 // PageSettings — 通知・PWA設定 (Phase 5新-E)
 // =================================================================
 function PageSettings(){
@@ -10701,6 +11026,7 @@ window.PagePhotos = PagePhotos;
 window.PageOrg = PageOrg;
 window.PageAds = PageAds;
 window.PageSettings = PageSettings;
+window.PageHeroSettings = PageHeroSettings;
 
 })();
 </script>
@@ -10770,6 +11096,7 @@ const PAGES = {
   mobile:         () => renderPage('PageMobile'),
 
   // ----- 設定 (Phase 5新-E) -----
+  'hero-settings': () => renderPage('PageHeroSettings'),
   settings:       () => renderPage('PageSettings'),
 };
 
