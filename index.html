@@ -9979,13 +9979,17 @@ function PageHeroSettings(){
   const [slides, setSlides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [editing, setEditing] = useState(null);  // null | {mode:'create'} | {mode:'edit', slide}
+  const [editing, setEditing] = useState(null);
+  const [previewIdx, setPreviewIdx] = useState(0);   // ライブプレビュー: どのスライドを大きく見せるか
 
   async function fetchAll() {
     setLoading(true);
     try {
       const list = await window.fetchData('listHeroSlides');
-      setSlides(Array.isArray(list) ? list : []);
+      const arr = Array.isArray(list) ? list : [];
+      setSlides(arr);
+      // index 範囲外ならリセット
+      if (previewIdx >= arr.length) setPreviewIdx(0);
       setError(null);
     } catch (e) {
       setError(e.message || 'スライドの取得に失敗しました');
@@ -10039,7 +10043,6 @@ function PageHeroSettings(){
   }
 
   async function handleMove(slide, direction) {
-    // direction: -1 (上に) / +1 (下に)
     const sorted = [...slides].sort((a,b) => a.order - b.order);
     const idx = sorted.findIndex(s => s.id === slide.id);
     const newIdx = idx + direction;
@@ -10054,24 +10057,82 @@ function PageHeroSettings(){
     }
   }
 
+  // Drive URL 正規化 (uc?export=view → thumbnail)
+  const normalizeImageUrl = (url) => {
+    if (!url || typeof url !== 'string') return url;
+    let m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w2000`;
+    m = url.match(/drive\.google\.com\/uc.*?[?&]id=([^&]+)/);
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w2000`;
+    return url;
+  };
+
+  // tone別オーバーレイ色 (参加者サイトと同じ)
+  const toneOverlay = {
+    warm:  'linear-gradient(180deg, rgba(10,41,96,0.35) 0%, rgba(10,41,96,0.55) 100%)',
+    night: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(10,41,96,0.65) 100%)',
+    city:  'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(10,41,96,0.65) 100%)',
+  };
+
+  const sortedSlides = [...slides].sort((a,b) => a.order - b.order);
+  const enabledCount = slides.filter(s => s.enabled).length;
+  const previewSlide = sortedSlides[previewIdx] || null;
+
   return (
     <div className="ph">
       <div className="ph-head">
         <div className="ph-crumbs"><span>設定</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>ヒーロー設定</span></div>
         <h1 className="ph-title">ヒーロー <span style={{color:'var(--coral)',fontStyle:'italic'}}>設定</span></h1>
-        <p className="ph-sub">参加者ページのトップに表示する常設スライドを管理 (最大 5 枚)。イベント のスライドと混在表示されます。</p>
+        <p className="ph-sub">参加者ページのトップに表示する常設スライドを管理。イベントスライドと交互にローテーションされます。</p>
       </div>
 
       {error && <ErrorBanner error={error} onClose={()=>setError(null)}/>}
 
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontSize:13,color:'var(--ink3)'}}>
-          現在 {slides.length} / 5 枚 (有効: {slides.filter(s => s.enabled).length} 枚)
+      {/* スロットカウンター + 追加ボタン */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+        padding: '14px 20px',
+        background: 'linear-gradient(135deg, var(--indigo-50) 0%, var(--bg2) 100%)',
+        borderRadius: 14,
+        border: '1px solid var(--indigo-100)',
+      }}>
+        <div style={{display:'flex',alignItems:'center',gap:18}}>
+          <div>
+            <div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink4)',letterSpacing:'0.18em',fontWeight:600,marginBottom:4}}>SLIDES</div>
+            <div style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:600,color:'var(--ink)',lineHeight:1}}>
+              {slides.length} <span style={{color:'var(--ink5)',fontSize:16}}>/ 5</span>
+            </div>
+          </div>
+          {/* スロット視覚化 */}
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            {[0,1,2,3,4].map(i => {
+              const slot = sortedSlides[i];
+              const filled = !!slot;
+              const enabledSlot = filled && slot.enabled;
+              return (
+                <div key={i} style={{
+                  width: 32, height: 18, borderRadius: 4,
+                  background: enabledSlot ? 'var(--indigo)' : (filled ? 'var(--ink5)' : 'transparent'),
+                  border: filled ? 'none' : '1px dashed var(--ink5)',
+                  transition: 'all .25s',
+                }} title={filled ? (enabledSlot ? '有効' : '無効') : '空き'}/>
+              );
+            })}
+          </div>
+          <div style={{fontSize:11,color:'var(--ink4)'}}>
+            <span style={{color:'var(--green)',fontWeight:600}}>● {enabledCount}</span> 有効 ・
+            <span style={{color:'var(--ink5)'}}> ● {slides.length - enabledCount}</span> 無効 ・
+            <span style={{color:'var(--ink5)'}}> ○ {5 - slides.length}</span> 空き
+          </div>
         </div>
         <button
           className="btn btn-indigo"
           onClick={() => setEditing({mode:'create'})}
-          disabled={slides.length >= 5}>
+          disabled={slides.length >= 5}
+          style={{padding: '10px 18px'}}>
           <Icon n="plus" s={14}/> 新規スライドを追加
         </button>
       </div>
@@ -10079,66 +10140,391 @@ function PageHeroSettings(){
       {loading ? (
         <LoadingState label="スライドを読み込んでいます…"/>
       ) : slides.length === 0 ? (
-        <div className="empty">
-          <Icon n="img" s={28}/>
-          <div>まだスライドがありません</div>
-          <div style={{fontSize:11,color:'var(--ink5)',marginTop:4}}>右上の「新規スライドを追加」から作成してください</div>
+        <div style={{
+          padding: '80px 40px',
+          textAlign: 'center',
+          background: 'var(--white)',
+          borderRadius: 14,
+          border: '2px dashed var(--line)',
+        }}>
+          <div style={{fontSize:48,marginBottom:14,opacity:0.5}}>🖼</div>
+          <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--ink)',marginBottom:8}}>
+            まだスライドがありません
+          </div>
+          <div style={{fontSize:13,color:'var(--ink4)',marginBottom:20,lineHeight:1.7}}>
+            参加者ページのヒーローに表示する画像とコピーを最大 5 枚まで設定できます。<br/>
+            イベントが無いときの「常設スライド」として活躍します。
+          </div>
+          <button className="btn btn-indigo" onClick={() => setEditing({mode:'create'})}>
+            <Icon n="plus" s={14}/> 最初のスライドを追加
+          </button>
         </div>
       ) : (
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {[...slides].sort((a,b) => a.order - b.order).map((slide, idx, arr) => (
-            <div key={slide.id} className="card" style={{padding:14,opacity: slide.enabled ? 1 : 0.5}}>
-              <div style={{display:'grid',gridTemplateColumns:'auto 140px 1fr auto',gap:14,alignItems:'center'}}>
-                {/* 並び替えボタン */}
-                <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                  <button className="btn btn-soft btn-sm btn-icon" onClick={() => handleMove(slide, -1)} disabled={idx === 0} title="上に">▲</button>
-                  <button className="btn btn-soft btn-sm btn-icon" onClick={() => handleMove(slide, 1)} disabled={idx === arr.length - 1} title="下に">▼</button>
-                </div>
+        <div style={{display:'grid',gridTemplateColumns:'minmax(0, 1.4fr) minmax(0, 1fr)',gap:20,alignItems:'start'}}>
 
-                {/* サムネイル */}
-                <div style={{width:140,height:80,background:'var(--bg2)',borderRadius:6,overflow:'hidden'}}>
-                  {slide.imageUrl ? (
-                    <img src={slide.imageUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={(e) => { e.target.style.display='none'; }}/>
-                  ) : (
-                    <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--ink5)',fontSize:11}}>NO IMAGE</div>
-                  )}
-                </div>
+          {/* === 左: ライブプレビュー === */}
+          <div style={{
+            position: 'sticky',
+            top: 70,
+          }}>
+            <div style={{
+              fontFamily:'var(--mono)',fontSize:10,color:'var(--ink4)',
+              letterSpacing:'0.2em',fontWeight:700,marginBottom:10,
+            }}>LIVE PREVIEW</div>
 
-                {/* テキスト情報 */}
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--coral)',letterSpacing:'0.15em',fontWeight:700,marginBottom:4}}>
-                    {slide.eyebrow || '(eyebrow なし)'}
+            <div style={{
+              position: 'relative',
+              aspectRatio: '16 / 9',
+              borderRadius: 14,
+              overflow: 'hidden',
+              background: '#0a2960',
+              boxShadow: '0 14px 36px -16px rgba(10,41,96,0.4), 0 4px 12px -4px rgba(10,41,96,0.2)',
+            }}>
+              {previewSlide && previewSlide.imageUrl ? (
+                <>
+                  <img
+                    src={normalizeImageUrl(previewSlide.imageUrl)}
+                    alt=""
+                    style={{
+                      position:'absolute',inset:0,width:'100%',height:'100%',
+                      objectFit:'cover',
+                    }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <div aria-hidden style={{
+                    position:'absolute',inset:0,
+                    background: toneOverlay[previewSlide.tone || 'warm'],
+                  }}/>
+                  {/* テキストオーバーレイ */}
+                  <div style={{
+                    position:'absolute',inset:0,
+                    display:'flex',flexDirection:'column',
+                    justifyContent:'center',
+                    padding:'30px 36px',
+                    color:'#fff',
+                  }}>
+                    {previewSlide.eyebrow && (
+                      <div style={{
+                        fontFamily:'var(--mono)',fontSize:10,
+                        letterSpacing:'0.32em',fontWeight:600,
+                        opacity:0.95,marginBottom:14,
+                        display:'flex',alignItems:'center',gap:10,
+                      }}>
+                        <span style={{width:24,height:1,background:'#fff',opacity:0.7}}/>
+                        <span>{previewSlide.eyebrow}</span>
+                      </div>
+                    )}
+                    {previewSlide.titleEn && (
+                      <div style={{
+                        fontFamily:'var(--serif)',fontSize:'clamp(20px, 3vw, 36px)',
+                        fontWeight:400,lineHeight:1.05,
+                        textShadow:'0 2px 16px rgba(0,0,0,0.35)',
+                      }}>
+                        <div style={{fontStyle:'normal'}}>{previewSlide.titleEn}</div>
+                        {previewSlide.titleEm && (
+                          <div style={{fontStyle:'italic',color:'#ffd5c6',marginTop:4}}>{previewSlide.titleEm}</div>
+                        )}
+                      </div>
+                    )}
+                    {previewSlide.sub && (
+                      <div style={{
+                        marginTop:12,fontSize:12,
+                        textShadow:'0 2px 8px rgba(0,0,0,0.4)',
+                        opacity:0.95,
+                      }}>{previewSlide.sub}</div>
+                    )}
                   </div>
-                  <div style={{fontSize:14,fontWeight:700,color:'var(--ink)',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                    {slide.titleEn || '(タイトル英語なし)'} <span style={{fontStyle:'italic',color:'var(--ink3)'}}>{slide.titleEm}</span>
-                  </div>
-                  <div style={{fontSize:12,color:'var(--ink4)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                    {slide.sub || '(サブコピーなし)'}
-                  </div>
-                  <div style={{display:'flex',gap:6,marginTop:6}}>
-                    <span className="badge badge-ink" style={{fontSize:10}}>順番: {slide.order}</span>
-                    <span className="badge" style={{fontSize:10,background:slide.enabled?'var(--green-50)':'var(--bg2)',color:slide.enabled?'var(--green)':'var(--ink5)'}}>
-                      {slide.enabled ? '有効' : '無効'}
-                    </span>
-                    <span className="badge badge-ink" style={{fontSize:10}}>{slide.tone || 'warm'}</span>
-                  </div>
+                </>
+              ) : (
+                <div style={{
+                  position:'absolute',inset:0,
+                  display:'flex',flexDirection:'column',
+                  alignItems:'center',justifyContent:'center',
+                  color:'rgba(255,255,255,0.6)',
+                  fontFamily:'var(--mono)',
+                  fontSize:11,letterSpacing:'0.2em',
+                }}>
+                  <Icon n="img" s={32}/>
+                  <div style={{marginTop:10}}>NO PREVIEW</div>
                 </div>
+              )}
 
-                {/* アクション */}
-                <div style={{display:'flex',gap:6}}>
-                  <button className="btn btn-soft btn-sm" onClick={() => handleToggleEnabled(slide)} title={slide.enabled ? '無効にする' : '有効にする'}>
-                    {slide.enabled ? '🟢' : '⚪'}
-                  </button>
-                  <button className="btn btn-soft btn-sm" onClick={() => setEditing({mode:'edit', slide})}>
-                    <Icon n="edit" s={12}/> 編集
-                  </button>
-                  <button className="btn btn-soft btn-sm btn-icon" onClick={() => handleDelete(slide)} style={{color:'var(--coral)'}} title="削除">
-                    <Icon n="trash" s={12}/>
-                  </button>
+              {/* プレビューのインジケータ (どのスライド見てるか) */}
+              {sortedSlides.length > 1 && (
+                <div style={{
+                  position:'absolute',bottom:14,left:16,
+                  display:'flex',gap:6,
+                }}>
+                  {sortedSlides.map((s, i) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setPreviewIdx(i)}
+                      style={{
+                        width: i === previewIdx ? 28 : 8,
+                        height: 4,
+                        background: i === previewIdx ? '#fff' : 'rgba(255,255,255,0.45)',
+                        borderRadius: 999,
+                        border: 0,
+                        padding: 0,
+                        cursor: 'pointer',
+                        transition: 'all .3s',
+                      }}
+                    />
+                  ))}
                 </div>
-              </div>
+              )}
+
+              {/* 状態バッジ */}
+              {previewSlide && !previewSlide.enabled && (
+                <div style={{
+                  position:'absolute',top:14,right:14,
+                  background:'rgba(0,0,0,0.5)',
+                  backdropFilter:'blur(6px)',
+                  color:'#fff',
+                  padding:'6px 12px',borderRadius:999,
+                  fontFamily:'var(--mono)',fontSize:10,
+                  letterSpacing:'0.15em',fontWeight:700,
+                }}>DISABLED</div>
+              )}
             </div>
-          ))}
+
+            <div style={{
+              marginTop:10,padding:'10px 14px',
+              background:'var(--bg2)',borderRadius:8,
+              fontSize:11,color:'var(--ink4)',
+              display:'flex',alignItems:'center',gap:8,
+            }}>
+              <Icon n="info" s={12}/>
+              <span>これは参加者ページのヒーロー画面の見え方です。実際は他のスライドと自動で切替わります。</span>
+            </div>
+          </div>
+
+          {/* === 右: スライドリスト === */}
+          <div>
+            <div style={{
+              fontFamily:'var(--mono)',fontSize:10,color:'var(--ink4)',
+              letterSpacing:'0.2em',fontWeight:700,marginBottom:10,
+            }}>ALL SLIDES ({sortedSlides.length})</div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {sortedSlides.map((slide, idx, arr) => {
+                const isActive = idx === previewIdx;
+                return (
+                <div
+                  key={slide.id}
+                  onClick={() => setPreviewIdx(idx)}
+                  style={{
+                    cursor: 'pointer',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    background: 'var(--white)',
+                    border: isActive ? '2px solid var(--indigo)' : '1px solid var(--line)',
+                    boxShadow: isActive
+                      ? '0 8px 24px -8px rgba(10,41,96,0.25)'
+                      : '0 2px 6px -2px rgba(10,41,96,0.06)',
+                    transition: 'all .25s',
+                  }}>
+                  <div style={{display:'grid',gridTemplateColumns:'auto 96px 1fr auto',gap:12,padding:10,alignItems:'center'}}>
+
+                    {/* 並び替え (大きめのカラム) */}
+                    <div style={{display:'flex',flexDirection:'column',gap:3,alignItems:'center'}}>
+                      <button
+                        className="btn-icon"
+                        onClick={(e) => { e.stopPropagation(); handleMove(slide, -1); }}
+                        disabled={idx === 0}
+                        title="上に"
+                        style={{
+                          width:24,height:20,padding:0,
+                          background: idx === 0 ? 'var(--bg2)' : 'var(--white)',
+                          border:'1px solid var(--line)',
+                          borderRadius:4,cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                          opacity: idx === 0 ? 0.4 : 1,
+                          fontSize:10,color:'var(--ink3)',
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                        }}>▲</button>
+                      <div style={{
+                        fontFamily:'var(--mono)',fontSize:10,
+                        color:isActive?'var(--indigo)':'var(--ink5)',
+                        fontWeight:700,
+                      }}>{slide.order}</div>
+                      <button
+                        className="btn-icon"
+                        onClick={(e) => { e.stopPropagation(); handleMove(slide, 1); }}
+                        disabled={idx === arr.length - 1}
+                        title="下に"
+                        style={{
+                          width:24,height:20,padding:0,
+                          background: idx === arr.length - 1 ? 'var(--bg2)' : 'var(--white)',
+                          border:'1px solid var(--line)',
+                          borderRadius:4,cursor: idx === arr.length - 1 ? 'not-allowed' : 'pointer',
+                          opacity: idx === arr.length - 1 ? 0.4 : 1,
+                          fontSize:10,color:'var(--ink3)',
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                        }}>▼</button>
+                    </div>
+
+                    {/* サムネイル */}
+                    <div style={{
+                      position:'relative',
+                      width:96,height:54,
+                      borderRadius:6,overflow:'hidden',
+                      background:'#0a2960',
+                      flex:'none',
+                    }}>
+                      {slide.imageUrl ? (
+                        <>
+                          <img
+                            src={normalizeImageUrl(slide.imageUrl)}
+                            alt=""
+                            style={{width:'100%',height:'100%',objectFit:'cover'}}
+                            onError={(e) => { e.target.style.display='none'; }}
+                          />
+                          <div aria-hidden style={{
+                            position:'absolute',inset:0,
+                            background: toneOverlay[slide.tone || 'warm'],
+                            opacity:0.7,
+                          }}/>
+                        </>
+                      ) : (
+                        <div style={{
+                          width:'100%',height:'100%',
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                          color:'rgba(255,255,255,0.5)',fontSize:9,
+                          fontFamily:'var(--mono)',letterSpacing:'0.1em',
+                        }}>NO IMG</div>
+                      )}
+                      {!slide.enabled && (
+                        <div style={{
+                          position:'absolute',inset:0,
+                          background:'rgba(255,255,255,0.65)',
+                          backdropFilter:'blur(2px)',
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                          color:'var(--ink4)',
+                          fontFamily:'var(--mono)',fontSize:8,
+                          letterSpacing:'0.1em',fontWeight:700,
+                        }}>OFF</div>
+                      )}
+                    </div>
+
+                    {/* テキスト情報 */}
+                    <div style={{minWidth:0}}>
+                      <div style={{
+                        fontFamily:'var(--mono)',fontSize:9,
+                        color:slide.eyebrow?'var(--coral)':'var(--ink5)',
+                        letterSpacing:'0.18em',fontWeight:700,
+                        marginBottom:3,
+                        whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
+                      }}>
+                        {slide.eyebrow || '— eyebrow なし —'}
+                      </div>
+                      <div style={{
+                        fontFamily:'var(--serif)',fontSize:14,
+                        fontWeight:500,color:'var(--ink)',
+                        lineHeight:1.3,marginBottom:2,
+                        whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
+                      }}>
+                        {slide.titleEn || <span style={{color:'var(--ink5)',fontStyle:'italic'}}>(タイトル未設定)</span>}
+                        {slide.titleEm && <span style={{fontStyle:'italic',color:'var(--coral)',marginLeft:4}}>{slide.titleEm}</span>}
+                      </div>
+                      <div style={{
+                        fontSize:11,color:'var(--ink4)',
+                        whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
+                      }}>
+                        {slide.sub || <span style={{color:'var(--ink5)'}}>— サブコピーなし —</span>}
+                      </div>
+                    </div>
+
+                    {/* アクション */}
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                      {/* 有効/無効トグル */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleToggleEnabled(slide); }}
+                        title={slide.enabled ? '無効にする' : '有効にする'}
+                        style={{
+                          width:48,height:24,padding:2,
+                          background: slide.enabled ? 'var(--green)' : 'var(--ink5)',
+                          border:0,borderRadius:999,cursor:'pointer',
+                          position:'relative',
+                          transition:'background .2s',
+                        }}>
+                        <div style={{
+                          position:'absolute',top:2,
+                          left: slide.enabled ? 26 : 2,
+                          width:20,height:20,
+                          background:'#fff',borderRadius:'50%',
+                          transition:'left .2s',
+                          boxShadow:'0 1px 3px rgba(0,0,0,0.2)',
+                        }}/>
+                      </button>
+                      <div style={{display:'flex',gap:4}}>
+                        <button
+                          className="btn-icon"
+                          onClick={(e) => { e.stopPropagation(); setEditing({mode:'edit', slide}); }}
+                          title="編集"
+                          style={{
+                            width:22,height:22,padding:0,
+                            background:'var(--white)',
+                            border:'1px solid var(--line)',
+                            borderRadius:4,cursor:'pointer',
+                            display:'flex',alignItems:'center',justifyContent:'center',
+                            color:'var(--ink2)',
+                          }}>
+                          <Icon n="edit" s={11}/>
+                        </button>
+                        <button
+                          className="btn-icon"
+                          onClick={(e) => { e.stopPropagation(); handleDelete(slide); }}
+                          title="削除"
+                          style={{
+                            width:22,height:22,padding:0,
+                            background:'var(--white)',
+                            border:'1px solid var(--line)',
+                            borderRadius:4,cursor:'pointer',
+                            display:'flex',alignItems:'center',justifyContent:'center',
+                            color:'var(--coral)',
+                          }}>
+                          <Icon n="trash" s={11}/>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+
+            {/* 残り枠の表示 */}
+            {slides.length < 5 && (
+              <button
+                onClick={() => setEditing({mode:'create'})}
+                style={{
+                  marginTop:10,
+                  width:'100%',
+                  padding:'14px',
+                  background:'transparent',
+                  border:'2px dashed var(--line)',
+                  borderRadius:12,
+                  cursor:'pointer',
+                  color:'var(--ink4)',
+                  fontSize:12,
+                  fontFamily:'var(--mono)',
+                  letterSpacing:'0.1em',
+                  transition:'all .2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--indigo)';
+                  e.currentTarget.style.color = 'var(--indigo)';
+                  e.currentTarget.style.background = 'var(--indigo-50)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--line)';
+                  e.currentTarget.style.color = 'var(--ink4)';
+                  e.currentTarget.style.background = 'transparent';
+                }}>
+                + スライドを追加 ({5 - slides.length} 枠空き)
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -10154,7 +10540,7 @@ function PageHeroSettings(){
   );
 }
 
-// HeroSlideEditor — モーダル形式のスライド編集フォーム
+// HeroSlideEditor — ライブプレビュー付き編集モーダル
 function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const [imageUrl, setImageUrl] = useState(slide?.imageUrl || '');
   const [eyebrow, setEyebrow] = useState(slide?.eyebrow || '');
@@ -10164,6 +10550,22 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const [tone, setTone] = useState(slide?.tone || 'warm');
   const [enabled, setEnabled] = useState(slide?.enabled !== false);
   const [uploading, setUploading] = useState(false);
+
+  // Drive URL 正規化
+  const normalizeImageUrl = (url) => {
+    if (!url || typeof url !== 'string') return url;
+    let m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w2000`;
+    m = url.match(/drive\.google\.com\/uc.*?[?&]id=([^&]+)/);
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w2000`;
+    return url;
+  };
+
+  const toneOverlay = {
+    warm:  'linear-gradient(180deg, rgba(10,41,96,0.35) 0%, rgba(10,41,96,0.55) 100%)',
+    night: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(10,41,96,0.65) 100%)',
+    city:  'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(10,41,96,0.65) 100%)',
+  };
 
   async function handleFileUpload(e) {
     const file = e.target.files && e.target.files[0];
@@ -10210,84 +10612,314 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     });
   }
 
+  const previewImg = normalizeImageUrl(imageUrl);
+
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" style={{maxWidth:560}} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <div className="modal-title">{mode === 'edit' ? 'スライドを編集' : '新規スライドを追加'}</div>
+      <div className="modal" style={{maxWidth: 880, padding: 0}} onClick={(e) => e.stopPropagation()}>
+
+        {/* ヘッダー */}
+        <div style={{
+          padding:'18px 24px',
+          borderBottom:'1px solid var(--line)',
+          display:'flex',justifyContent:'space-between',alignItems:'center',
+        }}>
+          <div>
+            <div style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',letterSpacing:'0.2em',fontWeight:700,marginBottom:4}}>
+              {mode === 'edit' ? 'EDIT SLIDE' : 'NEW SLIDE'}
+            </div>
+            <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--ink)'}}>
+              {mode === 'edit' ? 'スライドを編集' : '新規スライドを追加'}
+            </div>
+          </div>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel}><Icon n="x" s={14}/></button>
         </div>
 
-        <div className="modal-body" style={{display:'flex',flexDirection:'column',gap:14}}>
-          {/* 画像 */}
-          <div className="field">
-            <label className="field-label">画像 (横長推奨、16:9)</label>
-            <input
-              className="input"
-              value={imageUrl}
-              onChange={e => setImageUrl(e.target.value)}
-              placeholder="https://... または下からアップロード"
-              style={{marginBottom:8}}
-            />
-            <label className="btn btn-soft btn-sm" style={{cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.6 : 1}}>
-              <Icon n="upload" s={12}/> {uploading ? ' アップロード中…' : ' ファイルを選択'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                style={{display:'none'}}
-                disabled={uploading}
-                onChange={handleFileUpload}
-              />
-            </label>
-            {imageUrl && (
-              <div style={{marginTop:10,padding:6,background:'var(--bg2)',borderRadius:6}}>
-                <img src={imageUrl} alt="" style={{width:'100%',maxHeight:140,objectFit:'cover',borderRadius:4,display:'block'}} onError={(e) => { e.target.style.display='none'; }}/>
+        {/* 二段組: 左 = ライブプレビュー / 右 = フォーム */}
+        <div style={{
+          display:'grid',
+          gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1.1fr)',
+          maxHeight:'calc(100vh - 200px)',
+          overflow:'hidden',
+        }}>
+          {/* === 左: プレビュー === */}
+          <div style={{
+            padding:'20px',
+            background:'linear-gradient(135deg, var(--bg2) 0%, var(--indigo-50) 100%)',
+            display:'flex',flexDirection:'column',
+            overflow:'auto',
+          }}>
+            <div style={{
+              fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+              letterSpacing:'0.22em',fontWeight:700,marginBottom:12,
+            }}>LIVE PREVIEW</div>
+
+            <div style={{
+              position:'relative',
+              aspectRatio:'16 / 9',
+              borderRadius:10,overflow:'hidden',
+              background:'#0a2960',
+              boxShadow:'0 12px 28px -12px rgba(10,41,96,0.4)',
+            }}>
+              {previewImg ? (
+                <>
+                  <img
+                    src={previewImg}
+                    alt=""
+                    style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
+                    onError={(e) => { e.target.style.display='none'; }}
+                  />
+                  <div aria-hidden style={{
+                    position:'absolute',inset:0,
+                    background: toneOverlay[tone],
+                  }}/>
+                  <div style={{
+                    position:'absolute',inset:0,
+                    display:'flex',flexDirection:'column',justifyContent:'center',
+                    padding:'24px 28px',color:'#fff',
+                  }}>
+                    {eyebrow && (
+                      <div style={{
+                        fontFamily:'var(--mono)',fontSize:9,
+                        letterSpacing:'0.32em',fontWeight:600,
+                        marginBottom:12,opacity:0.95,
+                        display:'flex',alignItems:'center',gap:10,
+                      }}>
+                        <span style={{width:20,height:1,background:'#fff',opacity:0.7}}/>
+                        <span>{eyebrow}</span>
+                      </div>
+                    )}
+                    {titleEn && (
+                      <div style={{
+                        fontFamily:'var(--serif)',fontSize:'clamp(18px, 2.4vw, 30px)',
+                        fontWeight:400,lineHeight:1.05,
+                        textShadow:'0 2px 14px rgba(0,0,0,0.35)',
+                      }}>
+                        <div>{titleEn}</div>
+                        {titleEm && <div style={{fontStyle:'italic',color:'#ffd5c6',marginTop:2}}>{titleEm}</div>}
+                      </div>
+                    )}
+                    {sub && (
+                      <div style={{
+                        marginTop:10,fontSize:11,
+                        textShadow:'0 2px 8px rgba(0,0,0,0.4)',
+                        opacity:0.95,lineHeight:1.5,
+                      }}>{sub}</div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={{
+                  position:'absolute',inset:0,
+                  display:'flex',flexDirection:'column',
+                  alignItems:'center',justifyContent:'center',
+                  color:'rgba(255,255,255,0.5)',
+                  fontFamily:'var(--mono)',fontSize:10,
+                  letterSpacing:'0.2em',
+                }}>
+                  <Icon n="img" s={28}/>
+                  <div style={{marginTop:8}}>画像を追加してください</div>
+                </div>
+              )}
+            </div>
+
+            {/* tone説明 */}
+            <div style={{
+              marginTop:14,padding:'10px 12px',
+              background:'var(--white)',borderRadius:8,
+              border:'1px solid var(--line)',
+              fontSize:11,color:'var(--ink3)',lineHeight:1.6,
+            }}>
+              <div style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',letterSpacing:'0.18em',marginBottom:4,fontWeight:700}}>OVERLAY: {tone.toUpperCase()}</div>
+              {tone === 'warm' && '明るい雰囲気の写真向け。インディゴの薄いオーバーレイ。'}
+              {tone === 'night' && '夜景や暗い写真向け。深いオーバーレイで文字を浮かせる。'}
+              {tone === 'city' && '都市風景向け。下方が濃いグラデーション。'}
+            </div>
+
+            {!enabled && (
+              <div style={{
+                marginTop:10,padding:'8px 12px',
+                background:'var(--ink-faint, #f3f0ed)',
+                border:'1px solid var(--ink5)',
+                borderRadius:8,fontSize:11,
+                color:'var(--ink3)',
+              }}>
+                ⚠ 「無効」状態のため、参加者ページには表示されません
               </div>
             )}
           </div>
 
-          <div className="field">
-            <label className="field-label">eyebrow (上部の英大文字ラベル)</label>
-            <input className="input" value={eyebrow} onChange={e => setEyebrow(e.target.value)} placeholder="例: ENCOUNTERS"/>
-          </div>
-
-          <div className="field">
-            <label className="field-label">メインコピー (英語)</label>
-            <input className="input" value={titleEn} onChange={e => setTitleEn(e.target.value)} placeholder="例: Where strangers become"/>
-          </div>
-
-          <div className="field">
-            <label className="field-label">メインコピー (斜体・色付け)</label>
-            <input className="input" value={titleEm} onChange={e => setTitleEm(e.target.value)} placeholder="例: friends."/>
-          </div>
-
-          <div className="field">
-            <label className="field-label">サブコピー (日本語)</label>
-            <IMEInput className="input" value={sub} onChange={e => setSub(e.target.value)} placeholder="例: 出会いが、まちを変えていく。"/>
-          </div>
-
-          <div className="field">
-            <label className="field-label">トーン (オーバーレイ)</label>
-            <div className="select-wrap">
-              <select className="input select" value={tone} onChange={e => setTone(e.target.value)}>
-                <option value="warm">warm (暖色オーバーレイ — 明るい雰囲気の写真向け)</option>
-                <option value="night">night (濃紺オーバーレイ — 夜空・暗い写真向け)</option>
-                <option value="city">city (黒〜紺グラデ — 都市風景向け)</option>
-              </select>
+          {/* === 右: フォーム === */}
+          <div style={{
+            padding:'20px 24px',
+            overflow:'auto',
+            display:'flex',flexDirection:'column',gap:16,
+          }}>
+            {/* 画像セクション */}
+            <div>
+              <div style={{
+                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
+              }}>BACKGROUND IMAGE</div>
+              <input
+                className="input"
+                value={imageUrl}
+                onChange={e => setImageUrl(e.target.value)}
+                placeholder="https://... または下からアップロード"
+                style={{marginBottom:8}}
+              />
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <label className="btn btn-soft btn-sm" style={{cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.6 : 1}}>
+                  <Icon n="upload" s={12}/> {uploading ? ' アップロード中…' : ' ファイルを選択'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    style={{display:'none'}}
+                    disabled={uploading}
+                    onChange={handleFileUpload}
+                  />
+                </label>
+                {imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl('')}
+                    style={{
+                      padding:'6px 10px',
+                      background:'transparent',
+                      border:'1px solid var(--line)',
+                      borderRadius:6,cursor:'pointer',
+                      fontSize:11,color:'var(--coral)',
+                    }}>クリア</button>
+                )}
+                <span style={{fontSize:10,color:'var(--ink5)',marginLeft:'auto'}}>横長 / 16:9 推奨 / 5MB まで</span>
+              </div>
             </div>
-          </div>
 
-          <div className="field">
-            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
-              <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)}/>
-              <span style={{fontSize:13}}>有効 (参加者サイトに表示)</span>
-            </label>
+            {/* コピーセクション */}
+            <div>
+              <div style={{
+                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
+              }}>COPY</div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <div>
+                  <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
+                    Eyebrow <span style={{color:'var(--ink5)',fontWeight:400}}>(上部の英大文字ラベル)</span>
+                  </label>
+                  <input className="input" value={eyebrow} onChange={e => setEyebrow(e.target.value)} placeholder="例: ENCOUNTERS"/>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <div>
+                    <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
+                      Title (英語)
+                    </label>
+                    <input className="input" value={titleEn} onChange={e => setTitleEn(e.target.value)} placeholder="Where strangers become"/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
+                      Title (斜体・色付け)
+                    </label>
+                    <input className="input" value={titleEm} onChange={e => setTitleEm(e.target.value)} placeholder="friends." style={{fontStyle:'italic'}}/>
+                  </div>
+                </div>
+                <div>
+                  <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
+                    サブコピー (日本語)
+                  </label>
+                  <IMEInput className="input" value={sub} onChange={e => setSub(e.target.value)} placeholder="出会いが、まちを変えていく。"/>
+                </div>
+              </div>
+            </div>
+
+            {/* スタイルセクション */}
+            <div>
+              <div style={{
+                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
+              }}>STYLE</div>
+              {/* tone セレクタ (3択ボタン) */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+                {[
+                  {v:'warm',label:'WARM',desc:'明るい'},
+                  {v:'night',label:'NIGHT',desc:'夜・暗い'},
+                  {v:'city',label:'CITY',desc:'都市'},
+                ].map(opt => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setTone(opt.v)}
+                    style={{
+                      padding:'10px 8px',
+                      background: tone === opt.v ? 'var(--indigo)' : 'var(--white)',
+                      color: tone === opt.v ? '#fff' : 'var(--ink2)',
+                      border: tone === opt.v ? '1px solid var(--indigo)' : '1px solid var(--line)',
+                      borderRadius:8,cursor:'pointer',
+                      transition:'all .2s',
+                    }}>
+                    <div style={{fontFamily:'var(--mono)',fontSize:10,fontWeight:700,letterSpacing:'0.15em',marginBottom:2}}>{opt.label}</div>
+                    <div style={{fontSize:10,opacity:0.7}}>{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 公開設定 */}
+            <div>
+              <div style={{
+                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
+              }}>VISIBILITY</div>
+              <label style={{
+                display:'flex',alignItems:'center',gap:12,cursor:'pointer',
+                padding:'10px 12px',
+                background: enabled ? 'var(--green-50, #e8f5e9)' : 'var(--bg2)',
+                border: enabled ? '1px solid var(--green)' : '1px solid var(--line)',
+                borderRadius:8,
+                transition:'all .2s',
+              }}>
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); setEnabled(!enabled); }}
+                  style={{
+                    width:44,height:24,padding:2,
+                    background: enabled ? 'var(--green)' : 'var(--ink5)',
+                    border:0,borderRadius:999,cursor:'pointer',
+                    position:'relative',
+                    transition:'background .2s',flex:'none',
+                  }}>
+                  <div style={{
+                    position:'absolute',top:2,
+                    left: enabled ? 22 : 2,
+                    width:20,height:20,
+                    background:'#fff',borderRadius:'50%',
+                    transition:'left .2s',
+                    boxShadow:'0 1px 3px rgba(0,0,0,0.2)',
+                  }}/>
+                </button>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:'var(--ink)'}}>
+                    {enabled ? '有効 — 参加者ページに表示' : '無効 — 表示されない'}
+                  </div>
+                  <div style={{fontSize:11,color:'var(--ink4)',marginTop:2}}>
+                    {enabled ? 'スライドショーのローテーションに含まれます' : '保存しても参加者ページには出ません'}
+                  </div>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
 
-        <div className="modal-foot">
+        {/* フッター */}
+        <div style={{
+          padding:'14px 24px',
+          borderTop:'1px solid var(--line)',
+          background:'var(--bg2)',
+          display:'flex',justifyContent:'flex-end',gap:8,
+        }}>
           <button className="btn btn-ghost" onClick={onCancel}>キャンセル</button>
-          <button className="btn btn-indigo" onClick={handleSubmit}>保存</button>
+          <button className="btn btn-indigo" onClick={handleSubmit}>
+            <Icon n="check" s={14}/> {mode === 'edit' ? '変更を保存' : 'スライドを追加'}
+          </button>
         </div>
       </div>
     </div>
