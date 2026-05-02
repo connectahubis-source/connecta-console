@@ -79,6 +79,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Phase 7.2: ヒーローオーバーレイ用手書きフォント -->
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Kalam:wght@400;700&family=Permanent+Marker&family=Yuji+Mai&family=Yuji+Boku&family=Klee+One:wght@400;600&family=Zen+Kurenaido&family=Hachi+Maru+Pop&family=Fraunces:ital,wght@0,400;1,400&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
@@ -7884,6 +7886,10 @@ function PageEventCreate(){
   // ヒーロー画像 (Phase 6.1) - 横長ヒーロー画像
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [heroUploading, setHeroUploading] = useState(false);
+  // (Phase 7.2) ヒーローオーバーレイ — 画像上に重ねるテキスト/図形
+  // 配列: [{id, type:'text'|'circle'|'rect'|'triangle', x, y, w, h, ...}]
+  const [heroOverlay, setHeroOverlay] = useState([]);
+  const [selectedOverlayId, setSelectedOverlayId] = useState(null);
   // 部署マスタ (Phase 6.4: イベントカテゴリは部署から動的生成)
   const [departments, setDepartments] = useState([]);
 
@@ -7968,6 +7974,13 @@ function PageEventCreate(){
         setSnsCopy(ev.snsCopy || "");
         setPosterUrl(ev.posterUrl || "");
         setHeroImageUrl(ev.heroImageUrl || "");
+        // (Phase 7.2) heroOverlay読み込み — JSON文字列または配列を受け取る
+        try {
+          const ov = ev.heroOverlay;
+          if (Array.isArray(ov)) setHeroOverlay(ov);
+          else if (typeof ov === 'string' && ov) setHeroOverlay(JSON.parse(ov));
+          else setHeroOverlay([]);
+        } catch (e) { setHeroOverlay([]); }
         setOnline(ev.online === true || ev.online === 'true');
         setZoomURL(ev.zoomURL || "");
         setFormat(ev.format || 'single');
@@ -8043,6 +8056,7 @@ function PageEventCreate(){
       snsCopy: snsCopy || '',
       posterUrl: posterUrl || '',
       heroImageUrl: heroImageUrl || '',
+      heroOverlay: JSON.stringify(heroOverlay || []),
       online: online,
       zoomURL: online ? (zoomURL || '') : '',
       format: format,
@@ -8800,6 +8814,279 @@ function PageEventCreate(){
                     )}
                   </div>
                 </div>
+
+                {/* (Phase 7.2) ヒーローオーバーレイエディタ — 画像 + テキスト/図形 */}
+                {heroImageUrl && (
+                  <div className="field" style={{marginTop:16,padding:16,background:'#fff',borderRadius:10,border:'1px solid var(--line)'}}>
+                    <label className="field-label" style={{fontWeight:700,fontSize:13,marginBottom:6,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span>🎨 オーバーレイ (テキスト・図形)</span>
+                      <span style={{fontSize:11,fontWeight:400,color:'var(--ink2)'}}>{(heroOverlay||[]).length} 個</span>
+                    </label>
+                    <div className="field-hint" style={{marginBottom:12}}>
+                      画像の上にテキストや図形を重ねられます。各オブジェクトはドラッグで位置調整、選択後にプロパティを編集できます。
+                    </div>
+
+                    {/* 追加ボタン */}
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                      <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                        const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                        const newItem = {id, type:'text', text:'テキスト', x:30, y:40, w:40, h:10, fontSize:36, color:'#ffffff', fontFamily:'"Caveat", cursive', fontWeight:400, textAlign:'center', rotation:0};
+                        setHeroOverlay([...(heroOverlay||[]), newItem]);
+                        setSelectedOverlayId(id);
+                      }}>+ テキスト</button>
+                      <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                        const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                        const newItem = {id, type:'circle', x:35, y:35, w:20, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0};
+                        setHeroOverlay([...(heroOverlay||[]), newItem]);
+                        setSelectedOverlayId(id);
+                      }}>+ ●丸</button>
+                      <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                        const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                        const newItem = {id, type:'rect', x:30, y:40, w:40, h:20, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0};
+                        setHeroOverlay([...(heroOverlay||[]), newItem]);
+                        setSelectedOverlayId(id);
+                      }}>+ ■四角</button>
+                      <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                        const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                        const newItem = {id, type:'triangle', x:35, y:35, w:30, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0};
+                        setHeroOverlay([...(heroOverlay||[]), newItem]);
+                        setSelectedOverlayId(id);
+                      }}>+ ▲三角</button>
+                      {(heroOverlay||[]).length > 0 && (
+                        <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                          if (window.confirm('すべてのオーバーレイを削除しますか？')) {
+                            setHeroOverlay([]);
+                            setSelectedOverlayId(null);
+                          }
+                        }} style={{color:'var(--coral)',marginLeft:'auto'}}>すべて削除</button>
+                      )}
+                    </div>
+
+                    {/* プレビュー (画像 + オーバーレイ) */}
+                    <div style={{
+                      position:'relative',
+                      width:'100%',
+                      aspectRatio:'16/9',
+                      background: '#0a2960 url('+heroImageUrl+') center/cover no-repeat',
+                      borderRadius:8,
+                      overflow:'hidden',
+                      border:'1px solid var(--line)',
+                      cursor: selectedOverlayId ? 'default' : 'pointer',
+                      userSelect: 'none',
+                    }}
+                      onClick={(e) => { if (e.target === e.currentTarget) setSelectedOverlayId(null); }}
+                    >
+                      {(heroOverlay||[]).map((item) => {
+                        const isSelected = item.id === selectedOverlayId;
+                        const baseStyle = {
+                          position:'absolute',
+                          left: item.x + '%',
+                          top: item.y + '%',
+                          width: item.w + '%',
+                          height: item.h + '%',
+                          transform: `rotate(${item.rotation||0}deg)`,
+                          cursor: 'move',
+                          outline: isSelected ? '2px dashed #2c89e8' : 'none',
+                          outlineOffset: 2,
+                          boxSizing: 'border-box',
+                        };
+                        // ドラッグハンドラ
+                        const onMouseDown = (e) => {
+                          e.stopPropagation();
+                          setSelectedOverlayId(item.id);
+                          const container = e.currentTarget.parentElement;
+                          const rect = container.getBoundingClientRect();
+                          const startX = e.clientX;
+                          const startY = e.clientY;
+                          const startItemX = item.x;
+                          const startItemY = item.y;
+                          const onMove = (mv) => {
+                            const dx = ((mv.clientX - startX) / rect.width) * 100;
+                            const dy = ((mv.clientY - startY) / rect.height) * 100;
+                            setHeroOverlay(prev => prev.map(o => o.id === item.id ? {...o, x: Math.max(0, Math.min(100-o.w, startItemX + dx)), y: Math.max(0, Math.min(100-o.h, startItemY + dy))} : o));
+                          };
+                          const onUp = () => {
+                            window.removeEventListener('mousemove', onMove);
+                            window.removeEventListener('mouseup', onUp);
+                          };
+                          window.addEventListener('mousemove', onMove);
+                          window.addEventListener('mouseup', onUp);
+                        };
+                        if (item.type === 'text') {
+                          return (
+                            <div key={item.id} onMouseDown={onMouseDown} style={{
+                              ...baseStyle,
+                              display:'flex',
+                              alignItems:'center',
+                              justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
+                              fontSize: item.fontSize + 'px',
+                              color: item.color,
+                              fontFamily: item.fontFamily,
+                              fontWeight: item.fontWeight,
+                              textAlign: item.textAlign,
+                              lineHeight: 1.1,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                              padding: 4,
+                            }}>{item.text || ''}</div>
+                          );
+                        } else if (item.type === 'circle') {
+                          return (
+                            <div key={item.id} onMouseDown={onMouseDown} style={{
+                              ...baseStyle,
+                              borderRadius: '50%',
+                              background: item.color,
+                              border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                            }}/>
+                          );
+                        } else if (item.type === 'rect') {
+                          return (
+                            <div key={item.id} onMouseDown={onMouseDown} style={{
+                              ...baseStyle,
+                              background: item.color,
+                              border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                            }}/>
+                          );
+                        } else if (item.type === 'triangle') {
+                          // SVGで三角形 (回転は親のtransform)
+                          return (
+                            <div key={item.id} onMouseDown={onMouseDown} style={baseStyle}>
+                              <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
+                                <polygon points="50,5 95,95 5,95" fill={item.color} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
+                              </svg>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+
+                    {/* 選択中オブジェクトのプロパティ編集 */}
+                    {selectedOverlayId && (() => {
+                      const sel = (heroOverlay||[]).find(o => o.id === selectedOverlayId);
+                      if (!sel) return null;
+                      const update = (patch) => {
+                        setHeroOverlay(prev => prev.map(o => o.id === sel.id ? {...o, ...patch} : o));
+                      };
+                      const remove = () => {
+                        setHeroOverlay(prev => prev.filter(o => o.id !== sel.id));
+                        setSelectedOverlayId(null);
+                      };
+                      const fontOptions = [
+                        {label:'手書き(英) Caveat', val:'"Caveat", cursive'},
+                        {label:'手書き(英) Kalam', val:'"Kalam", cursive'},
+                        {label:'マーカー(英) Permanent Marker', val:'"Permanent Marker", cursive'},
+                        {label:'筆風(日) Yuji Mai', val:'"Yuji Mai", serif'},
+                        {label:'筆字(日) Yuji Boku', val:'"Yuji Boku", serif'},
+                        {label:'丸手書き(日) Klee One', val:'"Klee One", cursive'},
+                        {label:'ペン書き(日) Zen Kurenaido', val:'"Zen Kurenaido", sans-serif'},
+                        {label:'ポップ手書き(日) Hachi Maru Pop', val:'"Hachi Maru Pop", cursive'},
+                        {label:'セリフ(英) Fraunces italic', val:'"Fraunces", serif'},
+                        {label:'ゴシック(日) Zen Kaku Gothic New', val:'"Zen Kaku Gothic New", sans-serif'},
+                      ];
+                      return (
+                        <div style={{marginTop:12,padding:12,background:'var(--bg2)',borderRadius:8,border:'1px solid var(--line)'}}>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                            <strong style={{fontSize:12}}>{
+                              sel.type === 'text' ? '📝 テキスト' :
+                              sel.type === 'circle' ? '● 丸' :
+                              sel.type === 'rect' ? '■ 四角' :
+                              sel.type === 'triangle' ? '▲ 三角' : ''
+                            } の編集</strong>
+                            <button type="button" className="btn btn-soft btn-sm" onClick={remove} style={{color:'var(--coral)'}}>削除</button>
+                          </div>
+
+                          {/* テキスト固有 */}
+                          {sel.type === 'text' && (
+                            <React.Fragment>
+                              <div style={{marginBottom:8}}>
+                                <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>テキスト</label>
+                                <textarea className="input" value={sel.text || ''} onChange={e => update({text: e.target.value})} rows={2} style={{fontFamily:sel.fontFamily}}/>
+                              </div>
+                              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>フォント</label>
+                                  <select className="input" value={sel.fontFamily} onChange={e => update({fontFamily: e.target.value})}>
+                                    {fontOptions.map(f => <option key={f.val} value={f.val}>{f.label}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>太さ</label>
+                                  <select className="input" value={sel.fontWeight} onChange={e => update({fontWeight: parseInt(e.target.value)})}>
+                                    <option value="400">通常 (400)</option>
+                                    <option value="500">中太 (500)</option>
+                                    <option value="600">太め (600)</option>
+                                    <option value="700">太字 (700)</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>サイズ (px)</label>
+                                  <input type="number" className="input" value={sel.fontSize} onChange={e => update({fontSize: parseInt(e.target.value) || 16})} min="8" max="200"/>
+                                </div>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>色</label>
+                                  <input type="color" className="input" value={sel.color} onChange={e => update({color: e.target.value})} style={{padding:2,height:36}}/>
+                                </div>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>揃え</label>
+                                  <select className="input" value={sel.textAlign} onChange={e => update({textAlign: e.target.value})}>
+                                    <option value="left">左</option>
+                                    <option value="center">中央</option>
+                                    <option value="right">右</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </React.Fragment>
+                          )}
+
+                          {/* 図形固有 */}
+                          {(sel.type === 'circle' || sel.type === 'rect' || sel.type === 'triangle') && (
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+                              <div>
+                                <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>塗り色</label>
+                                <input type="color" className="input" value={(sel.color||'').startsWith('rgba')?'#ffffff':sel.color} onChange={e => update({color: e.target.value})} style={{padding:2,height:36}}/>
+                              </div>
+                              <div>
+                                <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>枠色</label>
+                                <input type="color" className="input" value={sel.borderColor || '#ffffff'} onChange={e => update({borderColor: e.target.value})} style={{padding:2,height:36}}/>
+                              </div>
+                              <div>
+                                <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>枠太さ</label>
+                                <input type="number" className="input" value={sel.borderWidth || 0} onChange={e => update({borderWidth: parseInt(e.target.value) || 0})} min="0" max="20"/>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 共通: 位置・サイズ・回転 */}
+                          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr',gap:8}}>
+                            <div>
+                              <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>X (%)</label>
+                              <input type="number" className="input" value={Math.round(sel.x)} onChange={e => update({x: parseFloat(e.target.value) || 0})} min="0" max="100"/>
+                            </div>
+                            <div>
+                              <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>Y (%)</label>
+                              <input type="number" className="input" value={Math.round(sel.y)} onChange={e => update({y: parseFloat(e.target.value) || 0})} min="0" max="100"/>
+                            </div>
+                            <div>
+                              <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>幅 (%)</label>
+                              <input type="number" className="input" value={Math.round(sel.w)} onChange={e => update({w: parseFloat(e.target.value) || 10})} min="5" max="100"/>
+                            </div>
+                            <div>
+                              <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>高さ (%)</label>
+                              <input type="number" className="input" value={Math.round(sel.h)} onChange={e => update({h: parseFloat(e.target.value) || 10})} min="5" max="100"/>
+                            </div>
+                            <div>
+                              <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>回転 (°)</label>
+                              <input type="number" className="input" value={sel.rotation || 0} onChange={e => update({rotation: parseInt(e.target.value) || 0})} min="-180" max="180"/>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             )}
 
@@ -11063,14 +11350,22 @@ function PageHomepageSettings(){
     { key: 'concept_main_ja',   label: 'メインコピー (日)',  ph: '東京を、もうひとつのふるさとに。', type: 'text' },
     { key: 'concept_body_en',   label: '本文 (英)',           ph: 'For international students arriving in Tokyo...', type: 'textarea' },
     { key: 'concept_body_ja',   label: '本文 (日)',           ph: 'イベントではなく、出会いを。\n一夜限りでなく、日常のなかで。', type: 'textarea' },
+    { key: 'concept_image_url', label: '右側の写真',           type: 'image' },
+    { key: 'concept_button_link', label: '「もっと知る」リンク', ph: '#/about', type: 'text' },
 
     { section: 'Events', label: 'Events 入口セクション' },
     { key: 'events_section_bg_image',  label: '背景画像',     type: 'image' },
     { key: 'events_section_label_en',  label: '英ラベル',     ph: 'Events', type: 'text' },
     { key: 'events_section_label_ja',  label: '日ラベル',     ph: 'イベント一覧', type: 'text' },
+    { key: 'events_section_body_en',   label: '本文 (英)',    ph: 'A space to meet, not just join...', type: 'textarea' },
     { key: 'events_section_body',      label: '本文 (日)',    ph: '初めての方も、一人での参加も大歓迎です。', type: 'textarea' },
-    { key: 'events_section_cta_text',  label: 'CTA文言',     ph: '参加する', type: 'text' },
-    { key: 'events_section_cta_link',  label: 'CTAリンク',   ph: '#events-list', type: 'text' },
+    { key: 'events_section_cta_text',  label: 'CTA文言 (参加する)',     ph: '参加する', type: 'text' },
+    { key: 'events_section_cta_link',  label: 'CTAリンク (参加する)',   ph: '#events-list', type: 'text' },
+    { key: 'events_gallery_link',      label: '「過去のイベントを見る」リンク', ph: '#/gallery', type: 'text' },
+
+    { section: 'Upcoming Events', label: '近日開催イベントセクション' },
+    { key: 'upcoming_events_label_en', label: '英ラベル',     ph: 'Events', type: 'text' },
+    { key: 'upcoming_events_label_ja', label: '日ラベル',     ph: '近日開催', type: 'text' },
 
     { section: 'News', label: 'News セクション' },
     { key: 'news_section_bg_image',    label: '背景画像 (固定)', type: 'image' },
