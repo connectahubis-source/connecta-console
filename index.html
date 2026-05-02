@@ -11017,6 +11017,16 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const [tone, setTone] = useState(slide?.tone || 'warm');
   const [enabled, setEnabled] = useState(slide?.enabled !== false);
   const [uploading, setUploading] = useState(false);
+  // (Phase 7.5) オーバーレイ — 手書きテキスト/図形を画像上に重ねる
+  const [overlay, setOverlay] = useState(() => {
+    try {
+      const ov = slide?.overlay;
+      if (Array.isArray(ov)) return ov;
+      if (typeof ov === 'string' && ov) return JSON.parse(ov);
+      return [];
+    } catch (e) { return []; }
+  });
+  const [selectedOverlayId, setSelectedOverlayId] = useState(null);
 
   // Drive URL 正規化
   const normalizeImageUrl = (url) => {
@@ -11079,6 +11089,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
       sub: sub.trim(),
       tone,
       enabled,
+      overlay: JSON.stringify(overlay || []),
     });
   }
 
@@ -11409,6 +11420,11 @@ function PageHomepageSettings(){
   const [error, setError] = useState(null);
 
   const SETTING_DEFS = [
+    { section: 'Hero', label: 'ヒーロー (トップ画面)' },
+    { key: 'hero_catch_en',   label: 'キャッチコピー (英)',  ph: "Let's walk Tokyo together.", type: 'text' },
+    { key: 'hero_catch_ja',   label: 'キャッチコピー (日)',  ph: '一緒に、東京を歩こう', type: 'text' },
+    { key: 'hero_catch_easy', label: 'キャッチコピー (やさしい日本語)',  ph: 'いっしょに、とうきょうを あるこう', type: 'text' },
+
     { section: 'Concept', label: 'コンセプト' },
     { key: 'concept_main_en',   label: 'メインコピー (英)',  ph: 'Make Tokyo home.', type: 'text' },
     { key: 'concept_main_ja',   label: 'メインコピー (日)',  ph: '東京を、もうひとつのふるさとに。', type: 'text' },
@@ -11435,6 +11451,13 @@ function PageHomepageSettings(){
     { key: 'news_section_bg_image',    label: '背景画像 (固定)', type: 'image' },
     { key: 'news_section_label_en',    label: '英ラベル',     ph: 'News', type: 'text' },
     { key: 'news_section_label_ja',    label: '日ラベル',     ph: '最新のお知らせ', type: 'text' },
+
+    { section: 'Footer', label: 'フッター' },
+    { key: 'footer_tagline_en',  label: 'キャッチコピー (英)', ph: 'Make Tokyo home.', type: 'text' },
+    { key: 'footer_tagline_ja',  label: 'キャッチコピー (日)', ph: '東京を、もうひとつのふるさとに。', type: 'text' },
+    { key: 'footer_tagline_easy',label: 'キャッチコピー (やさしい日本語)', ph: 'とうきょうを、もうひとつの ふるさとに。', type: 'text' },
+    { key: 'footer_est_year',    label: '設立年 (EST.)', ph: '2018', type: 'text' },
+    { key: 'footer_copyright',   label: '著作権表記', ph: '© connec+a 2026', type: 'text' },
   ];
 
   async function fetchAll() {
