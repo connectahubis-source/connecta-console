@@ -717,7 +717,7 @@ svg{display:block}
     <div class="nav-section">
       <div class="nav-label"><span>コミュニケーション</span></div>
       <a href="#mail" class="nav-item" data-nav="mail"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-10 5L2 7"/></svg>メール配信</a>
-      <a href="#news" class="nav-item" data-nav="news"><svg class="ic" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg>ニュース配信</a>
+      <a href="#news" class="nav-item" data-nav="news"><svg class="ic" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg>ニュース管理</a>
       <a href="#chat" class="nav-item" data-nav="chat"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>チャット<span class="n-dot"></span></a>
       <a href="#templates" class="nav-item" data-nav="templates"><svg class="ic" viewBox="0 0 24 24"><rect width="8" height="8" x="3" y="3" rx="1"/><path d="M7 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4"/></svg>定型文</a>
     </div>
@@ -742,7 +742,6 @@ svg{display:block}
       <div class="nav-label"><span>設定</span></div>
       <a href="#hero-settings" class="nav-item" data-nav="hero-settings"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>ヒーロー設定</a>
       <a href="#homepage-settings" class="nav-item" data-nav="homepage-settings"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>ホームページ設定</a>
-      <a href="#news-front" class="nav-item" data-nav="news-front"><svg class="ic" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8z"/></svg>ニュース管理</a>
       <a href="#settings" class="nav-item" data-nav="settings"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>通知・PWA</a>
     </div>
   </aside>
@@ -7890,6 +7889,9 @@ function PageEventCreate(){
   // 配列: [{id, type:'text'|'circle'|'rect'|'triangle', x, y, w, h, ...}]
   const [heroOverlay, setHeroOverlay] = useState([]);
   const [selectedOverlayId, setSelectedOverlayId] = useState(null);
+  // (Phase 7.4) イベントタグ — エリア・料金タイプ (参加者サイトのフィルタ用)
+  const [area, setArea] = useState('');         // '関東' | '関西' | 'web' | ''
+  const [feeType, setFeeType] = useState('');   // 'paid' | 'free' | ''
   // 部署マスタ (Phase 6.4: イベントカテゴリは部署から動的生成)
   const [departments, setDepartments] = useState([]);
 
@@ -7981,6 +7983,9 @@ function PageEventCreate(){
           else if (typeof ov === 'string' && ov) setHeroOverlay(JSON.parse(ov));
           else setHeroOverlay([]);
         } catch (e) { setHeroOverlay([]); }
+        // (Phase 7.4) イベントタグ
+        setArea(ev.area || '');
+        setFeeType(ev.feeType || '');
         setOnline(ev.online === true || ev.online === 'true');
         setZoomURL(ev.zoomURL || "");
         setFormat(ev.format || 'single');
@@ -8057,6 +8062,9 @@ function PageEventCreate(){
       posterUrl: posterUrl || '',
       heroImageUrl: heroImageUrl || '',
       heroOverlay: JSON.stringify(heroOverlay || []),
+      // (Phase 7.4) イベントタグ
+      area: area || '',
+      feeType: feeType || '',
       online: online,
       zoomURL: online ? (zoomURL || '') : '',
       format: format,
@@ -8304,6 +8312,33 @@ function PageEventCreate(){
                     {!online ? (
                       <>
                         <div className="field">
+                          <label className="field-label">エリア <span className="field-req">*</span></label>
+                          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                            {[
+                              {val:'関東', label:'関東', hint:'東京/神奈川/千葉/埼玉 等'},
+                              {val:'関西', label:'関西', hint:'大阪/京都/兵庫 等'},
+                            ].map(opt => (
+                              <label key={opt.val} style={{
+                                display:'flex',alignItems:'center',gap:6,
+                                padding:'8px 14px',borderRadius:999,
+                                border: area === opt.val ? '2px solid #0a2960' : '1px solid var(--line)',
+                                background: area === opt.val ? '#eef2ff' : '#fff',
+                                cursor:'pointer',fontSize:13,fontWeight: area === opt.val ? 600 : 400,
+                                color: area === opt.val ? '#0a2960' : 'var(--ink2)',
+                                transition:'all 0.15s ease',
+                              }}>
+                                <input type="radio" name="event-area" value={opt.val}
+                                  checked={area === opt.val}
+                                  onChange={e => setArea(e.target.value)}
+                                  style={{margin:0}}/>
+                                <span>{opt.label}</span>
+                                <span style={{fontSize:10,color:'var(--ink3)',fontWeight:400}}>({opt.hint})</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="field-hint">参加者サイトのエリアフィルタで使用されます</div>
+                        </div>
+                        <div className="field">
                           <label className="field-label">会場名 <span className="field-req">*</span></label>
                           <IMEInput className="input" value={venue} onChange={e=>setVenue(e.target.value)} placeholder="例: 鎌倉駅西口集合 / カフェ XYZ"/>
                         </div>
@@ -8461,6 +8496,35 @@ function PageEventCreate(){
                 <div style={{padding:14,background:'var(--indigo-50)',borderLeft:'3px solid var(--indigo)',borderRadius:6,fontSize:12,color:'var(--ink3)'}}>
                   <Icon n="info" s={12}/> 参加費と支払い方法を設定します。
                 </div>
+                {format !== 'multi' && (
+                  <div className="field">
+                    <label className="field-label">料金タイプ <span className="field-req">*</span></label>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {[
+                        {val:'paid', label:'有料', hint:'参加費あり'},
+                        {val:'free', label:'無料', hint:'参加費 0 円'},
+                      ].map(opt => (
+                        <label key={opt.val} style={{
+                          display:'flex',alignItems:'center',gap:6,
+                          padding:'8px 14px',borderRadius:999,
+                          border: feeType === opt.val ? '2px solid #0a2960' : '1px solid var(--line)',
+                          background: feeType === opt.val ? '#eef2ff' : '#fff',
+                          cursor:'pointer',fontSize:13,fontWeight: feeType === opt.val ? 600 : 400,
+                          color: feeType === opt.val ? '#0a2960' : 'var(--ink2)',
+                          transition:'all 0.15s ease',
+                        }}>
+                          <input type="radio" name="event-feetype" value={opt.val}
+                            checked={feeType === opt.val}
+                            onChange={e => setFeeType(e.target.value)}
+                            style={{margin:0}}/>
+                          <span>{opt.label}</span>
+                          <span style={{fontSize:10,color:'var(--ink3)',fontWeight:400}}>({opt.hint})</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="field-hint">参加者サイトの料金フィルタで使用されます (複数セッションの場合は各セッションの参加費から自動判定)</div>
+                  </div>
+                )}
                 <div className="grid-2">
                   <div className="field">
                     <label className="field-label">参加費 (円)</label>
@@ -11556,14 +11620,22 @@ function PageHomepageSettings(){
 }
 
 // =================================================================
-// PageNewsFront — 参加者サイト用ニュース管理 (Phase 6.9)
-// 既存の News シートを使い、参加者サイト向けフィールドを編集
+// PageNewsFront — ニュース管理 (Phase 7.3 統合版)
+// CRUD + 参加者サイト表示制御 + フィルタ + 検索 + ステータス循環 + ドラッグ並び替え
 // =================================================================
 function PageNewsFront(){
   const [allNews, setAllNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);   // {mode:'edit'|'create', news?}
   const [error, setError] = useState(null);
+  // (Phase 7.3) フィルタ・検索
+  const [categoryFilter, setCategoryFilter] = useState('all');   // all/お知らせ/特集/募集/報告
+  const [statusFilter, setStatusFilter] = useState('all');       // all/公開中/下書き/予約/非公開
+  const [query, setQuery] = useState('');
+  const [showOnlyFront, setShowOnlyFront] = useState(false);     // 参加者表示のみ
+  // (Phase 7.3) ドラッグ並び替え
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
 
   async function fetchAll() {
     setLoading(true);
@@ -11595,21 +11667,114 @@ function PageNewsFront(){
     }
   }
 
+  async function handleDelete(news) {
+    if (!window.confirm('「' + news.title + '」を削除しますか？')) return;
+    try {
+      await window.postData('deleteNews', { newsId: news.id });
+      window.toast.success('ニュースを削除しました');
+      await fetchAll();
+    } catch (e) {
+      window.toast.error('削除失敗: ' + (e.message || e));
+    }
+  }
+
   async function handleToggleFront(news) {
     try {
       await window.postData('updateNews', { newsId: news.id, fields: { showOnFront: !news.showOnFront } });
-      await fetchAll();
+      // optimistic update
+      setAllNews(prev => prev.map(n => n.id === news.id ? {...n, showOnFront: !n.showOnFront} : n));
     } catch (e) {
       window.toast.error('更新失敗: ' + (e.message || e));
     }
   }
 
-  if (loading) {
-    return <div className="page" data-page="news-front"><div style={{padding:24,color:'var(--ink2)'}}>読み込み中...</div></div>;
+  // (Phase 7.3) ステータスを循環: 公開中 → 下書き → 予約 → 非公開 → 公開中
+  async function handleCycleStatus(news) {
+    const cycle = ['公開中', '下書き', '予約', '非公開'];
+    const idx = cycle.indexOf(news.status);
+    const next = cycle[(idx + 1) % cycle.length];
+    try {
+      await window.postData('updateNews', { newsId: news.id, fields: { status: next } });
+      setAllNews(prev => prev.map(n => n.id === news.id ? {...n, status: next} : n));
+    } catch (e) {
+      window.toast.error('ステータス変更失敗: ' + (e.message || e));
+    }
   }
 
-  // 参加者表示中のものを上に
-  const sorted = [...allNews].sort((a, b) => {
+  // (Phase 7.3) ドラッグ並び替えで displayOrder を更新
+  function handleDragStart(e, id) {
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (_) {}
+  }
+  function handleDragOver(e, id) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (id !== dragOverId) setDragOverId(id);
+  }
+  function handleDragLeave() { setDragOverId(null); }
+  async function handleDrop(e, targetId) {
+    e.preventDefault();
+    if (!draggingId || draggingId === targetId) {
+      setDraggingId(null); setDragOverId(null);
+      return;
+    }
+    // 現在のソート済みリストを取得し、draggingId を targetId の位置に挿入
+    const list = [...sorted];
+    const fromIdx = list.findIndex(n => n.id === draggingId);
+    const toIdx = list.findIndex(n => n.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) {
+      setDraggingId(null); setDragOverId(null);
+      return;
+    }
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, moved);
+    // 新しい displayOrder を 1 から振り直す (showOnFront のみ対象)
+    const updates = [];
+    let order = 1;
+    list.forEach(n => {
+      if (n.showOnFront) {
+        if (n.displayOrder !== order) updates.push({id: n.id, displayOrder: order});
+        n.displayOrder = order;
+        order++;
+      }
+    });
+    // optimistic update
+    setAllNews(prev => prev.map(n => {
+      const u = updates.find(x => x.id === n.id);
+      return u ? {...n, displayOrder: u.displayOrder} : n;
+    }));
+    setDraggingId(null); setDragOverId(null);
+    // バックエンド更新 (並列)
+    try {
+      await Promise.all(updates.map(u => window.postData('updateNews', { newsId: u.id, fields: { displayOrder: u.displayOrder } })));
+      if (updates.length > 0) window.toast.success('並び順を更新しました');
+    } catch (e) {
+      window.toast.error('並び順保存失敗: ' + (e.message || e));
+      await fetchAll(); // ロールバック
+    }
+  }
+
+  if (loading) {
+    return <div className="page" data-page="news"><div style={{padding:24,color:'var(--ink2)'}}>読み込み中...</div></div>;
+  }
+
+  // フィルタ + 検索
+  const filtered = allNews.filter(n => {
+    if (categoryFilter !== 'all' && n.category !== categoryFilter) return false;
+    if (statusFilter !== 'all' && n.status !== statusFilter) return false;
+    if (showOnlyFront && !n.showOnFront) return false;
+    if (query) {
+      const q = query.toLowerCase();
+      const inTitle = (n.title || '').toLowerCase().includes(q);
+      const inBody = (n.body || '').toLowerCase().includes(q);
+      if (!inTitle && !inBody) return false;
+    }
+    return true;
+  });
+
+  // ソート: 参加者表示中を上に、その中で displayOrder 昇順、空は末尾
+  const sorted = [...filtered].sort((a, b) => {
     if (a.showOnFront !== b.showOnFront) return a.showOnFront ? -1 : 1;
     const ao = (a.displayOrder === '' || a.displayOrder == null) ? 9999 : Number(a.displayOrder);
     const bo = (b.displayOrder === '' || b.displayOrder == null) ? 9999 : Number(b.displayOrder);
@@ -11618,13 +11783,24 @@ function PageNewsFront(){
 
   const frontCount = allNews.filter(n => n.showOnFront).length;
 
+  // ステータス色
+  const statusColors = {
+    '公開中': {bg:'#ecfdf5', fg:'#065f46', border:'#a7f3d0'},
+    '下書き': {bg:'#f3f4f6', fg:'#4b5563', border:'#e5e7eb'},
+    '予約':   {bg:'#fef3c7', fg:'#92400e', border:'#fde68a'},
+    '非公開': {bg:'#fee2e2', fg:'#991b1b', border:'#fecaca'},
+  };
+
   return (
-    <div className="page" data-page="news-front">
+    <div className="page" data-page="news">
       <div className="page-head">
         <div className="ph-left">
-          <div className="ph-crumbs"><span>設定</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>ニュース管理</span></div>
+          <div className="ph-crumbs"><span>コミュニケーション</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>ニュース管理</span></div>
           <h1>ニュース管理<i>.</i></h1>
-          <div className="ph-sub">参加者サイト News セクションに表示するニュース。最大3件、表示順で切替。{frontCount > 3 && <span style={{color:'var(--accent-warm)', fontWeight:600}}> ⚠ {frontCount}件 表示ON、上位3件のみ表示されます</span>}</div>
+          <div className="ph-sub">
+            ニュース記事の作成・編集・削除と、参加者サイト News セクションの表示制御。
+            {frontCount > 3 && <span style={{color:'#f59e0b', fontWeight:600, marginLeft:8}}>⚠ {frontCount}件 表示ON、上位3件のみ表示されます</span>}
+          </div>
         </div>
         <div className="ph-right">
           <button className="btn btn-primary" onClick={() => setEditing({mode:'create'})}>
@@ -11635,47 +11811,191 @@ function PageNewsFront(){
 
       {error && <div style={{padding:'12px 16px', background:'#fee2e2', color:'#991b1b', borderRadius:8, marginBottom:16}}>{error}</div>}
 
+      {/* (Phase 7.3) 検索 + フィルタバー */}
+      <div style={{
+        display:'flex', flexWrap:'wrap', gap:12, alignItems:'center',
+        padding:'14px 16px', background:'#fff', border:'1px solid var(--line)', borderRadius:12,
+        marginBottom:14, maxWidth:1120,
+      }}>
+        {/* 検索 */}
+        <div style={{position:'relative', flex:'1 1 240px', minWidth:200}}>
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="タイトル・本文を検索"
+            style={{
+              width:'100%', padding:'8px 12px 8px 34px',
+              border:'1px solid var(--line)', borderRadius:999, fontSize:13,
+              background:'#f9fafb',
+            }}
+          />
+          <span style={{position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'var(--ink3)', pointerEvents:'none'}}>
+            <Icon n="search" s={14}/>
+          </span>
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              style={{
+                position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
+                background:'none', border:'none', cursor:'pointer', color:'var(--ink3)',
+                padding:4, display:'flex', alignItems:'center', justifyContent:'center',
+              }}
+            ><Icon n="x" s={12}/></button>
+          )}
+        </div>
+
+        {/* カテゴリフィルタ (pill) */}
+        <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+          {['all', 'お知らせ', '特集', '募集', '報告'].map(c => (
+            <button
+              key={c}
+              onClick={() => setCategoryFilter(c)}
+              style={{
+                padding:'6px 14px', borderRadius:999, border:'1px solid var(--line)',
+                background: categoryFilter === c ? '#0a2960' : '#fff',
+                color: categoryFilter === c ? '#fff' : 'var(--ink2)',
+                fontSize:12, fontWeight:600, cursor:'pointer',
+                transition:'all 0.15s ease',
+              }}
+            >{c === 'all' ? 'すべて' : c}</button>
+          ))}
+        </div>
+
+        {/* ステータスフィルタ (select) */}
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          style={{padding:'8px 12px', border:'1px solid var(--line)', borderRadius:999, fontSize:12, background:'#fff', cursor:'pointer'}}
+        >
+          <option value="all">すべてのステータス</option>
+          <option value="公開中">公開中</option>
+          <option value="下書き">下書き</option>
+          <option value="予約">予約</option>
+          <option value="非公開">非公開</option>
+        </select>
+
+        {/* 参加者表示のみトグル */}
+        <label style={{display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12, color:'var(--ink2)'}}>
+          <input
+            type="checkbox"
+            checked={showOnlyFront}
+            onChange={e => setShowOnlyFront(e.target.checked)}
+            style={{cursor:'pointer'}}
+          />
+          参加者表示のみ
+        </label>
+
+        {/* 件数表示 */}
+        <div style={{marginLeft:'auto', fontSize:11, color:'var(--ink3)', fontFamily:'var(--mono, monospace)'}}>
+          {sorted.length} / {allNews.length} 件
+        </div>
+      </div>
+
+      {/* リスト本体 */}
       <div style={{display:'flex', flexDirection:'column', gap:8, maxWidth:1120}}>
         {sorted.length === 0 ? (
           <div style={{padding:'40px 24px', textAlign:'center', color:'var(--ink3)', border:'2px dashed var(--line)', borderRadius:12}}>
-            ニュースがまだ登録されていません。
+            {allNews.length === 0 ? 'ニュースがまだ登録されていません。' : '条件に合うニュースがありません。'}
           </div>
-        ) : sorted.map(n => (
-          <div key={n.id} style={{
-            display:'flex', alignItems:'center', gap:16,
-            padding:'14px 16px',
-            background:'#fff',
-            border:'1px solid var(--line)',
-            borderRadius:12,
-            opacity: n.showOnFront ? 1 : 0.55,
-          }}>
-            <div style={{
-              width:40, height:40, borderRadius:8,
-              background: n.showOnFront ? '#fff1ec' : '#f3f4f6',
-              color: n.showOnFront ? '#ff7a59' : 'var(--ink3)',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:13, fontWeight:700,
-            }}>{n.showOnFront && n.displayOrder !== '' ? n.displayOrder : '−'}</div>
+        ) : sorted.map(n => {
+          const sc = statusColors[n.status] || statusColors['下書き'];
+          const isDragging = draggingId === n.id;
+          const isDragOver = dragOverId === n.id && draggingId !== n.id;
+          return (
+            <div
+              key={n.id}
+              draggable={n.showOnFront}
+              onDragStart={(e) => n.showOnFront && handleDragStart(e, n.id)}
+              onDragOver={(e) => n.showOnFront && handleDragOver(e, n.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => n.showOnFront && handleDrop(e, n.id)}
+              style={{
+                display:'flex', alignItems:'center', gap:14,
+                padding:'14px 16px',
+                background:'#fff',
+                border: isDragOver ? '2px solid #0a2960' : '1px solid var(--line)',
+                borderRadius:12,
+                opacity: isDragging ? 0.4 : (n.showOnFront ? 1 : 0.7),
+                cursor: n.showOnFront ? 'move' : 'default',
+                transition: 'border 0.1s ease',
+              }}
+            >
+              {/* 順序バッジ + ドラッグハンドル */}
+              <div style={{
+                width:36, height:36, borderRadius:8,
+                background: n.showOnFront ? '#0a2960' : '#f3f4f6',
+                color: n.showOnFront ? '#fff' : 'var(--ink3)',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:13, fontWeight:700,
+                flexShrink:0,
+              }}>{n.showOnFront ? (n.displayOrder || '−') : '−'}</div>
 
-            <div style={{flex:1, minWidth:0}}>
-              <div style={{fontWeight:600, fontSize:14, color:'var(--ink1)', marginBottom:2}}>{n.title}</div>
-              <div style={{fontSize:12, color:'var(--ink3)'}}>
-                {n.category} · {n.status}
-                {n.publishAt && <span> · 予約: {new Date(n.publishAt).toLocaleDateString('ja-JP')}</span>}
-                {n.ctaText && <span> · CTA: {n.ctaText}</span>}
+              {/* タイトル + メタ */}
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontWeight:600, fontSize:14, color:'var(--ink1)', marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                  {n.title}
+                </div>
+                <div style={{display:'flex', alignItems:'center', gap:8, fontSize:11, color:'var(--ink3)', flexWrap:'wrap'}}>
+                  <span style={{padding:'2px 8px', background:'#f3f4f6', borderRadius:4, color:'var(--ink2)', fontWeight:500}}>{n.category}</span>
+                  {/* ステータスクリックで循環 */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleCycleStatus(n); }}
+                    style={{
+                      padding:'2px 10px', borderRadius:999,
+                      background: sc.bg, color: sc.fg, border:'1px solid '+sc.border,
+                      fontSize:11, fontWeight:600, cursor:'pointer',
+                    }}
+                    title="クリックでステータス変更"
+                  >{n.status}</button>
+                  {n.publishedAt && <span>公開: {n.publishedAt}</span>}
+                  {n.publishAt && <span>予約: {new Date(n.publishAt).toLocaleDateString('ja-JP')}</span>}
+                  {n.ctaText && <span>CTA: {n.ctaText}</span>}
+                </div>
               </div>
+
+              {/* アクション */}
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={(e) => { e.stopPropagation(); handleToggleFront(n); }}
+                title={n.showOnFront ? '参加者サイトから外す' : '参加者サイトに表示'}
+                style={{flexShrink:0, fontSize:12}}
+              >
+                {n.showOnFront ? (
+                  <span style={{color:'#0a2960', fontWeight:600}}>● 表示中</span>
+                ) : (
+                  <span style={{color:'var(--ink3)'}}>○ 非表示</span>
+                )}
+              </button>
+
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={(e) => { e.stopPropagation(); setEditing({mode:'edit', news:n}); }}
+                style={{flexShrink:0}}
+              >
+                <Icon n="edit" s={14}/> 編集
+              </button>
+
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={(e) => { e.stopPropagation(); handleDelete(n); }}
+                style={{flexShrink:0, color:'#dc2626'}}
+                title="削除"
+              >
+                <Icon n="trash" s={14}/>
+              </button>
             </div>
-
-            <button className="btn btn-ghost" onClick={() => handleToggleFront(n)} title={n.showOnFront ? '参加者サイトから外す' : '参加者サイトに表示'}>
-              {n.showOnFront ? '参加者表示中' : '非表示'}
-            </button>
-
-            <button className="btn btn-ghost" onClick={() => setEditing({mode:'edit', news:n})}>
-              <Icon n="edit" s={14}/> 編集
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* ヘルプテキスト */}
+      {sorted.filter(n => n.showOnFront).length >= 2 && (
+        <div style={{marginTop:12, padding:'10px 14px', background:'#f9fafb', border:'1px solid var(--line)', borderRadius:8, fontSize:12, color:'var(--ink3)', maxWidth:1120}}>
+          💡 参加者表示中の項目は、行をドラッグして並び替えできます。ステータスバッジをクリックすると公開状態を循環できます。
+        </div>
+      )}
 
       {editing && (
         <NewsFrontEditor
@@ -12660,7 +12980,8 @@ const PAGES = {
 
   // ----- コミュニケーション (Phase 2新-B) -----
   mail:           () => renderPage('PageMail'),
-  news:           () => renderPage('PageNews'),
+  // (Phase 7.3) 「ニュース配信」と「ニュース管理」を統合 → PageNewsFront に一本化
+  news:           () => renderPage('PageNewsFront'),
   chat:           () => renderPage('PageChat'),
   templates:      () => renderPage('PageTemplates'),
 
@@ -12679,6 +13000,7 @@ const PAGES = {
   // ----- 設定 (Phase 5新-E) -----
   'hero-settings': () => renderPage('PageHeroSettings'),
   'homepage-settings': () => renderPage('PageHomepageSettings'),
+  // (Phase 7.3) 旧 #news-front は #news にリダイレクト
   'news-front':    () => renderPage('PageNewsFront'),
   settings:       () => renderPage('PageSettings'),
 };
