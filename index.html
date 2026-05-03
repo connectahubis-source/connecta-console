@@ -11017,7 +11017,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const [tone, setTone] = useState(slide?.tone || 'warm');
   const [enabled, setEnabled] = useState(slide?.enabled !== false);
   const [uploading, setUploading] = useState(false);
-  // (Phase 7.5) オーバーレイ — 手書きテキスト/図形を画像上に重ねる
+  // (Phase 7.6) オーバーレイ — テキスト/図形/画像を背景上に重ねる
   const [overlay, setOverlay] = useState(() => {
     try {
       const ov = slide?.overlay;
@@ -11027,6 +11027,50 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     } catch (e) { return []; }
   });
   const [selectedOverlayId, setSelectedOverlayId] = useState(null);
+  // (Phase 7.6) 背景色 — 写真なし時の塗り
+  const [bgColor, setBgColor] = useState(slide?.bgColor || '');
+
+  // (Phase 7.6) キーボード操作 — 選択中要素を矢印で移動、Deleteで削除、Cmd+Dで複製
+  React.useEffect(() => {
+    const handleKey = (e) => {
+      if (!selectedOverlayId) return;
+      // input/textarea にフォーカスがあるときは無視
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      const item = (overlay||[]).find(o => o.id === selectedOverlayId);
+      if (!item) return;
+      const step = e.shiftKey ? 5 : 1;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setOverlay(prev => prev.map(o => o.id === selectedOverlayId ? {...o, x: Math.max(-100, (o.x||0) - step)} : o));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setOverlay(prev => prev.map(o => o.id === selectedOverlayId ? {...o, x: Math.min(200, (o.x||0) + step)} : o));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setOverlay(prev => prev.map(o => o.id === selectedOverlayId ? {...o, y: Math.max(-100, (o.y||0) - step)} : o));
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setOverlay(prev => prev.map(o => o.id === selectedOverlayId ? {...o, y: Math.min(200, (o.y||0) + step)} : o));
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        setOverlay(prev => prev.filter(o => o.id !== selectedOverlayId));
+        setSelectedOverlayId(null);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
+        e.preventDefault();
+        const newId = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        const dup = {...item, id:newId, x:Math.min(95, (item.x||0)+5), y:Math.min(95, (item.y||0)+5), zOrder:(overlay||[]).length};
+        setOverlay([...(overlay||[]), dup]);
+        setSelectedOverlayId(newId);
+      } else if (e.key === 'Escape') {
+        setSelectedOverlayId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedOverlayId, overlay]);
 
   // Drive URL 正規化
   const normalizeImageUrl = (url) => {
@@ -11090,6 +11134,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
       tone,
       enabled,
       overlay: JSON.stringify(overlay || []),
+      bgColor: bgColor || '',
     });
   }
 
@@ -11386,6 +11431,417 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                   </div>
                 </div>
               </label>
+            </div>
+
+            {/* (Phase 7.6) 背景色プリセット (写真なし時の塗り) */}
+            <div>
+              <div style={{
+                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
+              }}>BACKGROUND COLOR</div>
+              <div style={{fontSize:11,color:'var(--ink4)',marginBottom:8}}>
+                写真なしスライドの背景色。写真があれば写真を優先します。
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:6}}>
+                {[
+                  {v:'',                  label:'写真使用',   bg:'#fff',                                          border:'1px dashed var(--ink4)'},
+                  {v:'navy',              label:'紺',        bg:'#0a2960',                                       border:'none'},
+                  {v:'white',             label:'白',        bg:'#fff',                                          border:'1px solid var(--line)'},
+                  {v:'beige',             label:'ベージュ',   bg:'#f5f0e8',                                       border:'1px solid var(--line)'},
+                  {v:'gradient-blue',     label:'青グラデ',   bg:'linear-gradient(135deg, #1c89e8 0%, #0a2960 100%)',  border:'none'},
+                  {v:'gradient-navy',     label:'紺グラデ',   bg:'linear-gradient(135deg, #1a3661 0%, #0a2960 100%)', border:'none'},
+                  {v:'gradient-sky',      label:'空グラデ',   bg:'linear-gradient(180deg, #7cb9f0 0%, #ffffff 100%)',  border:'1px solid var(--line)'},
+                  {v:'gradient-warm',     label:'ベージュグラデ', bg:'linear-gradient(135deg, #f5f0e8 0%, #ffffff 100%)', border:'1px solid var(--line)'},
+                ].map(opt => (
+                  <button key={opt.v||'photo'} type="button"
+                    onClick={() => setBgColor(opt.v)}
+                    style={{
+                      padding:0, height:48, position:'relative',
+                      background:opt.bg, border:opt.border,
+                      borderRadius:6, cursor:'pointer',
+                      outline: bgColor === opt.v ? '2px solid var(--indigo)' : 'none',
+                      outlineOffset: 2,
+                    }} title={opt.label}>
+                    <span style={{
+                      position:'absolute',bottom:2,left:0,right:0,
+                      fontSize:9,fontWeight:600,
+                      color: opt.v === 'navy' || opt.v === 'gradient-blue' || opt.v === 'gradient-navy' ? '#fff' : 'var(--ink)',
+                      textShadow: opt.v === 'navy' || opt.v === 'gradient-blue' || opt.v === 'gradient-navy' ? '0 1px 2px rgba(0,0,0,0.4)' : 'none',
+                    }}>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* (Phase 7.6) オーバーレイエディタ — テキスト/図形/画像 */}
+            <div>
+              <div style={{
+                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
+                display:'flex',justifyContent:'space-between',alignItems:'center',
+              }}>
+                <span>OVERLAY · オブジェクト</span>
+                <span style={{fontSize:11,fontWeight:400,color:'var(--ink2)'}}>{(overlay||[]).length} 個</span>
+              </div>
+
+              {/* プレビュー */}
+              <div style={{
+                position:'relative',
+                width:'100%',
+                aspectRatio:'16/9',
+                background: imageUrl
+                  ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/cover no-repeat`
+                  : (bgColor === 'navy' ? '#0a2960'
+                    : bgColor === 'white' ? '#ffffff'
+                    : bgColor === 'beige' ? '#f5f0e8'
+                    : bgColor === 'gradient-blue' ? 'linear-gradient(135deg, #1c89e8 0%, #0a2960 100%)'
+                    : bgColor === 'gradient-navy' ? 'linear-gradient(135deg, #1a3661 0%, #0a2960 100%)'
+                    : bgColor === 'gradient-sky' ? 'linear-gradient(180deg, #7cb9f0 0%, #ffffff 100%)'
+                    : bgColor === 'gradient-warm' ? 'linear-gradient(135deg, #f5f0e8 0%, #ffffff 100%)'
+                    : '#0a2960'),
+                borderRadius:8,
+                overflow:'hidden',
+                border:'1px solid var(--line)',
+                cursor: selectedOverlayId ? 'default' : 'pointer',
+                userSelect:'none',
+                marginBottom:10,
+              }}
+                onClick={(e) => { if (e.target === e.currentTarget) setSelectedOverlayId(null); }}>
+                {[...(overlay||[])].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
+                  const isSelected = item.id === selectedOverlayId;
+                  const baseStyle = {
+                    position:'absolute',
+                    left: item.x + '%',
+                    top: item.y + '%',
+                    width: item.w + '%',
+                    height: item.h + '%',
+                    transform:`rotate(${item.rotation||0}deg)`,
+                    boxSizing:'border-box',
+                    cursor:'move',
+                    outline: isSelected ? '2px dashed #2c89e8' : 'none',
+                    outlineOffset: 2,
+                  };
+                  const handleMouseDown = (ev) => {
+                    ev.stopPropagation();
+                    setSelectedOverlayId(item.id);
+                    const startX = ev.clientX;
+                    const startY = ev.clientY;
+                    const startItem = {x:item.x, y:item.y};
+                    const parent = ev.currentTarget.parentElement;
+                    const rect = parent.getBoundingClientRect();
+                    const onMove = (mev) => {
+                      const dx = ((mev.clientX - startX) / rect.width) * 100;
+                      const dy = ((mev.clientY - startY) / rect.height) * 100;
+                      // (Phase 7.6) 写真外配置を許可: -100% 〜 200%
+                      const newX = Math.max(-100, Math.min(200, startItem.x + dx));
+                      const newY = Math.max(-100, Math.min(200, startItem.y + dy));
+                      setOverlay(prev => prev.map(o => o.id === item.id ? {...o, x: Math.round(newX*10)/10, y: Math.round(newY*10)/10} : o));
+                    };
+                    const onUp = () => {
+                      window.removeEventListener('mousemove', onMove);
+                      window.removeEventListener('mouseup', onUp);
+                    };
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                  };
+                  if (item.type === 'text') {
+                    return (
+                      <div key={item.id} onMouseDown={handleMouseDown} style={{
+                        ...baseStyle,
+                        display:'flex',
+                        alignItems:'center',
+                        justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
+                        fontSize: item.fontSize ? `${item.fontSize/3}px` : '12px',
+                        color: item.color || '#fff',
+                        fontFamily: item.fontFamily,
+                        fontWeight: item.fontWeight || 400,
+                        textAlign: item.textAlign || 'center',
+                        lineHeight: 1.1,
+                        whiteSpace:'pre-wrap',
+                        wordBreak:'break-word',
+                        padding: 2,
+                        textShadow:'0 2px 16px rgba(0,0,0,0.3)',
+                      }}>{item.text || ''}</div>
+                    );
+                  } else if (item.type === 'circle') {
+                    return (
+                      <div key={item.id} onMouseDown={handleMouseDown} style={{
+                        ...baseStyle, borderRadius:'50%',
+                        background: item.color || 'transparent',
+                        border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                      }}/>
+                    );
+                  } else if (item.type === 'rect') {
+                    return (
+                      <div key={item.id} onMouseDown={handleMouseDown} style={{
+                        ...baseStyle,
+                        background: item.color || 'transparent',
+                        border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                      }}/>
+                    );
+                  } else if (item.type === 'triangle') {
+                    return (
+                      <div key={item.id} onMouseDown={handleMouseDown} style={baseStyle}>
+                        <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
+                          <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
+                        </svg>
+                      </div>
+                    );
+                  } else if (item.type === 'image') {
+                    return (
+                      <div key={item.id} onMouseDown={handleMouseDown} style={baseStyle}>
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt="" style={{width:'100%',height:'100%',objectFit:'contain',display:'block',pointerEvents:'none'}}/>
+                        ) : (
+                          <div style={{width:'100%',height:'100%',background:'rgba(255,255,255,0.2)',border:'1px dashed #fff',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:10}}>画像なし</div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+
+              {/* 追加ボタン */}
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                  const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                  const newItem = {id, type:'text', text:'テキスト', x:30, y:40, w:40, h:10, fontSize:36, color:'#ffffff', fontFamily:'"Caveat", cursive', fontWeight:400, textAlign:'center', rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  setOverlay([...(overlay||[]), newItem]);
+                  setSelectedOverlayId(id);
+                }}>+ T</button>
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                  const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                  const newItem = {id, type:'circle', x:35, y:35, w:20, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  setOverlay([...(overlay||[]), newItem]);
+                  setSelectedOverlayId(id);
+                }}>+ ●</button>
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                  const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                  const newItem = {id, type:'rect', x:30, y:40, w:40, h:20, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  setOverlay([...(overlay||[]), newItem]);
+                  setSelectedOverlayId(id);
+                }}>+ ■</button>
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                  const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                  const newItem = {id, type:'triangle', x:35, y:35, w:30, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  setOverlay([...(overlay||[]), newItem]);
+                  setSelectedOverlayId(id);
+                }}>+ ▲</button>
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => {
+                  const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                  const newItem = {id, type:'image', imageUrl:'', x:30, y:30, w:30, h:30, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  setOverlay([...(overlay||[]), newItem]);
+                  setSelectedOverlayId(id);
+                }}>+ 画像</button>
+              </div>
+
+              {/* 選択中要素のプロパティ編集 */}
+              {selectedOverlayId && (() => {
+                const item = (overlay||[]).find(o => o.id === selectedOverlayId);
+                if (!item) return null;
+                const update = (patch) => setOverlay(prev => prev.map(o => o.id === item.id ? {...o, ...patch} : o));
+                const remove = () => {
+                  setOverlay(prev => prev.filter(o => o.id !== item.id));
+                  setSelectedOverlayId(null);
+                };
+                const duplicate = () => {
+                  const newId = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                  const dup = {...item, id:newId, x:Math.min(95, (item.x||0)+5), y:Math.min(95, (item.y||0)+5), zOrder:(overlay||[]).length};
+                  setOverlay([...(overlay||[]), dup]);
+                  setSelectedOverlayId(newId);
+                };
+                const moveLayer = (delta) => {
+                  // delta: -1 (背面), 1 (前面), -99 (最背面), 99 (最前面)
+                  const sorted = [...(overlay||[])].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0));
+                  const idx = sorted.findIndex(o => o.id === item.id);
+                  if (idx === -1) return;
+                  let newIdx;
+                  if (delta === -99) newIdx = 0;
+                  else if (delta === 99) newIdx = sorted.length - 1;
+                  else newIdx = Math.max(0, Math.min(sorted.length-1, idx + delta));
+                  if (newIdx === idx) return;
+                  const reordered = [...sorted];
+                  const [moved] = reordered.splice(idx, 1);
+                  reordered.splice(newIdx, 0, moved);
+                  setOverlay(reordered.map((o, i) => ({...o, zOrder:i})));
+                };
+                return (
+                  <div style={{padding:10,background:'var(--bg2)',borderRadius:6,border:'1px solid var(--line)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                      <div style={{fontSize:11,fontWeight:700,color:'var(--ink)'}}>
+                        {item.type === 'text' ? '📝 テキスト' : item.type === 'circle' ? '● 丸' : item.type === 'rect' ? '■ 四角' : item.type === 'triangle' ? '▲ 三角' : '🖼 画像'}
+                      </div>
+                      <div style={{display:'flex',gap:4}}>
+                        <button type="button" onClick={duplicate} title="複製 (Cmd+D)" style={{padding:'2px 6px',fontSize:11,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>複製</button>
+                        <button type="button" onClick={remove} title="削除 (Delete)" style={{padding:'2px 6px',fontSize:11,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer',color:'#dc2626'}}>削除</button>
+                      </div>
+                    </div>
+
+                    {/* テキスト固有 */}
+                    {item.type === 'text' && (
+                      <>
+                        <div style={{marginBottom:6}}>
+                          <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>テキスト</label>
+                          <textarea className="input" rows="2" value={item.text||''} onChange={e=>update({text:e.target.value})} style={{fontSize:12,resize:'vertical'}}/>
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>フォント</label>
+                            <select className="input" value={item.fontFamily||''} onChange={e=>update({fontFamily:e.target.value})} style={{fontSize:11,padding:'4px 6px'}}>
+                              <option value='"Caveat", cursive'>Caveat (英手書き)</option>
+                              <option value='"Kalam", cursive'>Kalam (英手書き2)</option>
+                              <option value='"Permanent Marker", cursive'>Permanent Marker (マーカー)</option>
+                              <option value='"Yuji Mai", cursive'>Yuji Mai (筆)</option>
+                              <option value='"Yuji Boku", cursive'>Yuji Boku (筆 太)</option>
+                              <option value='"Klee One", cursive'>Klee One (丸手書き)</option>
+                              <option value='"Zen Kurenaido", cursive'>Zen Kurenaido (鉛筆)</option>
+                              <option value='"Hachi Maru Pop", cursive'>Hachi Maru Pop (ポップ)</option>
+                              <option value='"Fraunces", serif'>Fraunces (セリフ)</option>
+                              <option value='"Zen Kaku Gothic New", sans-serif'>Zen Kaku Gothic New (日)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>太さ</label>
+                            <select className="input" value={item.fontWeight||400} onChange={e=>update({fontWeight:Number(e.target.value)})} style={{fontSize:11,padding:'4px 6px'}}>
+                              <option value={300}>細 (300)</option>
+                              <option value={400}>標準 (400)</option>
+                              <option value={500}>中 (500)</option>
+                              <option value={600}>やや太 (600)</option>
+                              <option value={700}>太 (700)</option>
+                              <option value={900}>極太 (900)</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:6}}>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>サイズ</label>
+                            <input className="input" type="number" min="8" max="200" value={item.fontSize||36} onChange={e=>update({fontSize:Number(e.target.value)||36})} style={{fontSize:11,padding:'4px 6px'}}/>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>色</label>
+                            <input type="color" value={item.color||'#ffffff'} onChange={e=>update({color:e.target.value})} style={{width:'100%',height:28,border:'1px solid var(--line)',borderRadius:4,cursor:'pointer',padding:0}}/>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>揃え</label>
+                            <select className="input" value={item.textAlign||'center'} onChange={e=>update({textAlign:e.target.value})} style={{fontSize:11,padding:'4px 6px'}}>
+                              <option value="left">左</option>
+                              <option value="center">中</option>
+                              <option value="right">右</option>
+                            </select>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* 図形 (circle/rect/triangle) 固有 */}
+                    {(item.type === 'circle' || item.type === 'rect' || item.type === 'triangle') && (
+                      <>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:6}}>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>塗り色</label>
+                            <input type="color" value={(item.color||'').startsWith('rgba') ? '#ffffff' : (item.color||'#ffffff')} onChange={e=>update({color:e.target.value})} style={{width:'100%',height:28,border:'1px solid var(--line)',borderRadius:4,cursor:'pointer',padding:0}}/>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>枠色</label>
+                            <input type="color" value={item.borderColor||'#ffffff'} onChange={e=>update({borderColor:e.target.value})} style={{width:'100%',height:28,border:'1px solid var(--line)',borderRadius:4,cursor:'pointer',padding:0}}/>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>枠太さ</label>
+                            <input className="input" type="number" min="0" max="20" value={item.borderWidth||0} onChange={e=>update({borderWidth:Number(e.target.value)||0})} style={{fontSize:11,padding:'4px 6px'}}/>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* 画像固有 */}
+                    {item.type === 'image' && (
+                      <div style={{marginBottom:6}}>
+                        <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>画像URL</label>
+                        <input className="input" type="text" value={item.imageUrl||''} onChange={e=>update({imageUrl:e.target.value})} placeholder="https://..." style={{fontSize:11,padding:'4px 6px'}}/>
+                        <input type="file" accept="image/*" onChange={async (e) => {
+                          const file = e.target.files && e.target.files[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) { window.toast.error('画像が大きすぎます (最大 5MB)'); return; }
+                          try {
+                            const compressed = await window.compressImage(file, { maxLong: 1200, quality: 0.85 });
+                            const result = await window.postData('uploadPosterImage', {
+                              filename: 'overlay-' + file.name.replace(/\.[^.]+$/, '.jpg'),
+                              mimeType: compressed.mimeType,
+                              dataBase64: compressed.dataBase64,
+                            });
+                            if (result && result.url) {
+                              update({imageUrl: result.url});
+                              window.toast.success('画像をアップしました');
+                            }
+                          } catch (err) {
+                            window.toast.error('アップロード失敗: ' + (err.message||err));
+                          }
+                          e.target.value = '';
+                        }} style={{marginTop:4,fontSize:11}}/>
+                      </div>
+                    )}
+
+                    {/* 共通: 位置・サイズ・回転 */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr',gap:4,marginBottom:6}}>
+                      <div>
+                        <label style={{fontSize:9,color:'var(--ink4)',display:'block',marginBottom:1}}>X (%)</label>
+                        <input className="input" type="number" min="-100" max="200" step="0.5" value={item.x||0} onChange={e=>update({x:Number(e.target.value)})} style={{fontSize:10,padding:'3px 4px'}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:9,color:'var(--ink4)',display:'block',marginBottom:1}}>Y (%)</label>
+                        <input className="input" type="number" min="-100" max="200" step="0.5" value={item.y||0} onChange={e=>update({y:Number(e.target.value)})} style={{fontSize:10,padding:'3px 4px'}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:9,color:'var(--ink4)',display:'block',marginBottom:1}}>W (%)</label>
+                        <input className="input" type="number" min="1" max="200" step="0.5" value={item.w||10} onChange={e=>update({w:Number(e.target.value)})} style={{fontSize:10,padding:'3px 4px'}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:9,color:'var(--ink4)',display:'block',marginBottom:1}}>H (%)</label>
+                        <input className="input" type="number" min="1" max="200" step="0.5" value={item.h||10} onChange={e=>update({h:Number(e.target.value)})} style={{fontSize:10,padding:'3px 4px'}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:9,color:'var(--ink4)',display:'block',marginBottom:1}}>回転°</label>
+                        <input className="input" type="number" min="-360" max="360" step="1" value={item.rotation||0} onChange={e=>update({rotation:Number(e.target.value)})} style={{fontSize:10,padding:'3px 4px'}}/>
+                      </div>
+                    </div>
+
+                    {/* レイヤー操作 */}
+                    <div style={{display:'flex',gap:4,marginBottom:6}}>
+                      <button type="button" onClick={()=>moveLayer(-99)} title="最背面" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>⤓最背面</button>
+                      <button type="button" onClick={()=>moveLayer(-1)} title="背面へ" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>↓背面</button>
+                      <button type="button" onClick={()=>moveLayer(1)} title="前面へ" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>↑前面</button>
+                      <button type="button" onClick={()=>moveLayer(99)} title="最前面" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>⤒最前面</button>
+                    </div>
+
+                    {/* アニメーション */}
+                    <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr',gap:6}}>
+                      <div>
+                        <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>アニメーション</label>
+                        <select className="input" value={item.animation||'none'} onChange={e=>update({animation:e.target.value})} style={{fontSize:11,padding:'4px 6px'}}>
+                          <option value="none">なし</option>
+                          <option value="fadeIn">フェードイン</option>
+                          <option value="slideUp">下から上へ</option>
+                          <option value="slideDown">上から下へ</option>
+                          <option value="slideLeft">右から左へ</option>
+                          <option value="slideRight">左から右へ</option>
+                          <option value="zoomIn">ズームイン</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>遅延 (秒)</label>
+                        <input className="input" type="number" min="0" max="10" step="0.1" value={item.animationDelay||0} onChange={e=>update({animationDelay:Number(e.target.value)||0})} style={{fontSize:11,padding:'4px 6px'}}/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {!selectedOverlayId && (overlay||[]).length > 0 && (
+                <div style={{fontSize:11,color:'var(--ink4)',textAlign:'center',padding:8}}>
+                  オブジェクトをクリックして選択
+                </div>
+              )}
             </div>
           </div>
         </div>
