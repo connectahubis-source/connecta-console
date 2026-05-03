@@ -11011,11 +11011,6 @@ function PageHeroSettings(){
 // HeroSlideEditor — ライブプレビュー付き編集モーダル
 function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const [imageUrl, setImageUrl] = useState(slide?.imageUrl || '');
-  const [eyebrow, setEyebrow] = useState(slide?.eyebrow || '');
-  const [titleEn, setTitleEn] = useState(slide?.titleEn || '');
-  const [titleEm, setTitleEm] = useState(slide?.titleEm || '');
-  const [sub, setSub] = useState(slide?.sub || '');
-  const [tone, setTone] = useState(slide?.tone || 'warm');
   const [enabled, setEnabled] = useState(slide?.enabled !== false);
   const [uploading, setUploading] = useState(false);
   // (Phase 7.6) オーバーレイ — テキスト/図形/画像を背景上に重ねる
@@ -11157,12 +11152,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     return url;
   };
 
-  const toneOverlay = {
-    warm:  'linear-gradient(180deg, rgba(10,41,96,0.35) 0%, rgba(10,41,96,0.55) 100%)',
-    night: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(10,41,96,0.65) 100%)',
-    city:  'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(10,41,96,0.65) 100%)',
-  };
-
   async function handleFileUpload(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -11202,18 +11191,11 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   function handleSubmit() {
     onSave({
       imageUrl: imageUrl.trim(),
-      eyebrow: eyebrow.trim(),
-      titleEn: titleEn.trim(),
-      titleEm: titleEm.trim(),
-      sub: sub.trim(),
-      tone,
       enabled,
       overlay: JSON.stringify(overlay || []),
       bgColor: bgColor || '',
     });
   }
-
-  const previewImg = normalizeImageUrl(imageUrl);
 
   return (
     <div className="modal-backdrop" onClick={handleClose}>
@@ -11269,112 +11251,160 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
           minHeight: 0,
           overflow:'hidden',
         }}>
-          {/* === 左: プレビュー === */}
+          {/* === 左: オーバーレイ・ライブプレビュー (Phase 7.7) === */}
           <div style={{
             padding:'20px',
             background:'linear-gradient(135deg, var(--bg2) 0%, var(--indigo-50) 100%)',
             display:'flex',flexDirection:'column',
             overflow:'auto',
-            minHeight: 0,    /* (Phase 7.6 fix) grid子要素で内容が膨らむ問題を回避 */
+            minHeight: 0,
           }}>
             <div style={{
               fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
               letterSpacing:'0.22em',fontWeight:700,marginBottom:12,
-            }}>LIVE PREVIEW</div>
-
-            <div style={{
-              position:'relative',
-              aspectRatio:'16 / 9',
-              borderRadius:10,overflow:'hidden',
-              background:'#0a2960',
-              boxShadow:'0 12px 28px -12px rgba(10,41,96,0.4)',
+              display:'flex',justifyContent:'space-between',alignItems:'center',
             }}>
-              {previewImg ? (
-                <>
-                  <img
-                    src={previewImg}
-                    alt=""
-                    style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
-                    onError={(e) => { e.target.style.display='none'; }}
-                  />
-                  <div aria-hidden style={{
-                    position:'absolute',inset:0,
-                    background: toneOverlay[tone],
-                  }}/>
-                  <div style={{
-                    position:'absolute',inset:0,
-                    display:'flex',flexDirection:'column',justifyContent:'center',
-                    padding:'24px 28px',color:'#fff',
-                  }}>
-                    {eyebrow && (
-                      <div style={{
-                        fontFamily:'var(--mono)',fontSize:9,
-                        letterSpacing:'0.32em',fontWeight:600,
-                        marginBottom:12,opacity:0.95,
-                        display:'flex',alignItems:'center',gap:10,
-                      }}>
-                        <span style={{width:20,height:1,background:'#fff',opacity:0.7}}/>
-                        <span>{eyebrow}</span>
-                      </div>
-                    )}
-                    {titleEn && (
-                      <div style={{
-                        fontFamily:'var(--serif)',fontSize:'clamp(18px, 2.4vw, 30px)',
-                        fontWeight:400,lineHeight:1.05,
-                        textShadow:'0 2px 14px rgba(0,0,0,0.35)',
-                      }}>
-                        <div>{titleEn}</div>
-                        {titleEm && <div style={{fontStyle:'italic',color:'#ffd5c6',marginTop:2}}>{titleEm}</div>}
-                      </div>
-                    )}
-                    {sub && (
-                      <div style={{
-                        marginTop:10,fontSize:11,
-                        textShadow:'0 2px 8px rgba(0,0,0,0.4)',
-                        opacity:0.95,lineHeight:1.5,
-                      }}>{sub}</div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div style={{
-                  position:'absolute',inset:0,
-                  display:'flex',flexDirection:'column',
-                  alignItems:'center',justifyContent:'center',
-                  color:'rgba(255,255,255,0.5)',
-                  fontFamily:'var(--mono)',fontSize:10,
-                  letterSpacing:'0.2em',
-                }}>
-                  <Icon n="img" s={28}/>
-                  <div style={{marginTop:8}}>画像を追加してください</div>
-                </div>
-              )}
+              <span>LIVE PREVIEW</span>
+              <span style={{fontWeight:400,letterSpacing:'0.05em'}}>{(overlay||[]).length} オブジェクト</span>
             </div>
 
-            {/* tone説明 */}
+            {/* 大型プレビュー (16:9) */}
             <div style={{
-              marginTop:14,padding:'10px 12px',
-              background:'var(--white)',borderRadius:8,
+              position:'relative',
+              width:'100%',
+              aspectRatio:'16/9',
+              background: imageUrl
+                ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/cover no-repeat`
+                : (bgColor === 'navy' ? '#0a2960'
+                  : bgColor === 'white' ? '#ffffff'
+                  : bgColor === 'beige' ? '#f5f0e8'
+                  : bgColor === 'gradient-blue' ? 'linear-gradient(135deg, #1c89e8 0%, #0a2960 100%)'
+                  : bgColor === 'gradient-navy' ? 'linear-gradient(135deg, #1a3661 0%, #0a2960 100%)'
+                  : bgColor === 'gradient-sky' ? 'linear-gradient(180deg, #7cb9f0 0%, #ffffff 100%)'
+                  : bgColor === 'gradient-warm' ? 'linear-gradient(135deg, #f5f0e8 0%, #ffffff 100%)'
+                  : '#0a2960'),
+              borderRadius:10,
+              overflow:'hidden',
               border:'1px solid var(--line)',
-              fontSize:11,color:'var(--ink3)',lineHeight:1.6,
-            }}>
-              <div style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',letterSpacing:'0.18em',marginBottom:4,fontWeight:700}}>OVERLAY: {tone.toUpperCase()}</div>
-              {tone === 'warm' && '明るい雰囲気の写真向け。インディゴの薄いオーバーレイ。'}
-              {tone === 'night' && '夜景や暗い写真向け。深いオーバーレイで文字を浮かせる。'}
-              {tone === 'city' && '都市風景向け。下方が濃いグラデーション。'}
+              cursor: selectedOverlayId ? 'default' : 'pointer',
+              userSelect:'none',
+              boxShadow:'0 12px 28px -12px rgba(10,41,96,0.4)',
+            }}
+              onClick={(e) => { if (e.target === e.currentTarget) setSelectedOverlayId(null); }}>
+              {[...(overlay||[])].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
+                const isSelected = item.id === selectedOverlayId;
+                const baseStyle = {
+                  position:'absolute',
+                  left: item.x + '%',
+                  top: item.y + '%',
+                  width: item.w + '%',
+                  height: item.h + '%',
+                  transform:`rotate(${item.rotation||0}deg)`,
+                  opacity: item.opacity ?? 1,
+                  boxSizing:'border-box',
+                  cursor:'move',
+                  outline: isSelected ? '2px dashed #2c89e8' : 'none',
+                  outlineOffset: 2,
+                };
+                const handleMouseDown = (ev) => {
+                  ev.stopPropagation();
+                  setSelectedOverlayId(item.id);
+                  const startX = ev.clientX;
+                  const startY = ev.clientY;
+                  const startItem = {x:item.x, y:item.y};
+                  const parent = ev.currentTarget.parentElement;
+                  const rect = parent.getBoundingClientRect();
+                  const onMove = (mev) => {
+                    const dx = ((mev.clientX - startX) / rect.width) * 100;
+                    const dy = ((mev.clientY - startY) / rect.height) * 100;
+                    const newX = Math.max(-100, Math.min(200, startItem.x + dx));
+                    const newY = Math.max(-100, Math.min(200, startItem.y + dy));
+                    setOverlay(prev => prev.map(o => o.id === item.id ? {...o, x: Math.round(newX*10)/10, y: Math.round(newY*10)/10} : o));
+                  };
+                  const onUp = () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                };
+                if (item.type === 'text') {
+                  return (
+                    <div key={item.id} onMouseDown={handleMouseDown} style={{
+                      ...baseStyle,
+                      display:'flex',
+                      alignItems:'center',
+                      justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
+                      fontSize: item.fontSize ? `${item.fontSize/2.5}px` : '14px',
+                      color: item.color || '#fff',
+                      fontFamily: item.fontFamily,
+                      fontWeight: item.fontWeight || 400,
+                      textAlign: item.textAlign || 'center',
+                      lineHeight: 1.1,
+                      whiteSpace:'pre-wrap',
+                      wordBreak:'break-word',
+                      padding: 2,
+                      textShadow:'0 2px 16px rgba(0,0,0,0.3)',
+                    }}>{item.text || ''}{item.href && <span style={{fontSize:9,marginLeft:4,opacity:0.6}}>🔗</span>}</div>
+                  );
+                } else if (item.type === 'circle') {
+                  return (
+                    <div key={item.id} onMouseDown={handleMouseDown} style={{
+                      ...baseStyle, borderRadius:'50%',
+                      background: item.color || 'transparent',
+                      border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                    }}/>
+                  );
+                } else if (item.type === 'rect') {
+                  return (
+                    <div key={item.id} onMouseDown={handleMouseDown} style={{
+                      ...baseStyle,
+                      background: item.color || 'transparent',
+                      border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                    }}/>
+                  );
+                } else if (item.type === 'triangle') {
+                  return (
+                    <div key={item.id} onMouseDown={handleMouseDown} style={baseStyle}>
+                      <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
+                        <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
+                      </svg>
+                    </div>
+                  );
+                } else if (item.type === 'image') {
+                  return (
+                    <div key={item.id} onMouseDown={handleMouseDown} style={baseStyle}>
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt="" style={{width:'100%',height:'100%',objectFit:'contain',display:'block',pointerEvents:'none'}}/>
+                      ) : (
+                        <div style={{width:'100%',height:'100%',background:'rgba(255,255,255,0.2)',border:'1px dashed #fff',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:10}}>画像なし</div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })}
             </div>
 
             {!enabled && (
               <div style={{
-                marginTop:10,padding:'8px 12px',
-                background:'var(--ink-faint, #f3f0ed)',
-                border:'1px solid var(--ink5)',
+                marginTop:14,padding:'10px 14px',
+                background:'rgba(245, 158, 11, 0.1)',
+                border:'1px solid rgba(245, 158, 11, 0.3)',
                 borderRadius:8,fontSize:11,
                 color:'var(--ink3)',
               }}>
                 ⚠ 「無効」状態のため、参加者ページには表示されません
               </div>
             )}
+
+            <div style={{
+              marginTop:12,fontSize:10,color:'var(--ink4)',lineHeight:1.6,
+            }}>
+              ・ プレビュー上のオブジェクトをドラッグで移動<br/>
+              ・ クリックで選択 → 右パネルで詳細編集<br/>
+              ・ 矢印キーで微調整、Delete / Backspace で削除、Esc で選択解除
+            </div>
           </div>
 
           {/* === 右: フォーム === */}
@@ -11421,74 +11451,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                     }}>クリア</button>
                 )}
                 <span style={{fontSize:10,color:'var(--ink5)',marginLeft:'auto'}}>横長 / 16:9 推奨 / 自動で 2000px・JPEG に圧縮</span>
-              </div>
-            </div>
-
-            {/* コピーセクション */}
-            <div>
-              <div style={{
-                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
-                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
-              }}>COPY</div>
-              <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                <div>
-                  <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
-                    Eyebrow <span style={{color:'var(--ink5)',fontWeight:400}}>(上部の英大文字ラベル)</span>
-                  </label>
-                  <input className="input" value={eyebrow} onChange={e => setEyebrow(e.target.value)} placeholder="例: ENCOUNTERS"/>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <div>
-                    <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
-                      Title (英語)
-                    </label>
-                    <input className="input" value={titleEn} onChange={e => setTitleEn(e.target.value)} placeholder="Where strangers become"/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
-                      Title (斜体・色付け)
-                    </label>
-                    <input className="input" value={titleEm} onChange={e => setTitleEm(e.target.value)} placeholder="friends." style={{fontStyle:'italic'}}/>
-                  </div>
-                </div>
-                <div>
-                  <label style={{fontSize:11,color:'var(--ink3)',fontWeight:600,marginBottom:4,display:'block'}}>
-                    サブコピー (日本語)
-                  </label>
-                  <IMEInput className="input" value={sub} onChange={e => setSub(e.target.value)} placeholder="出会いが、まちを変えていく。"/>
-                </div>
-              </div>
-            </div>
-
-            {/* スタイルセクション */}
-            <div>
-              <div style={{
-                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
-                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
-              }}>STYLE</div>
-              {/* tone セレクタ (3択ボタン) */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
-                {[
-                  {v:'warm',label:'WARM',desc:'明るい'},
-                  {v:'night',label:'NIGHT',desc:'夜・暗い'},
-                  {v:'city',label:'CITY',desc:'都市'},
-                ].map(opt => (
-                  <button
-                    key={opt.v}
-                    type="button"
-                    onClick={() => setTone(opt.v)}
-                    style={{
-                      padding:'10px 8px',
-                      background: tone === opt.v ? 'var(--indigo)' : 'var(--white)',
-                      color: tone === opt.v ? '#fff' : 'var(--ink2)',
-                      border: tone === opt.v ? '1px solid var(--indigo)' : '1px solid var(--line)',
-                      borderRadius:8,cursor:'pointer',
-                      transition:'all .2s',
-                    }}>
-                    <div style={{fontFamily:'var(--mono)',fontSize:10,fontWeight:700,letterSpacing:'0.15em',marginBottom:2}}>{opt.label}</div>
-                    <div style={{fontSize:10,opacity:0.7}}>{opt.desc}</div>
-                  </button>
-                ))}
               </div>
             </div>
 
@@ -11585,124 +11547,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               }}>
                 <span>OVERLAY · オブジェクト</span>
                 <span style={{fontSize:11,fontWeight:400,color:'var(--ink2)'}}>{(overlay||[]).length} 個</span>
-              </div>
-
-              {/* プレビュー */}
-              <div style={{
-                position:'relative',
-                width:'100%',
-                aspectRatio:'16/9',
-                background: imageUrl
-                  ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/cover no-repeat`
-                  : (bgColor === 'navy' ? '#0a2960'
-                    : bgColor === 'white' ? '#ffffff'
-                    : bgColor === 'beige' ? '#f5f0e8'
-                    : bgColor === 'gradient-blue' ? 'linear-gradient(135deg, #1c89e8 0%, #0a2960 100%)'
-                    : bgColor === 'gradient-navy' ? 'linear-gradient(135deg, #1a3661 0%, #0a2960 100%)'
-                    : bgColor === 'gradient-sky' ? 'linear-gradient(180deg, #7cb9f0 0%, #ffffff 100%)'
-                    : bgColor === 'gradient-warm' ? 'linear-gradient(135deg, #f5f0e8 0%, #ffffff 100%)'
-                    : '#0a2960'),
-                borderRadius:8,
-                overflow:'hidden',
-                border:'1px solid var(--line)',
-                cursor: selectedOverlayId ? 'default' : 'pointer',
-                userSelect:'none',
-                marginBottom:10,
-              }}
-                onClick={(e) => { if (e.target === e.currentTarget) setSelectedOverlayId(null); }}>
-                {[...(overlay||[])].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
-                  const isSelected = item.id === selectedOverlayId;
-                  const baseStyle = {
-                    position:'absolute',
-                    left: item.x + '%',
-                    top: item.y + '%',
-                    width: item.w + '%',
-                    height: item.h + '%',
-                    transform:`rotate(${item.rotation||0}deg)`,
-                    boxSizing:'border-box',
-                    cursor:'move',
-                    outline: isSelected ? '2px dashed #2c89e8' : 'none',
-                    outlineOffset: 2,
-                  };
-                  const handleMouseDown = (ev) => {
-                    ev.stopPropagation();
-                    setSelectedOverlayId(item.id);
-                    const startX = ev.clientX;
-                    const startY = ev.clientY;
-                    const startItem = {x:item.x, y:item.y};
-                    const parent = ev.currentTarget.parentElement;
-                    const rect = parent.getBoundingClientRect();
-                    const onMove = (mev) => {
-                      const dx = ((mev.clientX - startX) / rect.width) * 100;
-                      const dy = ((mev.clientY - startY) / rect.height) * 100;
-                      // (Phase 7.6) 写真外配置を許可: -100% 〜 200%
-                      const newX = Math.max(-100, Math.min(200, startItem.x + dx));
-                      const newY = Math.max(-100, Math.min(200, startItem.y + dy));
-                      setOverlay(prev => prev.map(o => o.id === item.id ? {...o, x: Math.round(newX*10)/10, y: Math.round(newY*10)/10} : o));
-                    };
-                    const onUp = () => {
-                      window.removeEventListener('mousemove', onMove);
-                      window.removeEventListener('mouseup', onUp);
-                    };
-                    window.addEventListener('mousemove', onMove);
-                    window.addEventListener('mouseup', onUp);
-                  };
-                  if (item.type === 'text') {
-                    return (
-                      <div key={item.id} onMouseDown={handleMouseDown} style={{
-                        ...baseStyle,
-                        display:'flex',
-                        alignItems:'center',
-                        justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                        fontSize: item.fontSize ? `${item.fontSize/3}px` : '12px',
-                        color: item.color || '#fff',
-                        fontFamily: item.fontFamily,
-                        fontWeight: item.fontWeight || 400,
-                        textAlign: item.textAlign || 'center',
-                        lineHeight: 1.1,
-                        whiteSpace:'pre-wrap',
-                        wordBreak:'break-word',
-                        padding: 2,
-                        textShadow:'0 2px 16px rgba(0,0,0,0.3)',
-                      }}>{item.text || ''}</div>
-                    );
-                  } else if (item.type === 'circle') {
-                    return (
-                      <div key={item.id} onMouseDown={handleMouseDown} style={{
-                        ...baseStyle, borderRadius:'50%',
-                        background: item.color || 'transparent',
-                        border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
-                      }}/>
-                    );
-                  } else if (item.type === 'rect') {
-                    return (
-                      <div key={item.id} onMouseDown={handleMouseDown} style={{
-                        ...baseStyle,
-                        background: item.color || 'transparent',
-                        border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
-                      }}/>
-                    );
-                  } else if (item.type === 'triangle') {
-                    return (
-                      <div key={item.id} onMouseDown={handleMouseDown} style={baseStyle}>
-                        <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
-                          <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
-                        </svg>
-                      </div>
-                    );
-                  } else if (item.type === 'image') {
-                    return (
-                      <div key={item.id} onMouseDown={handleMouseDown} style={baseStyle}>
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt="" style={{width:'100%',height:'100%',objectFit:'contain',display:'block',pointerEvents:'none'}}/>
-                        ) : (
-                          <div style={{width:'100%',height:'100%',background:'rgba(255,255,255,0.2)',border:'1px dashed #fff',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:10}}>画像なし</div>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
               </div>
 
               {/* 追加ボタン */}
@@ -11907,6 +11751,31 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                         <label style={{fontSize:9,color:'var(--ink4)',display:'block',marginBottom:1}}>回転°</label>
                         <input className="input" type="number" min="-360" max="360" step="1" value={item.rotation||0} onChange={e=>update({rotation:Number(e.target.value)})} style={{fontSize:10,padding:'3px 4px'}}/>
                       </div>
+                    </div>
+
+                    {/* (Phase 7.7) 透過度 (全要素共通) */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 60px',gap:6,alignItems:'center',marginBottom:6}}>
+                      <div>
+                        <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>透過度</label>
+                        <input type="range" min="0" max="100" step="1"
+                          value={Math.round(((item.opacity ?? 1) * 100))}
+                          onChange={e=>update({opacity: Number(e.target.value)/100})}
+                          style={{width:'100%'}}/>
+                      </div>
+                      <div style={{paddingTop:14,fontSize:10,fontWeight:600,color:'var(--ink2)',textAlign:'right'}}>
+                        {Math.round(((item.opacity ?? 1) * 100))}%
+                      </div>
+                    </div>
+
+                    {/* (Phase 7.7) リンクURL (ボタン化) — テキスト/図形/画像どれでも可 */}
+                    <div style={{marginBottom:6}}>
+                      <label style={{fontSize:10,color:'var(--ink3)',display:'block',marginBottom:2}}>
+                        リンクURL <span style={{color:'var(--ink4)',fontWeight:400}}>(空ならクリック不可、設定するとボタンになる)</span>
+                      </label>
+                      <input className="input" type="text" value={item.href||''}
+                        onChange={e=>update({href:e.target.value})}
+                        placeholder="https://... または #/events"
+                        style={{fontSize:11,padding:'4px 6px'}}/>
                     </div>
 
                     {/* レイヤー操作 */}
