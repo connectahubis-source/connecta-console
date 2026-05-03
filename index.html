@@ -10443,15 +10443,13 @@ function PagePhotos(){
 // PageHeroSettings — ヒーロースライド管理 (Phase 6.3)
 // 最大5枚の常設ヒーロースライドをCRUD。並び替え・有効/無効切替対応。
 // =================================================================
-// (Phase 7.7) Hero プレビュー用: 仮想キャンバス1280×720 を実幅でscale計算
-// 戻り値: [ref, scale]
-// 使い方: const [wrapRef, scale] = useCanvasScale();
-// <div ref={wrapRef}><div style={{transform:`scale(${scale})`, ...}}>...</div></div>
+
+// (Phase 7.7) Heroプレビュー用: プレビュー実幅 / 参加者サイト写真エリア (1193px) のスケール係数
+// fontSize や borderWidth など px 値を、プレビュー幅に応じて縮小表示するために使う
 function useCanvasScale(virtualWidth) {
-  const VW = virtualWidth || 1280;
+  const VW = virtualWidth || 1193;
   const ref = React.useRef(null);
-  const [scale, setScale] = React.useState(0);
-  // useLayoutEffect: ペイント前に scale を測定 (初回0でちらつく問題を回避)
+  const [scale, setScale] = React.useState(1);
   React.useLayoutEffect(() => {
     if (!ref.current) return;
     const el = ref.current;
@@ -10467,7 +10465,6 @@ function useCanvasScale(virtualWidth) {
     } else {
       window.addEventListener('resize', update);
     }
-    // 画像ロードや遅延レイアウトで幅が後から確定するケースに備えて、リトライ
     const t1 = setTimeout(update, 50);
     const t2 = setTimeout(update, 200);
     return () => {
@@ -10485,7 +10482,7 @@ function PageHeroSettings(){
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
   const [previewIdx, setPreviewIdx] = useState(0);   // ライブプレビュー: どのスライドを大きく見せるか
-  // (Phase 7.7) 大プレビューの仮想キャンバススケール
+  // (Phase 7.7) 参加者サイト写真エリア(1193px)からのスケール係数
   const [previewWrapRef, previewScale] = useCanvasScale(1193);
 
   async function fetchAll() {
@@ -10719,16 +10716,9 @@ function PageHeroSettings(){
                     ) : (
                       <div style={{position:'absolute',inset:0,background: slideBg}}/>
                     )}
-                    {/* オーバーレイ要素 (仮想キャンバス1280×720を縮小表示) */}
-                    {overlay.length > 0 && previewScale > 0 && (
-                      <div style={{
-                        position:'absolute',
-                        top:0, left:0,
-                        width:1193, height:920,
-                        transform:`scale(${previewScale})`,
-                        transformOrigin:'top left',
-                        pointerEvents:'none',
-                      }}>
+                    {/* オーバーレイ要素 */}
+                    {overlay.length > 0 && (
+                      <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
                         {[...overlay].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
                           const baseStyle = {
                             position:'absolute',
@@ -10747,7 +10737,7 @@ function PageHeroSettings(){
                                 display:'flex',
                                 alignItems:'center',
                                 justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                                fontSize: item.fontSize ? item.fontSize + 'px' : '14px',
+                                fontSize: item.fontSize ? `${item.fontSize * previewScale}px` : `${14 * previewScale}px`,
                                 color: item.color || '#fff',
                                 fontFamily: item.fontFamily,
                                 fontWeight: item.fontWeight || 400,
@@ -10764,7 +10754,7 @@ function PageHeroSettings(){
                               <div key={item.id} style={{
                                 ...baseStyle, borderRadius:'50%',
                                 background: item.color || 'transparent',
-                                border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                                border: `${(item.borderWidth || 0) * previewScale}px solid ${item.borderColor || 'transparent'}`,
                               }}/>
                             );
                           } else if (item.type === 'rect') {
@@ -10772,14 +10762,14 @@ function PageHeroSettings(){
                               <div key={item.id} style={{
                                 ...baseStyle,
                                 background: item.color || 'transparent',
-                                border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                                border: `${(item.borderWidth || 0) * previewScale}px solid ${item.borderColor || 'transparent'}`,
                               }}/>
                             );
                           } else if (item.type === 'triangle') {
                             return (
                               <div key={item.id} style={baseStyle}>
                                 <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
-                                  <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
+                                  <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={(item.borderWidth || 0) * previewScale * 0.1}/>
                                 </svg>
                               </div>
                             );
@@ -11150,7 +11140,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     if (slide?.bgColorDraft) return slide.bgColorDraft;
     return slide?.bgColor || '';
   });
-  // (Phase 7.7) DRAFT/LIVE プレビューの仮想キャンバススケール
+  // (Phase 7.7) DRAFT/LIVEプレビューの参加者サイト換算スケール
   const [draftWrapRef, draftScale] = useCanvasScale(1193);
   const [liveWrapRef, liveScale] = useCanvasScale(1193);
   // (Phase 7.6) オーバーレイ・背景色の自動保存 (2秒デバウンス)
@@ -11373,11 +11363,21 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={handleClose}>
+    <div className="modal-backdrop" onClick={handleClose} style={{
+      position:'fixed',
+      inset:0,
+      background:'rgba(10, 41, 96, 0.4)',
+      backdropFilter:'blur(4px)',
+      display:'flex',
+      alignItems:'center',
+      justifyContent:'center',
+      zIndex:1000,
+      padding:20,
+    }}>
       <div className="card" style={{
-        width: 880,
-        maxWidth: '94%',
-        maxHeight: '90vh',
+        width: 1400,
+        maxWidth: '95vw',
+        maxHeight: '92vh',
         padding: 0,
         overflow: 'hidden',
         display: 'flex',
@@ -11445,7 +11445,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
         {/* 二段組: 左 = ライブプレビュー / 右 = フォーム */}
         <div style={{
           display:'grid',
-          gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1.1fr)',
+          gridTemplateColumns:'minmax(0, 1.5fr) minmax(0, 1fr)',
           flex: 1,
           minHeight: 0,
           overflow:'hidden',
@@ -11477,13 +11477,14 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               参加者ページに反映するには右上の「LIVE PREVIEWに反映」ボタンを押してください。
             </div>
 
-            {/* 大型プレビュー (16:9) — 仮想キャンバス1280×720を縮小表示 (Phase 7.7) */}
+            {/* 大型プレビュー — 写真エリアと同じ比率 1193:920 */}
             <div ref={draftWrapRef} style={{
               position:'relative',
               width:'100%',
               aspectRatio:'1193/920',
+              flexShrink: 0,
               background: imageUrl
-                ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/cover no-repeat`
+                ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/contain no-repeat`
                 : (bgColor === 'navy' ? '#0a2960'
                   : bgColor === 'white' ? '#ffffff'
                   : bgColor === 'beige' ? '#f5f0e8'
@@ -11499,14 +11500,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               userSelect:'none',
               boxShadow:'0 12px 28px -12px rgba(10,41,96,0.4)',
             }}
-              onClick={(e) => { if (e.target === e.currentTarget || e.target.dataset?.canvas === 'draft') setSelectedOverlayId(null); }}>
-              <div data-canvas="draft" style={{
-                position:'absolute',
-                top:0, left:0,
-                width:1193, height:920,
-                transform:`scale(${draftScale})`,
-                transformOrigin:'top left',
-              }}>
+              onClick={(e) => { if (e.target === e.currentTarget) setSelectedOverlayId(null); }}>
               {[...(overlay||[])].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
                 const isSelected = item.id === selectedOverlayId;
                 const baseStyle = {
@@ -11551,7 +11545,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                       display:'flex',
                       alignItems:'center',
                       justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                      fontSize: item.fontSize ? item.fontSize + 'px' : '14px',
+                      fontSize: item.fontSize ? `${item.fontSize * draftScale}px` : `${14 * draftScale}px`,
                       color: item.color || '#fff',
                       fontFamily: item.fontFamily,
                       fontWeight: item.fontWeight || 400,
@@ -11568,7 +11562,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                     <div key={item.id} onMouseDown={handleMouseDown} style={{
                       ...baseStyle, borderRadius:'50%',
                       background: item.color || 'transparent',
-                      border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                      border: `${(item.borderWidth || 0) * draftScale}px solid ${item.borderColor || 'transparent'}`,
                     }}/>
                   );
                 } else if (item.type === 'rect') {
@@ -11576,14 +11570,14 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                     <div key={item.id} onMouseDown={handleMouseDown} style={{
                       ...baseStyle,
                       background: item.color || 'transparent',
-                      border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                      border: `${(item.borderWidth || 0) * draftScale}px solid ${item.borderColor || 'transparent'}`,
                     }}/>
                   );
                 } else if (item.type === 'triangle') {
                   return (
                     <div key={item.id} onMouseDown={handleMouseDown} style={baseStyle}>
                       <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
-                        <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
+                        <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={(item.borderWidth || 0) * draftScale * 0.1}/>
                       </svg>
                     </div>
                   );
@@ -11600,7 +11594,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                 }
                 return null;
               })}
-              </div>
             </div>
 
             {!enabled && (
@@ -11659,8 +11652,9 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                   position:'relative',
                   width:'100%',
                   aspectRatio:'1193/920',
+                  flexShrink: 0,
                   background: imageUrl
-                    ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/cover no-repeat`
+                    ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/contain no-repeat`
                     : (publishedBgColor === 'navy' ? '#0a2960'
                       : publishedBgColor === 'white' ? '#ffffff'
                       : publishedBgColor === 'beige' ? '#f5f0e8'
@@ -11675,14 +11669,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                   boxShadow:'0 6px 16px -8px rgba(10,41,96,0.3)',
                 }}>
                   {publishedOverlay.length > 0 && (
-                    <div style={{
-                      position:'absolute',
-                      top:0, left:0,
-                      width:1193, height:920,
-                      transform:`scale(${liveScale})`,
-                      transformOrigin:'top left',
-                      pointerEvents:'none',
-                    }}>
+                    <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
                       {[...publishedOverlay].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
                         const baseStyle = {
                           position:'absolute',
@@ -11701,7 +11688,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                               display:'flex',
                               alignItems:'center',
                               justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                              fontSize: item.fontSize ? item.fontSize + 'px' : '14px',
+                              fontSize: item.fontSize ? `${item.fontSize * liveScale}px` : `${14 * liveScale}px`,
                               color: item.color || '#fff',
                               fontFamily: item.fontFamily,
                               fontWeight: item.fontWeight || 400,
@@ -11718,7 +11705,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                             <div key={item.id} style={{
                               ...baseStyle, borderRadius:'50%',
                               background: item.color || 'transparent',
-                              border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                              border: `${(item.borderWidth || 0) * liveScale}px solid ${item.borderColor || 'transparent'}`,
                             }}/>
                           );
                         } else if (item.type === 'rect') {
@@ -11726,14 +11713,14 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                             <div key={item.id} style={{
                               ...baseStyle,
                               background: item.color || 'transparent',
-                              border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                              border: `${(item.borderWidth || 0) * liveScale}px solid ${item.borderColor || 'transparent'}`,
                             }}/>
                           );
                         } else if (item.type === 'triangle') {
                           return (
                             <div key={item.id} style={baseStyle}>
                               <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
-                                <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
+                                <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={(item.borderWidth || 0) * liveScale * 0.1}/>
                               </svg>
                             </div>
                           );
