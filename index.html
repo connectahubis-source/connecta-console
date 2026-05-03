@@ -10451,23 +10451,30 @@ function useCanvasScale(virtualWidth) {
   const VW = virtualWidth || 1280;
   const ref = React.useRef(null);
   const [scale, setScale] = React.useState(0);
-  React.useEffect(() => {
+  // useLayoutEffect: ペイント前に scale を測定 (初回0でちらつく問題を回避)
+  React.useLayoutEffect(() => {
     if (!ref.current) return;
     const el = ref.current;
     const update = () => {
       const w = el.clientWidth || 0;
-      setScale(w > 0 ? w / VW : 0);
+      if (w > 0) setScale(w / VW);
     };
     update();
+    let ro = null;
     if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(update);
+      ro = new ResizeObserver(update);
       ro.observe(el);
-      return () => ro.disconnect();
     } else {
-      // フォールバック: window resize
       window.addEventListener('resize', update);
-      return () => window.removeEventListener('resize', update);
     }
+    // 画像ロードや遅延レイアウトで幅が後から確定するケースに備えて、リトライ
+    const t1 = setTimeout(update, 50);
+    const t2 = setTimeout(update, 200);
+    return () => {
+      if (ro) ro.disconnect();
+      else window.removeEventListener('resize', update);
+      clearTimeout(t1); clearTimeout(t2);
+    };
   }, [VW]);
   return [ref, scale];
 }
@@ -10713,7 +10720,7 @@ function PageHeroSettings(){
                       <div style={{position:'absolute',inset:0,background: slideBg}}/>
                     )}
                     {/* オーバーレイ要素 (仮想キャンバス1280×720を縮小表示) */}
-                    {overlay.length > 0 && (
+                    {overlay.length > 0 && previewScale > 0 && (
                       <div style={{
                         position:'absolute',
                         top:0, left:0,
