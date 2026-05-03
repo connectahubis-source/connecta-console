@@ -11174,6 +11174,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
             background:'linear-gradient(135deg, var(--bg2) 0%, var(--indigo-50) 100%)',
             display:'flex',flexDirection:'column',
             overflow:'auto',
+            minHeight: 0,    /* (Phase 7.6 fix) grid子要素で内容が膨らむ問題を回避 */
           }}>
             <div style={{
               fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
@@ -11279,6 +11280,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
           <div style={{
             padding:'20px 24px',
             overflow:'auto',
+            minHeight: 0,    /* (Phase 7.6 fix) grid子要素で内容が膨らむ問題を回避 */
             display:'flex',flexDirection:'column',gap:16,
           }}>
             {/* 画像セクション */}
