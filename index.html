@@ -10642,6 +10642,7 @@ function PageHeroSettings(){
 
             <div style={{
               position: 'relative',
+              containerType: 'inline-size',
               aspectRatio: '16 / 9',
               borderRadius: 14,
               overflow: 'hidden',
@@ -10702,7 +10703,7 @@ function PageHeroSettings(){
                                 display:'flex',
                                 alignItems:'center',
                                 justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                                fontSize: item.fontSize ? `${item.fontSize/2.5}px` : '14px',
+                                fontSize: item.fontSize ? `clamp(${Math.round(item.fontSize*0.5)}px, ${item.fontSize/4}cqi, ${item.fontSize}px)` : 'clamp(7px, 2cqi, 14px)',
                                 color: item.color || '#fff',
                                 fontFamily: item.fontFamily,
                                 fontWeight: item.fontWeight || 400,
@@ -11431,7 +11432,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
 
             {/* 大型プレビュー (16:9) */}
             <div style={{
-              position:'relative',
+              position:'relative', containerType:'inline-size',
               width:'100%',
               aspectRatio:'16/9',
               background: imageUrl
@@ -11496,7 +11497,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                       display:'flex',
                       alignItems:'center',
                       justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                      fontSize: item.fontSize ? `${item.fontSize/2.5}px` : '14px',
+                      fontSize: item.fontSize ? `clamp(${Math.round(item.fontSize*0.5)}px, ${item.fontSize/4}cqi, ${item.fontSize}px)` : 'clamp(7px, 2cqi, 14px)',
                       color: item.color || '#fff',
                       fontFamily: item.fontFamily,
                       fontWeight: item.fontWeight || 400,
@@ -11601,6 +11602,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               return (
                 <div style={{
                   position:'relative',
+                  containerType:'inline-size',
                   width:'100%',
                   aspectRatio:'16/9',
                   background: imageUrl
@@ -11616,7 +11618,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                   borderRadius:10,
                   overflow:'hidden',
                   border:'1px solid var(--line)',
-                  opacity: 0.85,  // ドラフトとの差別化のため少し落とす
                   boxShadow:'0 6px 16px -8px rgba(10,41,96,0.3)',
                 }}>
                   {publishedOverlay.length > 0 && (
@@ -11639,7 +11640,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                               display:'flex',
                               alignItems:'center',
                               justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                              fontSize: item.fontSize ? `${item.fontSize/2.5}px` : '14px',
+                              fontSize: item.fontSize ? `clamp(${Math.round(item.fontSize*0.5)}px, ${item.fontSize/4}cqi, ${item.fontSize}px)` : 'clamp(7px, 2cqi, 14px)',
                               color: item.color || '#fff',
                               fontFamily: item.fontFamily,
                               fontWeight: item.fontWeight || 400,
@@ -11846,31 +11847,31 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
                 <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                   const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                  const newItem = {id, type:'text', text:'テキスト', x:30, y:40, w:40, h:10, fontSize:36, color:'#ffffff', fontFamily:'"Caveat", cursive', fontWeight:400, textAlign:'center', rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  const newItem = {id, type:'text', text:'テキスト', x:30, y:40, w:40, h:10, fontSize:36, color:'#ffffff', fontFamily:'"Caveat", cursive', fontWeight:400, textAlign:'center', rotation:0, opacity:1, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
                   setOverlay([...(overlay||[]), newItem]);
                   setSelectedOverlayId(id);
                 }}>+ T</button>
                 <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                   const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                  const newItem = {id, type:'circle', x:35, y:35, w:20, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  const newItem = {id, type:'circle', x:35, y:35, w:20, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, opacity:1, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
                   setOverlay([...(overlay||[]), newItem]);
                   setSelectedOverlayId(id);
                 }}>+ ●</button>
                 <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                   const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                  const newItem = {id, type:'rect', x:30, y:40, w:40, h:20, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  const newItem = {id, type:'rect', x:30, y:40, w:40, h:20, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, opacity:1, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
                   setOverlay([...(overlay||[]), newItem]);
                   setSelectedOverlayId(id);
                 }}>+ ■</button>
                 <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                   const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                  const newItem = {id, type:'triangle', x:35, y:35, w:30, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  const newItem = {id, type:'triangle', x:35, y:35, w:30, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0, opacity:1, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
                   setOverlay([...(overlay||[]), newItem]);
                   setSelectedOverlayId(id);
                 }}>+ ▲</button>
                 <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                   const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                  const newItem = {id, type:'image', imageUrl:'', x:30, y:30, w:30, h:30, rotation:0, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
+                  const newItem = {id, type:'image', imageUrl:'', x:30, y:30, w:30, h:30, rotation:0, opacity:1, zOrder:(overlay||[]).length, animation:'none', animationDelay:0};
                   setOverlay([...(overlay||[]), newItem]);
                   setSelectedOverlayId(id);
                 }}>+ 画像</button>
