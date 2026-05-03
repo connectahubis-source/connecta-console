@@ -445,6 +445,7 @@ svg{display:block}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--line2);border-top-color:var(--indigo);border-radius:50%;animation:spin .8s linear infinite}
 .spinner-lg{width:32px;height:32px;border-width:3px}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
 .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:12px;color:var(--ink4);font-size:12px}
 
 /* Skeleton */
@@ -11029,6 +11030,80 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const [selectedOverlayId, setSelectedOverlayId] = useState(null);
   // (Phase 7.6) 背景色 — 写真なし時の塗り
   const [bgColor, setBgColor] = useState(slide?.bgColor || '');
+  // (Phase 7.6) オーバーレイ・背景色の自動保存 (2秒デバウンス)
+  // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
+  const [autoSaveStatus, setAutoSaveStatus] = useState('idle');
+  const autoSaveTimerRef = useRef(null);
+  const autoSaveSavedAtRef = useRef(0);
+  const isInitialRenderRef = useRef(true);
+
+  // 自動保存関数 (デバウンス付き)
+  React.useEffect(() => {
+    // 新規作成中 (slideIdがない) は自動保存スキップ
+    if (mode !== 'edit' || !slide?.id) return;
+    // 初回レンダリングはスキップ (state初期化で発火するのを防ぐ)
+    if (isInitialRenderRef.current) {
+      isInitialRenderRef.current = false;
+      return;
+    }
+    // ペンディング中表示
+    setAutoSaveStatus('pending');
+    // 既存タイマーをクリア
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    // 2秒後に保存実行
+    autoSaveTimerRef.current = setTimeout(async () => {
+      setAutoSaveStatus('saving');
+      try {
+        await window.postData('updateHeroSlide', {
+          slideId: slide.id,
+          fields: {
+            overlay: JSON.stringify(overlay || []),
+            bgColor: bgColor || '',
+          },
+        });
+        autoSaveSavedAtRef.current = Date.now();
+        setAutoSaveStatus('saved');
+        // 3秒後にidleに戻す
+        setTimeout(() => {
+          if (Date.now() - autoSaveSavedAtRef.current >= 3000) {
+            setAutoSaveStatus('idle');
+          }
+        }, 3000);
+      } catch (err) {
+        console.error('[HeroSlideEditor] auto-save failed:', err);
+        setAutoSaveStatus('error');
+        if (window.toast) window.toast.error('自動保存に失敗しました: ' + (err.message || err));
+      }
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [overlay, bgColor, mode, slide?.id]);
+
+  // 閉じる前に保留中の自動保存を即時実行
+  const handleClose = async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (autoSaveStatus === 'pending' || autoSaveStatus === 'saving') {
+      try {
+        if (mode === 'edit' && slide?.id) {
+          await window.postData('updateHeroSlide', {
+            slideId: slide.id,
+            fields: {
+              overlay: JSON.stringify(overlay || []),
+              bgColor: bgColor || '',
+            },
+          });
+        }
+      } catch (err) {
+        console.error('[HeroSlideEditor] flush save failed:', err);
+      }
+    }
+    onCancel();
+  };
 
   // (Phase 7.6) キーボード操作 — 選択中要素を矢印で移動、Deleteで削除、Cmd+Dで複製
   React.useEffect(() => {
@@ -11141,7 +11216,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const previewImg = normalizeImageUrl(imageUrl);
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={handleClose}>
       <div className="card" style={{
         width: 880,
         maxWidth: '94%',
@@ -11166,7 +11241,24 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               {mode === 'edit' ? 'スライドを編集' : '新規スライドを追加'}
             </div>
           </div>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel}><Icon n="x" s={14}/></button>
+          {/* (Phase 7.6) 自動保存ステータス + 閉じる */}
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            {mode === 'edit' && autoSaveStatus !== 'idle' && (
+              <div style={{
+                display:'flex',alignItems:'center',gap:6,
+                fontSize:11,fontWeight:500,
+                color: autoSaveStatus === 'error' ? '#dc2626'
+                  : autoSaveStatus === 'saved' ? '#16a34a'
+                  : 'var(--ink3)',
+              }}>
+                {autoSaveStatus === 'pending' && (<><span style={{width:6,height:6,borderRadius:'50%',background:'var(--ink4)',animation:'pulse 1.4s infinite'}}/>変更あり</>)}
+                {autoSaveStatus === 'saving' && (<><span className="spinner" style={{width:10,height:10,borderWidth:1.5}}/>保存中…</>)}
+                {autoSaveStatus === 'saved' && (<><Icon n="check" s={11}/>保存済み</>)}
+                {autoSaveStatus === 'error' && (<><Icon n="alert" s={11}/>保存失敗</>)}
+              </div>
+            )}
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={handleClose}><Icon n="x" s={14}/></button>
+          </div>
         </div>
 
         {/* 二段組: 左 = ライブプレビュー / 右 = フォーム */}
@@ -11864,7 +11956,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
           background:'var(--bg2)',
           display:'flex',justifyContent:'flex-end',gap:8,
         }}>
-          <button className="btn btn-ghost" onClick={onCancel}>キャンセル</button>
+          <button className="btn btn-ghost" onClick={handleClose}>{mode === 'edit' ? '閉じる' : 'キャンセル'}</button>
           <button className="btn btn-indigo" onClick={handleSubmit}>
             <Icon n="check" s={14}/> {mode === 'edit' ? '変更を保存' : 'スライドを追加'}
           </button>
