@@ -10486,7 +10486,7 @@ function PageHeroSettings(){
   const [editing, setEditing] = useState(null);
   const [previewIdx, setPreviewIdx] = useState(0);   // ライブプレビュー: どのスライドを大きく見せるか
   // (Phase 7.7) 大プレビューの仮想キャンバススケール
-  const [previewWrapRef, previewScale] = useCanvasScale(1280);
+  const [previewWrapRef, previewScale] = useCanvasScale(1193);
 
   async function fetchAll() {
     setLoading(true);
@@ -10680,7 +10680,7 @@ function PageHeroSettings(){
 
             <div ref={previewWrapRef} style={{
               position: 'relative',
-              aspectRatio: '16 / 9',
+              aspectRatio: '1193 / 920',
               borderRadius: 14,
               overflow: 'hidden',
               background: '#0a2960',
@@ -10724,7 +10724,7 @@ function PageHeroSettings(){
                       <div style={{
                         position:'absolute',
                         top:0, left:0,
-                        width:1280, height:720,
+                        width:1193, height:920,
                         transform:`scale(${previewScale})`,
                         transformOrigin:'top left',
                         pointerEvents:'none',
@@ -11151,8 +11151,8 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     return slide?.bgColor || '';
   });
   // (Phase 7.7) DRAFT/LIVE プレビューの仮想キャンバススケール
-  const [draftWrapRef, draftScale] = useCanvasScale(1280);
-  const [liveWrapRef, liveScale] = useCanvasScale(1280);
+  const [draftWrapRef, draftScale] = useCanvasScale(1193);
+  const [liveWrapRef, liveScale] = useCanvasScale(1193);
   // (Phase 7.6) オーバーレイ・背景色の自動保存 (2秒デバウンス)
   // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle');
@@ -11481,7 +11481,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
             <div ref={draftWrapRef} style={{
               position:'relative',
               width:'100%',
-              aspectRatio:'16/9',
+              aspectRatio:'1193/920',
               background: imageUrl
                 ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/cover no-repeat`
                 : (bgColor === 'navy' ? '#0a2960'
@@ -11503,7 +11503,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               <div data-canvas="draft" style={{
                 position:'absolute',
                 top:0, left:0,
-                width:1280, height:720,
+                width:1193, height:920,
                 transform:`scale(${draftScale})`,
                 transformOrigin:'top left',
               }}>
@@ -11658,7 +11658,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                 <div ref={liveWrapRef} style={{
                   position:'relative',
                   width:'100%',
-                  aspectRatio:'16/9',
+                  aspectRatio:'1193/920',
                   background: imageUrl
                     ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/cover no-repeat`
                     : (publishedBgColor === 'navy' ? '#0a2960'
@@ -11678,7 +11678,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                     <div style={{
                       position:'absolute',
                       top:0, left:0,
-                      width:1280, height:720,
+                      width:1193, height:920,
                       transform:`scale(${liveScale})`,
                       transformOrigin:'top left',
                       pointerEvents:'none',
