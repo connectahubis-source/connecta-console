@@ -10648,62 +10648,111 @@ function PageHeroSettings(){
               background: '#0a2960',
               boxShadow: '0 14px 36px -16px rgba(10,41,96,0.4), 0 4px 12px -4px rgba(10,41,96,0.2)',
             }}>
-              {previewSlide && previewSlide.imageUrl ? (
-                <>
-                  <img
-                    src={normalizeImageUrl(previewSlide.imageUrl)}
-                    alt=""
-                    style={{
-                      position:'absolute',inset:0,width:'100%',height:'100%',
-                      objectFit:'cover',
-                    }}
-                    onError={(e) => { e.target.style.display = 'none'; }}
-                  />
-                  <div aria-hidden style={{
-                    position:'absolute',inset:0,
-                    background: toneOverlay[previewSlide.tone || 'warm'],
-                  }}/>
-                  {/* テキストオーバーレイ */}
-                  <div style={{
-                    position:'absolute',inset:0,
-                    display:'flex',flexDirection:'column',
-                    justifyContent:'center',
-                    padding:'30px 36px',
-                    color:'#fff',
-                  }}>
-                    {previewSlide.eyebrow && (
-                      <div style={{
-                        fontFamily:'var(--mono)',fontSize:10,
-                        letterSpacing:'0.32em',fontWeight:600,
-                        opacity:0.95,marginBottom:14,
-                        display:'flex',alignItems:'center',gap:10,
-                      }}>
-                        <span style={{width:24,height:1,background:'#fff',opacity:0.7}}/>
-                        <span>{previewSlide.eyebrow}</span>
+              {previewSlide ? (() => {
+                // (Phase 7.7) heroOverlay: JSON文字列または配列
+                let overlay = [];
+                try {
+                  const ov = previewSlide.overlay;
+                  if (Array.isArray(ov)) overlay = ov;
+                  else if (typeof ov === 'string' && ov) overlay = JSON.parse(ov);
+                } catch (e) { overlay = []; }
+                const slideBg = previewSlide.imageUrl
+                  ? null
+                  : (previewSlide.bgColor === 'navy' ? '#0a2960'
+                    : previewSlide.bgColor === 'white' ? '#ffffff'
+                    : previewSlide.bgColor === 'beige' ? '#f5f0e8'
+                    : previewSlide.bgColor === 'gradient-blue' ? 'linear-gradient(135deg, #1c89e8 0%, #0a2960 100%)'
+                    : previewSlide.bgColor === 'gradient-navy' ? 'linear-gradient(135deg, #1a3661 0%, #0a2960 100%)'
+                    : previewSlide.bgColor === 'gradient-sky' ? 'linear-gradient(180deg, #7cb9f0 0%, #ffffff 100%)'
+                    : previewSlide.bgColor === 'gradient-warm' ? 'linear-gradient(135deg, #f5f0e8 0%, #ffffff 100%)'
+                    : '#0a2960');
+                return (
+                  <>
+                    {previewSlide.imageUrl ? (
+                      <img
+                        src={normalizeImageUrl(previewSlide.imageUrl)}
+                        alt=""
+                        style={{
+                          position:'absolute',inset:0,width:'100%',height:'100%',
+                          objectFit:'cover',
+                        }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div style={{position:'absolute',inset:0,background: slideBg}}/>
+                    )}
+                    {/* オーバーレイ要素 */}
+                    {overlay.length > 0 && (
+                      <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
+                        {[...overlay].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
+                          const baseStyle = {
+                            position:'absolute',
+                            left: item.x + '%',
+                            top: item.y + '%',
+                            width: item.w + '%',
+                            height: item.h + '%',
+                            transform:`rotate(${item.rotation||0}deg)`,
+                            opacity: item.opacity ?? 1,
+                            boxSizing:'border-box',
+                          };
+                          if (item.type === 'text') {
+                            return (
+                              <div key={item.id} style={{
+                                ...baseStyle,
+                                display:'flex',
+                                alignItems:'center',
+                                justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
+                                fontSize: item.fontSize ? `${item.fontSize/2.5}px` : '14px',
+                                color: item.color || '#fff',
+                                fontFamily: item.fontFamily,
+                                fontWeight: item.fontWeight || 400,
+                                textAlign: item.textAlign || 'center',
+                                lineHeight: 1.1,
+                                whiteSpace:'pre-wrap',
+                                wordBreak:'break-word',
+                                padding:2,
+                                textShadow:'0 2px 16px rgba(0,0,0,0.3)',
+                              }}>{item.text || ''}</div>
+                            );
+                          } else if (item.type === 'circle') {
+                            return (
+                              <div key={item.id} style={{
+                                ...baseStyle, borderRadius:'50%',
+                                background: item.color || 'transparent',
+                                border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                              }}/>
+                            );
+                          } else if (item.type === 'rect') {
+                            return (
+                              <div key={item.id} style={{
+                                ...baseStyle,
+                                background: item.color || 'transparent',
+                                border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                              }}/>
+                            );
+                          } else if (item.type === 'triangle') {
+                            return (
+                              <div key={item.id} style={baseStyle}>
+                                <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
+                                  <polygon points="50,5 95,95 5,95" fill={item.color || 'transparent'} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
+                                </svg>
+                              </div>
+                            );
+                          } else if (item.type === 'image') {
+                            if (!item.imageUrl) return null;
+                            return (
+                              <div key={item.id} style={baseStyle}>
+                                <img src={item.imageUrl} alt="" style={{width:'100%',height:'100%',objectFit:'contain',display:'block'}}/>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
                       </div>
                     )}
-                    {previewSlide.titleEn && (
-                      <div style={{
-                        fontFamily:'var(--serif)',fontSize:'clamp(20px, 3vw, 36px)',
-                        fontWeight:400,lineHeight:1.05,
-                        textShadow:'0 2px 16px rgba(0,0,0,0.35)',
-                      }}>
-                        <div style={{fontStyle:'normal'}}>{previewSlide.titleEn}</div>
-                        {previewSlide.titleEm && (
-                          <div style={{fontStyle:'italic',color:'#ffd5c6',marginTop:4}}>{previewSlide.titleEm}</div>
-                        )}
-                      </div>
-                    )}
-                    {previewSlide.sub && (
-                      <div style={{
-                        marginTop:12,fontSize:12,
-                        textShadow:'0 2px 8px rgba(0,0,0,0.4)',
-                        opacity:0.95,
-                      }}>{previewSlide.sub}</div>
-                    )}
-                  </div>
-                </>
-              ) : (
+                  </>
+                );
+              })() : (
                 <div style={{
                   position:'absolute',inset:0,
                   display:'flex',flexDirection:'column',
@@ -10840,26 +10889,31 @@ function PageHeroSettings(){
                       flex:'none',
                     }}>
                       {slide.imageUrl ? (
-                        <>
-                          <img
-                            src={normalizeImageUrl(slide.imageUrl)}
-                            alt=""
-                            style={{width:'100%',height:'100%',objectFit:'cover'}}
-                            onError={(e) => { e.target.style.display='none'; }}
-                          />
-                          <div aria-hidden style={{
-                            position:'absolute',inset:0,
-                            background: toneOverlay[slide.tone || 'warm'],
-                            opacity:0.7,
-                          }}/>
-                        </>
+                        <img
+                          src={normalizeImageUrl(slide.imageUrl)}
+                          alt=""
+                          style={{width:'100%',height:'100%',objectFit:'cover'}}
+                          onError={(e) => { e.target.style.display='none'; }}
+                        />
+                      ) : slide.bgColor ? (
+                        <div style={{
+                          width:'100%',height:'100%',
+                          background: slide.bgColor === 'navy' ? '#0a2960'
+                            : slide.bgColor === 'white' ? '#ffffff'
+                            : slide.bgColor === 'beige' ? '#f5f0e8'
+                            : slide.bgColor === 'gradient-blue' ? 'linear-gradient(135deg, #1c89e8 0%, #0a2960 100%)'
+                            : slide.bgColor === 'gradient-navy' ? 'linear-gradient(135deg, #1a3661 0%, #0a2960 100%)'
+                            : slide.bgColor === 'gradient-sky' ? 'linear-gradient(180deg, #7cb9f0 0%, #ffffff 100%)'
+                            : slide.bgColor === 'gradient-warm' ? 'linear-gradient(135deg, #f5f0e8 0%, #ffffff 100%)'
+                            : '#0a2960',
+                        }}/>
                       ) : (
                         <div style={{
                           width:'100%',height:'100%',
                           display:'flex',alignItems:'center',justifyContent:'center',
                           color:'rgba(255,255,255,0.5)',fontSize:9,
                           fontFamily:'var(--mono)',letterSpacing:'0.1em',
-                        }}>NO IMG</div>
+                        }}>NO BG</div>
                       )}
                       {!slide.enabled && (
                         <div style={{
@@ -10874,32 +10928,49 @@ function PageHeroSettings(){
                       )}
                     </div>
 
-                    {/* テキスト情報 */}
+                    {/* テキスト情報 (Phase 7.7) — オーバーレイ数 + 背景タイプ表示 */}
                     <div style={{minWidth:0}}>
-                      <div style={{
-                        fontFamily:'var(--mono)',fontSize:9,
-                        color:slide.eyebrow?'var(--coral)':'var(--ink5)',
-                        letterSpacing:'0.18em',fontWeight:700,
-                        marginBottom:3,
-                        whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
-                      }}>
-                        {slide.eyebrow || '— eyebrow なし —'}
-                      </div>
-                      <div style={{
-                        fontFamily:'var(--serif)',fontSize:14,
-                        fontWeight:500,color:'var(--ink)',
-                        lineHeight:1.3,marginBottom:2,
-                        whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
-                      }}>
-                        {slide.titleEn || <span style={{color:'var(--ink5)',fontStyle:'italic'}}>(タイトル未設定)</span>}
-                        {slide.titleEm && <span style={{fontStyle:'italic',color:'var(--coral)',marginLeft:4}}>{slide.titleEm}</span>}
-                      </div>
-                      <div style={{
-                        fontSize:11,color:'var(--ink4)',
-                        whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
-                      }}>
-                        {slide.sub || <span style={{color:'var(--ink5)'}}>— サブコピーなし —</span>}
-                      </div>
+                      {(() => {
+                        let overlayCount = 0;
+                        try {
+                          const ov = slide.overlay;
+                          if (Array.isArray(ov)) overlayCount = ov.length;
+                          else if (typeof ov === 'string' && ov) overlayCount = JSON.parse(ov).length;
+                        } catch (e) {}
+                        const bgLabel = slide.imageUrl
+                          ? '写真'
+                          : slide.bgColor === 'navy' ? '紺'
+                          : slide.bgColor === 'white' ? '白'
+                          : slide.bgColor === 'beige' ? 'ベージュ'
+                          : slide.bgColor === 'gradient-blue' ? '青グラデ'
+                          : slide.bgColor === 'gradient-navy' ? '紺グラデ'
+                          : slide.bgColor === 'gradient-sky' ? '空グラデ'
+                          : slide.bgColor === 'gradient-warm' ? 'ベージュグラデ'
+                          : '未設定';
+                        return (
+                          <>
+                            <div style={{
+                              fontFamily:'var(--mono)',fontSize:9,
+                              color:'var(--ink4)',
+                              letterSpacing:'0.18em',fontWeight:700,
+                              marginBottom:4,
+                            }}>SLIDE {String(slide.order).padStart(2,'0')}</div>
+                            <div style={{
+                              fontSize:13,color:'var(--ink)',
+                              fontWeight:500,marginBottom:3,
+                              whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
+                            }}>
+                              背景: <span style={{color:'var(--ink2)'}}>{bgLabel}</span>
+                            </div>
+                            <div style={{
+                              fontSize:11,color:'var(--ink4)',
+                              whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',
+                            }}>
+                              オーバーレイ: <span style={{color:overlayCount>0?'var(--indigo)':'var(--ink5)',fontWeight:overlayCount>0?600:400}}>{overlayCount} 個</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {/* アクション */}
@@ -10949,7 +11020,7 @@ function PageHeroSettings(){
                             border:'1px solid var(--line)',
                             borderRadius:4,cursor:'pointer',
                             display:'flex',alignItems:'center',justifyContent:'center',
-                            color:'var(--coral)',
+                            color:'#dc2626',
                           }}>
                           <Icon n="trash" s={11}/>
                         </button>
@@ -10998,6 +11069,7 @@ function PageHeroSettings(){
 
       {editing && (
         <HeroSlideEditor
+          key={editing.mode === 'edit' ? `edit-${editing.slide.id}` : 'create'}
           mode={editing.mode}
           slide={editing.mode === 'edit' ? editing.slide : null}
           onSave={handleSave}
@@ -11070,10 +11142,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
         if (window.toast) window.toast.error('自動保存に失敗しました: ' + (err.message || err));
       }
     }, 2000);
-
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
   }, [overlay, bgColor, mode, slide?.id]);
 
   // 閉じる前に保留中の自動保存を即時実行
