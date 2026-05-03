@@ -10443,12 +10443,43 @@ function PagePhotos(){
 // PageHeroSettings — ヒーロースライド管理 (Phase 6.3)
 // 最大5枚の常設ヒーロースライドをCRUD。並び替え・有効/無効切替対応。
 // =================================================================
+// (Phase 7.7) Hero プレビュー用: 仮想キャンバス1280×720 を実幅でscale計算
+// 戻り値: [ref, scale]
+// 使い方: const [wrapRef, scale] = useCanvasScale();
+// <div ref={wrapRef}><div style={{transform:`scale(${scale})`, ...}}>...</div></div>
+function useCanvasScale(virtualWidth) {
+  const VW = virtualWidth || 1280;
+  const ref = React.useRef(null);
+  const [scale, setScale] = React.useState(0);
+  React.useEffect(() => {
+    if (!ref.current) return;
+    const el = ref.current;
+    const update = () => {
+      const w = el.clientWidth || 0;
+      setScale(w > 0 ? w / VW : 0);
+    };
+    update();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      return () => ro.disconnect();
+    } else {
+      // フォールバック: window resize
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }
+  }, [VW]);
+  return [ref, scale];
+}
+
 function PageHeroSettings(){
   const [slides, setSlides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
   const [previewIdx, setPreviewIdx] = useState(0);   // ライブプレビュー: どのスライドを大きく見せるか
+  // (Phase 7.7) 大プレビューの仮想キャンバススケール
+  const [previewWrapRef, previewScale] = useCanvasScale(1280);
 
   async function fetchAll() {
     setLoading(true);
@@ -10640,9 +10671,8 @@ function PageHeroSettings(){
               letterSpacing:'0.2em',fontWeight:700,marginBottom:10,
             }}>LIVE PREVIEW</div>
 
-            <div style={{
+            <div ref={previewWrapRef} style={{
               position: 'relative',
-              containerType: 'inline-size',
               aspectRatio: '16 / 9',
               borderRadius: 14,
               overflow: 'hidden',
@@ -10688,7 +10718,7 @@ function PageHeroSettings(){
                         position:'absolute',
                         top:0, left:0,
                         width:1280, height:720,
-                        transform:'scale(calc(100cqw / 1280))',
+                        transform:`scale(${previewScale})`,
                         transformOrigin:'top left',
                         pointerEvents:'none',
                       }}>
@@ -11113,6 +11143,9 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     if (slide?.bgColorDraft) return slide.bgColorDraft;
     return slide?.bgColor || '';
   });
+  // (Phase 7.7) DRAFT/LIVE プレビューの仮想キャンバススケール
+  const [draftWrapRef, draftScale] = useCanvasScale(1280);
+  const [liveWrapRef, liveScale] = useCanvasScale(1280);
   // (Phase 7.6) オーバーレイ・背景色の自動保存 (2秒デバウンス)
   // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle');
@@ -11438,9 +11471,8 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
             </div>
 
             {/* 大型プレビュー (16:9) — 仮想キャンバス1280×720を縮小表示 (Phase 7.7) */}
-            <div style={{
+            <div ref={draftWrapRef} style={{
               position:'relative',
-              containerType:'inline-size',
               width:'100%',
               aspectRatio:'16/9',
               background: imageUrl
@@ -11465,7 +11497,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                 position:'absolute',
                 top:0, left:0,
                 width:1280, height:720,
-                transform:'scale(calc(100cqw / 1280))',
+                transform:`scale(${draftScale})`,
                 transformOrigin:'top left',
               }}>
               {[...(overlay||[])].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
@@ -11616,9 +11648,8 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               } catch (e) { publishedOverlay = []; }
               const publishedBgColor = slide?.bgColor || '';
               return (
-                <div style={{
+                <div ref={liveWrapRef} style={{
                   position:'relative',
-                  containerType:'inline-size',
                   width:'100%',
                   aspectRatio:'16/9',
                   background: imageUrl
@@ -11641,7 +11672,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                       position:'absolute',
                       top:0, left:0,
                       width:1280, height:720,
-                      transform:'scale(calc(100cqw / 1280))',
+                      transform:`scale(${liveScale})`,
                       transformOrigin:'top left',
                       pointerEvents:'none',
                     }}>
