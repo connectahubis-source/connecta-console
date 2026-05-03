@@ -11142,7 +11142,15 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" style={{maxWidth: 880, padding: 0}} onClick={(e) => e.stopPropagation()}>
+      <div className="card" style={{
+        width: 880,
+        maxWidth: '94%',
+        maxHeight: '90vh',
+        padding: 0,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }} onClick={(e) => e.stopPropagation()}>
 
         {/* ヘッダー */}
         <div style={{
@@ -11165,7 +11173,8 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
         <div style={{
           display:'grid',
           gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1.1fr)',
-          maxHeight:'calc(100vh - 200px)',
+          flex: 1,
+          minHeight: 0,
           overflow:'hidden',
         }}>
           {/* === 左: プレビュー === */}
