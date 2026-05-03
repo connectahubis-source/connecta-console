@@ -10682,9 +10682,16 @@ function PageHeroSettings(){
                     ) : (
                       <div style={{position:'absolute',inset:0,background: slideBg}}/>
                     )}
-                    {/* オーバーレイ要素 */}
+                    {/* オーバーレイ要素 (仮想キャンバス1280×720を縮小表示) */}
                     {overlay.length > 0 && (
-                      <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
+                      <div style={{
+                        position:'absolute',
+                        top:0, left:0,
+                        width:1280, height:720,
+                        transform:'scale(calc(100cqw / 1280))',
+                        transformOrigin:'top left',
+                        pointerEvents:'none',
+                      }}>
                         {[...overlay].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
                           const baseStyle = {
                             position:'absolute',
@@ -10703,7 +10710,7 @@ function PageHeroSettings(){
                                 display:'flex',
                                 alignItems:'center',
                                 justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                                fontSize: item.fontSize ? `clamp(${Math.round(item.fontSize*0.5)}px, ${item.fontSize/4}cqi, ${item.fontSize}px)` : 'clamp(7px, 2cqi, 14px)',
+                                fontSize: item.fontSize ? item.fontSize + 'px' : '14px',
                                 color: item.color || '#fff',
                                 fontFamily: item.fontFamily,
                                 fontWeight: item.fontWeight || 400,
@@ -11430,9 +11437,10 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               参加者ページに反映するには右上の「LIVE PREVIEWに反映」ボタンを押してください。
             </div>
 
-            {/* 大型プレビュー (16:9) */}
+            {/* 大型プレビュー (16:9) — 仮想キャンバス1280×720を縮小表示 (Phase 7.7) */}
             <div style={{
-              position:'relative', containerType:'inline-size',
+              position:'relative',
+              containerType:'inline-size',
               width:'100%',
               aspectRatio:'16/9',
               background: imageUrl
@@ -11452,7 +11460,14 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               userSelect:'none',
               boxShadow:'0 12px 28px -12px rgba(10,41,96,0.4)',
             }}
-              onClick={(e) => { if (e.target === e.currentTarget) setSelectedOverlayId(null); }}>
+              onClick={(e) => { if (e.target === e.currentTarget || e.target.dataset?.canvas === 'draft') setSelectedOverlayId(null); }}>
+              <div data-canvas="draft" style={{
+                position:'absolute',
+                top:0, left:0,
+                width:1280, height:720,
+                transform:'scale(calc(100cqw / 1280))',
+                transformOrigin:'top left',
+              }}>
               {[...(overlay||[])].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
                 const isSelected = item.id === selectedOverlayId;
                 const baseStyle = {
@@ -11497,7 +11512,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                       display:'flex',
                       alignItems:'center',
                       justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                      fontSize: item.fontSize ? `clamp(${Math.round(item.fontSize*0.5)}px, ${item.fontSize/4}cqi, ${item.fontSize}px)` : 'clamp(7px, 2cqi, 14px)',
+                      fontSize: item.fontSize ? item.fontSize + 'px' : '14px',
                       color: item.color || '#fff',
                       fontFamily: item.fontFamily,
                       fontWeight: item.fontWeight || 400,
@@ -11546,6 +11561,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                 }
                 return null;
               })}
+              </div>
             </div>
 
             {!enabled && (
@@ -11621,7 +11637,14 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                   boxShadow:'0 6px 16px -8px rgba(10,41,96,0.3)',
                 }}>
                   {publishedOverlay.length > 0 && (
-                    <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
+                    <div style={{
+                      position:'absolute',
+                      top:0, left:0,
+                      width:1280, height:720,
+                      transform:'scale(calc(100cqw / 1280))',
+                      transformOrigin:'top left',
+                      pointerEvents:'none',
+                    }}>
                       {[...publishedOverlay].sort((a,b)=>(a.zOrder||0)-(b.zOrder||0)).map((item) => {
                         const baseStyle = {
                           position:'absolute',
@@ -11640,7 +11663,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                               display:'flex',
                               alignItems:'center',
                               justifyContent: item.textAlign === 'left' ? 'flex-start' : item.textAlign === 'right' ? 'flex-end' : 'center',
-                              fontSize: item.fontSize ? `clamp(${Math.round(item.fontSize*0.5)}px, ${item.fontSize/4}cqi, ${item.fontSize}px)` : 'clamp(7px, 2cqi, 14px)',
+                              fontSize: item.fontSize ? item.fontSize + 'px' : '14px',
                               color: item.color || '#fff',
                               fontFamily: item.fontFamily,
                               fontWeight: item.fontWeight || 400,
