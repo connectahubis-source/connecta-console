@@ -7091,6 +7091,11 @@ function DepartmentModal({mode, initialValues, onSave, onCancel}){
   const [desc, setDesc] = useState(init.desc || "");
   const [color, setColor] = useState(init.color || "indigo");
   const [order, setOrder] = useState(init.order || "");
+  // (Phase 7.8) 多言語
+  const [nameEasy, setNameEasy] = useState(init.name_easy || "");
+  const [nameEn, setNameEn] = useState(init.name_en || "");
+  const [abbrEasy, setAbbrEasy] = useState(init.abbr_easy || "");
+  const [abbrEn, setAbbrEn] = useState(init.abbr_en || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -7105,6 +7110,11 @@ function DepartmentModal({mode, initialValues, onSave, onCancel}){
         desc: desc.trim(),
         color,
         order: order ? Number(order) : undefined,
+        // (Phase 7.8) 多言語
+        name_easy: nameEasy.trim(),
+        name_en: nameEn.trim(),
+        abbr_easy: abbrEasy.trim(),
+        abbr_en: abbrEn.trim(),
       });
     } catch (err) {
       setError(err.message || String(err));
@@ -7124,11 +7134,23 @@ function DepartmentModal({mode, initialValues, onSave, onCancel}){
           <div className="field">
             <label className="field-label">部署名 <span className="field-req">*</span></label>
             <input className="input input-lg" value={name} onChange={e=>setName(e.target.value)} placeholder="例: IFT班 / 広報班 / 新規プロジェクト班"/>
+            <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+              <input className="input" style={{padding:8,fontSize:12}} value={nameEasy} onChange={e=>setNameEasy(e.target.value)} placeholder="やさしい日本語"/>
+              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+              <input className="input" style={{padding:8,fontSize:12}} value={nameEn} onChange={e=>setNameEn(e.target.value)} placeholder="English"/>
+            </div>
           </div>
           <div className="grid-2" style={{gap:14}}>
             <div className="field">
               <label className="field-label">略称</label>
               <input className="input" value={abbr} onChange={e=>setAbbr(e.target.value)} placeholder="例: IFT, PR"/>
+              <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                <input className="input" style={{padding:8,fontSize:12}} value={abbrEasy} onChange={e=>setAbbrEasy(e.target.value)} placeholder="やさしい"/>
+                <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                <input className="input" style={{padding:8,fontSize:12}} value={abbrEn} onChange={e=>setAbbrEn(e.target.value)} placeholder="EN"/>
+              </div>
               <div className="field-hint">アバター表示・チャンネル名等で使用</div>
             </div>
             <div className="field">
@@ -8255,7 +8277,21 @@ function PageEventCreate(){
                 <div className="field">
                   <label className="field-label">カテゴリ <span className="field-req">*</span></label>
                   <div className="select-wrap">
-                    <select className="input select" value={category} onChange={e=>setCategory(e.target.value)}>
+                    <select className="input select" value={category} onChange={e=>{
+                      const newCat = e.target.value;
+                      setCategory(newCat);
+                      // (Phase 7.8) 部署マスタから多言語デフォルトを取得
+                      const dept = departments.find(d => (d.abbr || d.name) === newCat);
+                      if (dept) {
+                        // 既に値が入ってる場合は上書きしない
+                        if (!categoryEasy && (dept.name_easy || dept.abbr_easy)) {
+                          setCategoryEasy(dept.abbr_easy || dept.name_easy || '');
+                        }
+                        if (!categoryEn && (dept.name_en || dept.abbr_en)) {
+                          setCategoryEn(dept.abbr_en || dept.name_en || '');
+                        }
+                      }
+                    }}>
                       {departments.length > 0 ? (
                         departments.map(d => {
                           const key = d.abbr || d.name;
@@ -11222,6 +11258,11 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
   const [imageUrl, setImageUrl] = useState(slide?.imageUrl || '');
   const [enabled, setEnabled] = useState(slide?.enabled !== false);
   const [uploading, setUploading] = useState(false);
+  // (Phase 7.8) 多言語フィールド (eyebrow + サブコピー × easy/en)
+  const [eyebrowEasy, setEyebrowEasy] = useState(slide?.eyebrow_easy || '');
+  const [eyebrowEn, setEyebrowEn] = useState(slide?.eyebrow_en || '');
+  const [subEasy, setSubEasy] = useState(slide?.sub_easy || '');
+  const [subEn, setSubEn] = useState(slide?.sub_en || '');
   // (Phase 7.7) オーバーレイ — ドラフトがあればそれを優先、なければ公開版を読み込み
   const [overlay, setOverlay] = useState(() => {
     try {
@@ -11461,6 +11502,11 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
       enabled,
       overlay: JSON.stringify(overlay || []),
       bgColor: bgColor || '',
+      // (Phase 7.8) 多言語
+      eyebrow_easy: eyebrowEasy.trim(),
+      eyebrow_en: eyebrowEn.trim(),
+      sub_easy: subEasy.trim(),
+      sub_en: subEn.trim(),
     });
   }
 
@@ -11940,6 +11986,37 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                   </div>
                 </div>
               </label>
+            </div>
+
+            {/* (Phase 7.8) 多言語フィールド (eyebrow + サブコピー × easy/en) */}
+            <div>
+              <div style={{
+                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
+                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
+              }}>I18N FIELDS</div>
+              <div style={{fontSize:11,color:'var(--ink4)',marginBottom:8}}>
+                参加者サイトの言語切替で表示される文言 (空欄なら日本語にフォールバック)
+              </div>
+              <div className="stack" style={{gap:8}}>
+                <div>
+                  <div style={{fontSize:11,color:'var(--ink4)',marginBottom:4}}>eyebrow (上部の小さなラベル)</div>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <input className="input" style={{padding:8,fontSize:12}} value={eyebrowEasy} onChange={e=>setEyebrowEasy(e.target.value)} placeholder="やさしい日本語"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <input className="input" style={{padding:8,fontSize:12}} value={eyebrowEn} onChange={e=>setEyebrowEn(e.target.value)} placeholder="English"/>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:'var(--ink4)',marginBottom:4}}>サブコピー (説明文)</div>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <textarea className="input" style={{padding:8,fontSize:12,minHeight:50,resize:'vertical'}} value={subEasy} onChange={e=>setSubEasy(e.target.value)} placeholder="やさしい日本語"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <textarea className="input" style={{padding:8,fontSize:12,minHeight:50,resize:'vertical'}} value={subEn} onChange={e=>setSubEn(e.target.value)} placeholder="English"/>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* (Phase 7.6) 背景色プリセット (写真なし時の塗り) */}
