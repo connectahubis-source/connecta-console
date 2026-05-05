@@ -7896,6 +7896,24 @@ function PageEventCreate(){
   // 部署マスタ (Phase 6.4: イベントカテゴリは部署から動的生成)
   const [departments, setDepartments] = useState([]);
 
+  // (Phase 7.8) 多言語フィールド (easy/en) — 翻訳パネルで編集 (タイトルは翻訳対象外)
+  const [venueEasy, setVenueEasy] = useState("");
+  const [venueEn, setVenueEn] = useState("");
+  const [summaryEasy, setSummaryEasy] = useState("");
+  const [summaryEn, setSummaryEn] = useState("");
+  const [categoryEasy, setCategoryEasy] = useState("");
+  const [categoryEn, setCategoryEn] = useState("");
+  const [requirementsEasy, setRequirementsEasy] = useState("");
+  const [requirementsEn, setRequirementsEn] = useState("");
+  const [customQuestionsEasy, setCustomQuestionsEasy] = useState("");
+  const [customQuestionsEn, setCustomQuestionsEn] = useState("");
+  const [earlyBirdEasy, setEarlyBirdEasy] = useState("");
+  const [earlyBirdEn, setEarlyBirdEn] = useState("");
+  const [cancelPolicyEasy, setCancelPolicyEasy] = useState("");
+  const [cancelPolicyEn, setCancelPolicyEn] = useState("");
+  const [snsCopyEasy, setSnsCopyEasy] = useState("");
+  const [snsCopyEn, setSnsCopyEn] = useState("");
+
   // 通信state
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -7995,6 +8013,23 @@ function PageEventCreate(){
           const methods = ev.paymentMethod.split(',').map(s => s.trim()).filter(Boolean);
           setPaymentMethods(methods.length > 0 ? methods : ["当日現金"]);
         }
+        // (Phase 7.8) 多言語フィールド (easy/en) ロード — タイトルは翻訳対象外
+        setVenueEasy(ev.venue_easy || "");
+        setVenueEn(ev.venue_en || "");
+        setSummaryEasy(ev.summary_easy || "");
+        setSummaryEn(ev.summary_en || "");
+        setCategoryEasy(ev.category_easy || "");
+        setCategoryEn(ev.category_en || "");
+        setRequirementsEasy(ev.requirements_easy || "");
+        setRequirementsEn(ev.requirements_en || "");
+        setCustomQuestionsEasy(ev.customQuestions_easy || "");
+        setCustomQuestionsEn(ev.customQuestions_en || "");
+        setEarlyBirdEasy(ev.earlyBird_easy || "");
+        setEarlyBirdEn(ev.earlyBird_en || "");
+        setCancelPolicyEasy(ev.cancelPolicy_easy || "");
+        setCancelPolicyEn(ev.cancelPolicy_en || "");
+        setSnsCopyEasy(ev.snsCopy_easy || "");
+        setSnsCopyEn(ev.snsCopy_en || "");
         // 複数セッション時はセッションリストも読み込み
         if (ev.format === 'multi') {
           try {
@@ -8070,6 +8105,23 @@ function PageEventCreate(){
       zoomURL: online ? (zoomURL || '') : '',
       format: format,
       status: publishStatus || status || '下書き',
+      // (Phase 7.8) 多言語フィールド (easy/en) — 翻訳パネルで編集された値 (タイトルは翻訳対象外)
+      venue_easy: venueEasy || '',
+      venue_en: venueEn || '',
+      summary_easy: summaryEasy || '',
+      summary_en: summaryEn || '',
+      category_easy: categoryEasy || '',
+      category_en: categoryEn || '',
+      requirements_easy: requirementsEasy || '',
+      requirements_en: requirementsEn || '',
+      customQuestions_easy: customQuestionsEasy || '',
+      customQuestions_en: customQuestionsEn || '',
+      earlyBird_easy: earlyBirdEasy || '',
+      earlyBird_en: earlyBirdEn || '',
+      cancelPolicy_easy: cancelPolicyEasy || '',
+      cancelPolicy_en: cancelPolicyEn || '',
+      snsCopy_easy: snsCopyEasy || '',
+      snsCopy_en: snsCopyEn || '',
     };
 
     // バリデーション
@@ -8220,6 +8272,13 @@ function PageEventCreate(){
                         </>
                       )}
                     </select>
+                    {/* (Phase 7.8) カテゴリの多言語ラベル */}
+                    <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                      <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                      <IMEInput className="input" style={{padding:8,fontSize:12}} value={categoryEasy} onChange={e=>setCategoryEasy(e.target.value)} placeholder="やさしい日本語 (例: コミュニティ)"/>
+                      <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                      <IMEInput className="input" style={{padding:8,fontSize:12}} value={categoryEn} onChange={e=>setCategoryEn(e.target.value)} placeholder="English (例: Community)"/>
+                    </div>
                   </div>
                   <div className="field-hint">
                     {departments.length > 0
@@ -8230,6 +8289,12 @@ function PageEventCreate(){
                 <div className="field">
                   <label className="field-label">概要・説明文</label>
                   <IMETextarea className="input" style={{height:120,padding:10,resize:'vertical'}} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="イベントの詳細説明、見どころ、対象者など。参加者向けの公開ページに表示されます。"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={summaryEasy} onChange={e=>setSummaryEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={summaryEn} onChange={e=>setSummaryEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
                   <div className="field-hint">マークダウン記法対応 (将来)、改行は反映されます</div>
                 </div>
               </div>
@@ -8342,6 +8407,12 @@ function PageEventCreate(){
                         <div className="field">
                           <label className="field-label">会場名 <span className="field-req">*</span></label>
                           <IMEInput className="input" value={venue} onChange={e=>setVenue(e.target.value)} placeholder="例: 鎌倉駅西口集合 / カフェ XYZ"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMEInput className="input" style={{padding:8,fontSize:12}} value={venueEasy} onChange={e=>setVenueEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMEInput className="input" style={{padding:8,fontSize:12}} value={venueEn} onChange={e=>setVenueEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
                         </div>
                         <div className="field">
                           <label className="field-label">住所</label>
@@ -8483,10 +8554,22 @@ function PageEventCreate(){
                 <div className="field">
                   <label className="field-label">参加要件・対象</label>
                   <IMETextarea className="input" style={{height:80,padding:10,resize:'vertical'}} value={requirements} onChange={e=>setRequirements(e.target.value)} placeholder="例: 18歳以上、日本語を勉強中の外国人留学生、定員に余裕があれば日本人も歓迎"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={requirementsEasy} onChange={e=>setRequirementsEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={requirementsEn} onChange={e=>setRequirementsEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
                 </div>
                 <div className="field">
                   <label className="field-label">カスタム質問 (申込時)</label>
                   <IMETextarea className="input" style={{height:80,padding:10,resize:'vertical'}} value={customQuestions} onChange={e=>setCustomQuestions(e.target.value)} placeholder="例:&#10;- 食物アレルギーはありますか?&#10;- 何を期待していますか?"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={customQuestionsEasy} onChange={e=>setCustomQuestionsEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={customQuestionsEn} onChange={e=>setCustomQuestionsEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
                   <div className="field-hint">1行 = 1質問。改行で区切る</div>
                 </div>
               </div>
@@ -8568,10 +8651,22 @@ function PageEventCreate(){
                 <div className="field">
                   <label className="field-label">早割 (任意)</label>
                   <IMEInput className="input" value={earlyBird} onChange={e=>setEarlyBird(e.target.value)} placeholder="例: 申込締切1週間前まで 2,500円"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMEInput className="input" style={{padding:8,fontSize:12}} value={earlyBirdEasy} onChange={e=>setEarlyBirdEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMEInput className="input" style={{padding:8,fontSize:12}} value={earlyBirdEn} onChange={e=>setEarlyBirdEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
                 </div>
                 <div className="field">
                   <label className="field-label">キャンセルポリシー</label>
                   <IMETextarea className="input" style={{height:80,padding:10,resize:'vertical'}} value={cancelPolicy} onChange={e=>setCancelPolicy(e.target.value)} placeholder="例:&#10;- 開催3日前まで: 全額返金&#10;- 開催前日: 50%返金&#10;- 当日: 返金なし"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={cancelPolicyEasy} onChange={e=>setCancelPolicyEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={cancelPolicyEn} onChange={e=>setCancelPolicyEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
                 </div>
               </div>
             )}
@@ -8712,6 +8807,12 @@ function PageEventCreate(){
                 <div className="field">
                   <label className="field-label">SNS告知文 (任意)</label>
                   <IMETextarea className="input" style={{height:80,padding:10,resize:'vertical'}} value={snsCopy} onChange={e=>setSnsCopy(e.target.value)} placeholder="例: 🌸 春の鎌倉散策イベント開催! 桜咲く古都を一緒に巡りませんか? #connecta #IFT"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={snsCopyEasy} onChange={e=>setSnsCopyEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={snsCopyEn} onChange={e=>setSnsCopyEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
                   <div className="field-hint">Twitter/Instagram 用、240字以内推奨</div>
                 </div>
 
@@ -9159,6 +9260,7 @@ function PageEventCreate(){
               <button className="btn btn-ghost" onClick={()=>setStep(Math.max(1, step-1))} disabled={step === 1}>← 戻る</button>
               <button className="btn btn-indigo" onClick={()=>setStep(Math.min(5, step+1))} disabled={step === 5}>次へ →</button>
             </div>
+
           </div>
         </div>
 
@@ -12816,6 +12918,11 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
   const [publishAt, setPublishAt] = useState(news?.publishAt ? String(news.publishAt).slice(0, 16) : '');
   const [ctaText, setCtaText] = useState(news?.ctaText || '詳細を見る');
   const [ctaLink, setCtaLink] = useState(news?.ctaLink || '');
+  // (Phase 7.8) 多言語
+  const [titleEasy, setTitleEasy] = useState(news?.title_easy || '');
+  const [titleEn, setTitleEn] = useState(news?.title_en || '');
+  const [bodyEasy, setBodyEasy] = useState(news?.body_easy || '');
+  const [bodyEn, setBodyEn] = useState(news?.body_en || '');
   const [savingState, setSavingState] = useState(false);
 
   function submit() {
@@ -12831,6 +12938,11 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
       publishAt: publishAt || '',
       ctaText: ctaText.trim(),
       ctaLink: ctaLink.trim(),
+      // (Phase 7.8) 多言語
+      title_easy: titleEasy.trim(),
+      title_en: titleEn.trim(),
+      body_easy: bodyEasy,
+      body_en: bodyEn,
     });
   }
 
@@ -12855,6 +12967,12 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
           <FieldRow label="タイトル *">
             <input type="text" value={title} onChange={e => setTitle(e.target.value)}
               style={{width:'100%', padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14}}/>
+            <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+              <input type="text" value={titleEasy} onChange={e=>setTitleEasy(e.target.value)} placeholder="やさしい日本語" style={{padding:8,fontSize:12,border:'1px solid var(--line)',borderRadius:4}}/>
+              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+              <input type="text" value={titleEn} onChange={e=>setTitleEn(e.target.value)} placeholder="English" style={{padding:8,fontSize:12,border:'1px solid var(--line)',borderRadius:4}}/>
+            </div>
           </FieldRow>
 
           <FieldRow label="カテゴリ">
@@ -12868,6 +12986,12 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
             <textarea value={body} onChange={e => setBody(e.target.value)} rows={5}
               placeholder="改行は <br> や空行で区切られます。詩的に書くのがおすすめ。"
               style={{width:'100%', padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14, fontFamily:'inherit', resize:'vertical'}}/>
+            <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+              <textarea value={bodyEasy} onChange={e=>setBodyEasy(e.target.value)} placeholder="やさしい日本語" rows={3} style={{padding:8,fontSize:12,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit',resize:'vertical'}}/>
+              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+              <textarea value={bodyEn} onChange={e=>setBodyEn(e.target.value)} placeholder="English" rows={3} style={{padding:8,fontSize:12,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit',resize:'vertical'}}/>
+            </div>
           </FieldRow>
 
           <FieldRow label="ステータス">
