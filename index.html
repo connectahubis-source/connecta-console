@@ -7892,9 +7892,13 @@ function PageEventCreate(){
   const [customQuestions, setCustomQuestions] = useState("");
   // 決済
   const [fee, setFee] = useState("");
-  const [paymentMethods, setPaymentMethods] = useState(["当日現金"]);   // 配列に変更
+  const [paymentMethods, setPaymentMethods] = useState(["PayPay"]);   // 配列、デフォルトはPayPay
   const [earlyBird, setEarlyBird] = useState("");
   const [cancelPolicy, setCancelPolicy] = useState("");
+  // (Part D) イベントポリシー (申込画面で表示、必須)
+  const [policyJa, setPolicyJa] = useState("");
+  const [policyEn, setPolicyEn] = useState("");
+  const [policyEasy, setPolicyEasy] = useState("");
   // オンライン対応
   const [online, setOnline] = useState(false);
   const [zoomURL, setZoomURL] = useState("");
@@ -8013,6 +8017,10 @@ function PageEventCreate(){
         setFee(ev.fee ? String(ev.fee) : "");
         setEarlyBird(ev.earlyBird || "");
         setCancelPolicy(ev.cancelPolicy || "");
+        // (Part D) イベントポリシーをロード
+        setPolicyJa(ev.policy_ja || ev.policy || "");
+        setPolicyEn(ev.policy_en || "");
+        setPolicyEasy(ev.policy_easy || "");
         setStatus(ev.status || "下書き");
         setSnsCopy(ev.snsCopy || "");
         setPosterUrl(ev.posterUrl || "");
@@ -8030,10 +8038,11 @@ function PageEventCreate(){
         setOnline(ev.online === true || ev.online === 'true');
         setZoomURL(ev.zoomURL || "");
         setFormat(ev.format || 'single');
-        // 支払い方法 (カンマ区切り → 配列に変換)
-        if (ev.paymentMethod) {
-          const methods = ev.paymentMethod.split(',').map(s => s.trim()).filter(Boolean);
-          setPaymentMethods(methods.length > 0 ? methods : ["当日現金"]);
+        // 支払い方法 (新列優先、旧列フォールバック、カンマ区切り → 配列)
+        const methodsRaw = ev.paymentMethods || ev.paymentMethod || '';
+        if (methodsRaw) {
+          const methods = String(methodsRaw).split(',').map(s => s.trim()).filter(Boolean);
+          setPaymentMethods(methods.length > 0 ? methods : ["PayPay"]);
         }
         // (Phase 7.8) 多言語フィールド (easy/en) ロード — タイトルは翻訳対象外
         setVenueEasy(ev.venue_easy || "");
@@ -8113,9 +8122,14 @@ function PageEventCreate(){
       requirements: requirements || '',
       customQuestions: customQuestions || '',
       fee: Number(fee) || 0,
-      paymentMethod: paymentMethods.join(', '),   // 配列 → カンマ区切り
+      paymentMethod: paymentMethods.join(', '),    // 旧列 (互換のため残す)
+      paymentMethods: paymentMethods.join(','),    // (Part D) 新列、カンマ区切り (スペース無し)
       earlyBird: earlyBird || '',
       cancelPolicy: cancelPolicy || '',
+      // (Part D) イベントポリシー (申込画面で表示)
+      policy_ja: policyJa || '',
+      policy_en: policyEn || '',
+      policy_easy: policyEasy || '',
       snsCopy: snsCopy || '',
       posterUrl: posterUrl || '',
       heroImageUrl: heroImageUrl || '',
@@ -8654,11 +8668,12 @@ function PageEventCreate(){
                     <label className="field-label">支払い方法 <span style={{fontSize:10,color:'var(--ink4)',fontWeight:400}}>(複数選択可)</span></label>
                     <div style={{display:'flex',flexDirection:'column',gap:6}}>
                       {[
-                        {v:'無料', desc:''},
-                        {v:'当日現金', desc:''},
-                        {v:'銀行振込', desc:''},
-                        {v:'PayPay', desc:''},
-                        {v:'Stripe', desc:'(将来)'},
+                        {v:'PayPay', desc:'(QRコード/アプリ決済)'},
+                        {v:'現金', desc:'(会場で支払い)'},
+                        {v:'クレジットカード', desc:'(カード決済)'},
+                        {v:'銀行振込', desc:'(振込確認)'},
+                        {v:'事前決済', desc:'(オンライン決済)'},
+                        {v:'その他', desc:'(自由記述)'},
                       ].map(opt => {
                         const checked = paymentMethods.includes(opt.v);
                         return (
@@ -8681,7 +8696,7 @@ function PageEventCreate(){
                         );
                       })}
                     </div>
-                    <div className="field-hint">参加者には選択された方法を全て表示</div>
+                    <div className="field-hint">参加者の申込画面で選択肢として表示されます</div>
                   </div>
                 </div>
                 <div className="field">
@@ -8702,6 +8717,34 @@ function PageEventCreate(){
                     <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={cancelPolicyEasy} onChange={e=>setCancelPolicyEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
                     <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
                     <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={cancelPolicyEn} onChange={e=>setCancelPolicyEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
+                </div>
+
+                {/* (Part D) イベントポリシー — 申込画面で表示・同意必須 */}
+                <div className="field" style={{
+                  border: '2px solid var(--indigo)',
+                  borderRadius: 8,
+                  padding: 14,
+                  background: 'var(--indigo-50)',
+                }}>
+                  <label className="field-label" style={{color:'var(--indigo)',fontWeight:700}}>
+                    🛡 イベントポリシー <span style={{fontSize:10,fontWeight:400,color:'#dc2626'}}>(申込時に同意必須)</span>
+                  </label>
+                  <div className="field-hint" style={{marginBottom:8}}>
+                    申込画面で表示され、参加者が同意しないと申込できません。未設定だと参加者は申込できないので必ず設定してください。
+                  </div>
+                  <IMETextarea className="input" style={{height:120,padding:10,resize:'vertical'}}
+                    value={policyJa} onChange={e=>setPolicyJa(e.target.value)}
+                    placeholder="例:&#10;・本イベントは18歳以上の方が対象です&#10;・写真撮影が行われ、SNS等で利用される可能性があります&#10;・主催者の判断により、参加をお断りする場合があります&#10;・酒類の提供あり (20歳未満の飲酒は禁止)&#10;・事故・盗難等の責任は負いかねます"/>
+                  <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
+                    <IMETextarea className="input" style={{height:80,padding:8,fontSize:12,resize:'vertical'}}
+                      value={policyEasy} onChange={e=>setPolicyEasy(e.target.value)}
+                      placeholder="やさしい日本語 (空ならjaフォールバック)"/>
+                    <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
+                    <IMETextarea className="input" style={{height:80,padding:8,fontSize:12,resize:'vertical'}}
+                      value={policyEn} onChange={e=>setPolicyEn(e.target.value)}
+                      placeholder="English (Empty falls back to ja)"/>
                   </div>
                 </div>
               </div>
@@ -12407,6 +12450,20 @@ function PageHomepageSettings(){
     { key: 'footer_tagline_easy',label: 'キャッチコピー (やさしい日本語)', ph: 'とうきょうを、もうひとつの ふるさとに。', type: 'text' },
     { key: 'footer_est_year',    label: '設立年 (EST.)', ph: '2018', type: 'text' },
     { key: 'footer_copyright',   label: '著作権表記', ph: '© connec+a 2026', type: 'text' },
+
+    // (Part D) プライバシーポリシー — 申込・登録時に同意必須
+    { section: 'Privacy Policy', label: 'プライバシーポリシー (個人情報の取扱)' },
+    { key: 'privacy_policy_ja',   label: '本文 (日)',    ph: '当サービスは、利用者の個人情報を以下の通り取り扱います...', type: 'textarea' },
+    { key: 'privacy_policy_en',   label: '本文 (英)',    ph: 'We collect and protect your data as follows...', type: 'textarea' },
+    { key: 'privacy_policy_easy', label: '本文 (やさしい日本語)', ph: 'このサービスは、あなたの じょうほうを つぎのように つかいます...', type: 'textarea' },
+    { key: 'privacy_policy_updated_at', label: '最終更新日', ph: '2026-05-01', type: 'text' },
+
+    // (Part D) 利用規約 — 申込・登録時に同意必須
+    { section: 'Terms of Service', label: '利用規約' },
+    { key: 'terms_ja',   label: '本文 (日)',    ph: '本規約は、当サービスの利用条件を定めるものです...', type: 'textarea' },
+    { key: 'terms_en',   label: '本文 (英)',    ph: 'These terms govern your use of our service...', type: 'textarea' },
+    { key: 'terms_easy', label: '本文 (やさしい日本語)', ph: 'このサービスを つかうための ルールです...', type: 'textarea' },
+    { key: 'terms_updated_at', label: '最終更新日', ph: '2026-05-01', type: 'text' },
   ];
 
   async function fetchAll() {
