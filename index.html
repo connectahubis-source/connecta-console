@@ -742,7 +742,8 @@ svg{display:block}
     <div class="nav-section">
       <div class="nav-label"><span>設定</span></div>
       <a href="#hero-settings" class="nav-item" data-nav="hero-settings"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>ヒーロー設定</a>
-      <a href="#homepage-settings" class="nav-item" data-nav="homepage-settings"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>ホームページ設定</a>
+      <a href="#homepage-settings" class="nav-item" data-nav="homepage-settings"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>ホームページ (PC)</a>
+      <a href="#homepage-mobile-settings" class="nav-item" data-nav="homepage-mobile-settings"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>ホームページ (モバイル)</a>
       <a href="#settings" class="nav-item" data-nav="settings"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>通知・PWA</a>
     </div>
   </aside>
@@ -2188,7 +2189,8 @@ const STUB_META = {
   ads:            {title:"広告",              icon:"megaphone", phase:"Phase 2新-D", desc:"参加者向けバナー、外部メディア掲載枠の管理。掲載期間、クリック数の集計。"},
   mobile:         {title:"現地オペレーション", icon:"phone",     phase:"Phase 2新-C", desc:"イベント当日のスマホ向けUI。受付QR、進行スクリプト、緊急連絡先を集約。"},
   "hero-settings": {title:"ヒーロー設定",      icon:"img",       phase:"Phase 6.3",   desc:"参加者ページのトップに表示する常設ヒーロースライド (最大5枚) を管理。イベントが無い時のデフォルト + 混在表示。"},
-  "homepage-settings": {title:"ホームページ設定",  icon:"home",      phase:"Phase 6.9",   desc:"参加者サイトの Concept / News / Events 各セクションのコピー、背景画像、CTAを設定。"},
+  "homepage-settings": {title:"ホームページ設定 (PC)",  icon:"home",      phase:"Phase 6.9",   desc:"参加者サイトの Concept / News / Events 各セクションのコピー、背景画像、CTAを設定。PC版がメイン。"},
+  "homepage-mobile-settings": {title:"ホームページ設定 (モバイル)",  icon:"smartphone",      phase:"Phase 15",   desc:"モバイル専用ホームページ設定。Hero / Nav 4分割 / Featured / Concept / News / Contact の6セクションを上書き。空欄なら PC設定にフォールバック。"},
   "news-front":   {title:"ニュース管理",       icon:"news",      phase:"Phase 6.9",   desc:"参加者サイト News セクションに表示するニュース (最大3件) を管理。本文、表示順序、CTA を編集。"},
 };
 
@@ -12649,6 +12651,351 @@ function PageHomepageSettings(){
 }
 
 // =================================================================
+// PageHomepageMobileSettings — モバイル専用ホームページ設定
+// =================================================================
+// 設計: PC設定とは別管理。 すべてのキーに _mobile サフィックスを付けて保存。
+// フロント側は _mobile 値があればそれを優先、なければ共通値、なければデフォルト
+// 6セクション構成: Hero / Nav (4分割) / Featured / Concept / News / Contact
+function PageHomepageMobileSettings(){
+  const [settings, setSettings] = useState({});
+  const [draft, setDraft] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState({});
+  const [error, setError] = useState(null);
+
+  // モバイル専用 SETTING_DEFS — キーは原則 base 名 (保存時に _mobile を付ける)
+  const SETTING_DEFS = [
+    // === Header ===
+    { section: 'Header', label: 'ヘッダー (上部)' },
+    { key: 'home_header_tagline_ja',   label: 'タグライン (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_en',   label: 'タグライン (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_easy', label: 'タグライン (やさしい日本語)', ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+
+    // === Hero ===
+    { section: 'Hero', label: 'メインヒーロー' },
+    { key: 'home_hero_eyebrow_ja',     label: 'Eyebrow (日)',      ph: 'WELCOME TO TOKYO', type: 'text' },
+    { key: 'home_hero_eyebrow_en',     label: 'Eyebrow (英)',      ph: 'WELCOME TO TOKYO', type: 'text' },
+    { key: 'home_hero_eyebrow_easy',   label: 'Eyebrow (やさしい日本語)', ph: 'WELCOME TO TOKYO', type: 'text' },
+    { key: 'home_hero_main_ja',        label: 'メインコピー (日)',  ph: '出会いから\nはじまる東京', type: 'textarea' },
+    { key: 'home_hero_main_en',        label: 'メインコピー (英)',  ph: 'Where strangers\nbecome friends', type: 'textarea' },
+    { key: 'home_hero_main_easy',      label: 'メインコピー (やさしい日本語)', ph: 'であいから\nはじまるとうきょう', type: 'textarea' },
+    { key: 'home_hero_lead_ja',        label: 'リード文 (日)',      ph: '在日留学生と東京に住む人が、\n自然に出会える場所。', type: 'textarea' },
+    { key: 'home_hero_lead_en',        label: 'リード文 (英)',      ph: 'A space for international students\nand locals to discover each other.', type: 'textarea' },
+    { key: 'home_hero_lead_easy',      label: 'リード文 (やさしい日本語)', ph: 'りゅうがくせいと とうきょうのひとが\nであう ばしょ。', type: 'textarea' },
+    { key: 'home_hero_cta1_label_ja',  label: 'CTA 1 ラベル (日)', ph: 'イベントを見る', type: 'text' },
+    { key: 'home_hero_cta1_label_en',  label: 'CTA 1 ラベル (英)', ph: 'Discover events', type: 'text' },
+    { key: 'home_hero_cta1_label_easy',label: 'CTA 1 ラベル (やさしい日本語)', ph: 'イベントを みる', type: 'text' },
+    { key: 'home_hero_cta1_link',      label: 'CTA 1 リンク',     ph: '#/events', type: 'text' },
+    { key: 'home_hero_cta2_label_ja',  label: 'CTA 2 ラベル (日)', ph: '会員登録', type: 'text' },
+    { key: 'home_hero_cta2_label_en',  label: 'CTA 2 ラベル (英)', ph: 'Become a member', type: 'text' },
+    { key: 'home_hero_cta2_label_easy',label: 'CTA 2 ラベル (やさしい日本語)', ph: 'かいいんとうろく', type: 'text' },
+    { key: 'home_hero_cta2_link',      label: 'CTA 2 リンク',     ph: '#/signup', type: 'text' },
+
+    // === Nav Section (4分割) ===
+    { section: 'Nav Section', label: '4分割ナビ (EVENTS / ABOUT / NEWS / CONTACT)' },
+    { key: 'home_nav_label_ja',        label: 'セクション小ラベル (日)', ph: 'EXPLORE', type: 'text' },
+    { key: 'home_nav_label_en',        label: 'セクション小ラベル (英)', ph: 'EXPLORE', type: 'text' },
+    { key: 'home_nav_label_easy',      label: 'セクション小ラベル (やさしい日本語)', ph: 'EXPLORE', type: 'text' },
+    { key: 'home_nav_title_ja',        label: 'セクションタイトル (日)', ph: 'どこから始める？', type: 'text' },
+    { key: 'home_nav_title_en',        label: 'セクションタイトル (英)', ph: 'Choose your path', type: 'text' },
+    { key: 'home_nav_title_easy',      label: 'セクションタイトル (やさしい日本語)', ph: 'どこから はじめる？', type: 'text' },
+
+    { section: 'Nav 1: EVENTS', label: '1象限 (左上)' },
+    { key: 'home_nav_1_image',         label: '1象限 背景画像', type: 'image' },
+    { key: 'home_nav_1_eyebrow_ja',    label: '1象限 Eyebrow (日)',  ph: 'EVENTS', type: 'text' },
+    { key: 'home_nav_1_eyebrow_en',    label: '1象限 Eyebrow (英)',  ph: 'EVENTS', type: 'text' },
+    { key: 'home_nav_1_eyebrow_easy',  label: '1象限 Eyebrow (やさしい日本語)', ph: 'EVENTS', type: 'text' },
+    { key: 'home_nav_1_title_ja',      label: '1象限 タイトル (日)',  ph: 'イベントを探す', type: 'text' },
+    { key: 'home_nav_1_title_en',      label: '1象限 タイトル (英)',  ph: 'Find events', type: 'text' },
+    { key: 'home_nav_1_title_easy',    label: '1象限 タイトル (やさしい日本語)', ph: 'イベントを みる', type: 'text' },
+    { key: 'home_nav_1_link',          label: '1象限 リンク',         ph: '#/events', type: 'text' },
+
+    { section: 'Nav 2: ABOUT', label: '2象限 (右上)' },
+    { key: 'home_nav_2_image',         label: '2象限 背景画像', type: 'image' },
+    { key: 'home_nav_2_eyebrow_ja',    label: '2象限 Eyebrow (日)',  ph: 'ABOUT', type: 'text' },
+    { key: 'home_nav_2_eyebrow_en',    label: '2象限 Eyebrow (英)',  ph: 'ABOUT', type: 'text' },
+    { key: 'home_nav_2_eyebrow_easy',  label: '2象限 Eyebrow (やさしい日本語)', ph: 'ABOUT', type: 'text' },
+    { key: 'home_nav_2_title_ja',      label: '2象限 タイトル (日)',  ph: '私たちのこと', type: 'text' },
+    { key: 'home_nav_2_title_en',      label: '2象限 タイトル (英)',  ph: 'About us', type: 'text' },
+    { key: 'home_nav_2_title_easy',    label: '2象限 タイトル (やさしい日本語)', ph: 'わたしたちのこと', type: 'text' },
+    { key: 'home_nav_2_link',          label: '2象限 リンク',         ph: '#/about', type: 'text' },
+
+    { section: 'Nav 3: NEWS', label: '3象限 (左下)' },
+    { key: 'home_nav_3_image',         label: '3象限 背景画像', type: 'image' },
+    { key: 'home_nav_3_eyebrow_ja',    label: '3象限 Eyebrow (日)',  ph: 'NEWS', type: 'text' },
+    { key: 'home_nav_3_eyebrow_en',    label: '3象限 Eyebrow (英)',  ph: 'NEWS', type: 'text' },
+    { key: 'home_nav_3_eyebrow_easy',  label: '3象限 Eyebrow (やさしい日本語)', ph: 'NEWS', type: 'text' },
+    { key: 'home_nav_3_title_ja',      label: '3象限 タイトル (日)',  ph: '最近の動き', type: 'text' },
+    { key: 'home_nav_3_title_en',      label: '3象限 タイトル (英)',  ph: 'Latest news', type: 'text' },
+    { key: 'home_nav_3_title_easy',    label: '3象限 タイトル (やさしい日本語)', ph: 'さいきんの ニュース', type: 'text' },
+    { key: 'home_nav_3_link',          label: '3象限 リンク',         ph: '#/news', type: 'text' },
+
+    { section: 'Nav 4: CONTACT', label: '4象限 (右下)' },
+    { key: 'home_nav_4_image',         label: '4象限 背景画像', type: 'image' },
+    { key: 'home_nav_4_eyebrow_ja',    label: '4象限 Eyebrow (日)',  ph: 'CONTACT', type: 'text' },
+    { key: 'home_nav_4_eyebrow_en',    label: '4象限 Eyebrow (英)',  ph: 'CONTACT', type: 'text' },
+    { key: 'home_nav_4_eyebrow_easy',  label: '4象限 Eyebrow (やさしい日本語)', ph: 'CONTACT', type: 'text' },
+    { key: 'home_nav_4_title_ja',      label: '4象限 タイトル (日)',  ph: '質問する', type: 'text' },
+    { key: 'home_nav_4_title_en',      label: '4象限 タイトル (英)',  ph: 'Get in touch', type: 'text' },
+    { key: 'home_nav_4_title_easy',    label: '4象限 タイトル (やさしい日本語)', ph: 'しつもんする', type: 'text' },
+    { key: 'home_nav_4_link',          label: '4象限 リンク',         ph: '#/contact', type: 'text' },
+
+    // === Featured ===
+    { section: 'Featured', label: '特集セクション (1イベントを大きく)' },
+    { key: 'home_featured_label_ja',     label: '小ラベル (日)',  ph: 'FEATURED', type: 'text' },
+    { key: 'home_featured_label_en',     label: '小ラベル (英)',  ph: 'FEATURED', type: 'text' },
+    { key: 'home_featured_label_easy',   label: '小ラベル (やさしい日本語)', ph: 'FEATURED', type: 'text' },
+    { key: 'home_featured_title_ja',     label: 'タイトル (日)',  ph: '次のイベント', type: 'text' },
+    { key: 'home_featured_title_en',     label: 'タイトル (英)',  ph: 'Coming up next', type: 'text' },
+    { key: 'home_featured_title_easy',   label: 'タイトル (やさしい日本語)', ph: 'つぎの イベント', type: 'text' },
+    { key: 'home_featured_eventId',      label: '特集する EventID (空ならイベント一覧の先頭)', ph: 'E-2601', type: 'text' },
+    { key: 'home_featured_cta_label_ja', label: 'CTA ラベル (日)', ph: '詳細を見る', type: 'text' },
+    { key: 'home_featured_cta_label_en', label: 'CTA ラベル (英)', ph: 'View this event', type: 'text' },
+    { key: 'home_featured_cta_label_easy', label: 'CTA ラベル (やさしい日本語)', ph: 'くわしくみる', type: 'text' },
+
+    // === Concept (PC版と共通でも可、モバイル専用上書きしたい時のみ) ===
+    { section: 'Concept', label: 'コンセプト (PC版と共通でよければ未設定)' },
+    { key: 'concept_label_ja',           label: '小ラベル (日)',  ph: 'CONCEPT', type: 'text' },
+    { key: 'concept_label_en',           label: '小ラベル (英)',  ph: 'CONCEPT', type: 'text' },
+    { key: 'concept_label_easy',         label: '小ラベル (やさしい日本語)', ph: 'CONCEPT', type: 'text' },
+    { key: 'concept_main_ja',            label: 'メインコピー (日) — モバイル上書き', ph: '東京を、もうひとつのふるさとに。', type: 'textarea' },
+    { key: 'concept_main_en',            label: 'メインコピー (英) — モバイル上書き', ph: 'Make Tokyo home.', type: 'textarea' },
+    { key: 'concept_main_easy',          label: 'メインコピー (やさしい日本語) — モバイル上書き', ph: 'とうきょうを、もうひとつの ふるさとに。', type: 'textarea' },
+    { key: 'concept_body_ja',            label: '本文 (日) — モバイル上書き', ph: 'イベントではなく、出会いを。\n一夜限りでなく、日常のなかで。\n東京を、もうひとつのふるさとに。', type: 'textarea' },
+    { key: 'concept_body_en',            label: '本文 (英) — モバイル上書き', ph: 'For international students arriving in Tokyo, we offer a space to meet, not just join.', type: 'textarea' },
+    { key: 'concept_body_easy',          label: '本文 (やさしい日本語) — モバイル上書き', ph: 'イベントだけ じゃなくて、であい。\nひとよ だけ じゃなくて、まいにちの なかで。', type: 'textarea' },
+
+    // === News Section ===
+    { section: 'News Section', label: 'ニュースセクション' },
+    { key: 'home_news_label_ja',         label: '小ラベル (日)',  ph: 'NEWS', type: 'text' },
+    { key: 'home_news_label_en',         label: '小ラベル (英)',  ph: 'NEWS', type: 'text' },
+    { key: 'home_news_label_easy',       label: '小ラベル (やさしい日本語)', ph: 'NEWS', type: 'text' },
+    { key: 'home_news_title_ja',         label: 'タイトル (日)',  ph: '最近の動き', type: 'text' },
+    { key: 'home_news_title_en',         label: 'タイトル (英)',  ph: 'What\'s happening', type: 'text' },
+    { key: 'home_news_title_easy',       label: 'タイトル (やさしい日本語)', ph: 'さいきんの ニュース', type: 'text' },
+    { key: 'home_news_cta_label_ja',     label: 'CTA ラベル (日)', ph: 'すべてのニュースを見る', type: 'text' },
+    { key: 'home_news_cta_label_en',     label: 'CTA ラベル (英)', ph: 'Read all news', type: 'text' },
+    { key: 'home_news_cta_label_easy',   label: 'CTA ラベル (やさしい日本語)', ph: 'すべての ニュースを みる', type: 'text' },
+
+    // === Contact ===
+    { section: 'Contact', label: 'お問い合わせセクション' },
+    { key: 'home_contact_label_ja',      label: '小ラベル (日)',  ph: 'CONTACT', type: 'text' },
+    { key: 'home_contact_label_en',      label: '小ラベル (英)',  ph: 'CONTACT', type: 'text' },
+    { key: 'home_contact_label_easy',    label: '小ラベル (やさしい日本語)', ph: 'CONTACT', type: 'text' },
+    { key: 'home_contact_title_ja',      label: 'タイトル (日)',  ph: '参加前に、\n聞きたいことありますか？', type: 'textarea' },
+    { key: 'home_contact_title_en',      label: 'タイトル (英)',  ph: 'Got questions\nbefore joining?', type: 'textarea' },
+    { key: 'home_contact_title_easy',    label: 'タイトル (やさしい日本語)', ph: 'さんかするまえに、\nしつもん ありますか？', type: 'textarea' },
+    { key: 'home_contact_body_ja',       label: '本文 (日)',      ph: 'イベントのこと、参加方法、ひとりで参加する不安など、気軽にお問い合わせください。', type: 'textarea' },
+    { key: 'home_contact_body_en',       label: '本文 (英)',      ph: 'Events, how to join, going alone — feel free to ask anything.', type: 'textarea' },
+    { key: 'home_contact_body_easy',     label: '本文 (やさしい日本語)', ph: 'イベントの こと、さんかの しかた、ひとりで さんかすること など、どうぞ きがるに きいてください。', type: 'textarea' },
+    { key: 'home_contact_cta_label_ja',  label: 'CTA ラベル (日)', ph: '質問してみる', type: 'text' },
+    { key: 'home_contact_cta_label_en',  label: 'CTA ラベル (英)', ph: 'Get in touch', type: 'text' },
+    { key: 'home_contact_cta_label_easy',label: 'CTA ラベル (やさしい日本語)', ph: 'しつもん してみる', type: 'text' },
+  ];
+
+  async function fetchAll() {
+    setLoading(true);
+    try {
+      const data = await window.fetchData('getSettings');
+      const obj = (data && typeof data === 'object') ? data : {};
+      // _mobile サフィックス付きの値だけ抽出して draft にロード
+      const mobileObj = {};
+      SETTING_DEFS.forEach(def => {
+        if (!def.key) return;
+        const mobileKey = def.key + '_mobile';
+        mobileObj[def.key] = obj[mobileKey] || '';   // モバイル値をUI上は base key で扱う
+      });
+      setSettings(mobileObj);
+      setDraft(mobileObj);
+      setError(null);
+    } catch (e) {
+      setError(e.message || '設定の取得に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchAll(); }, []);
+
+  function setVal(key, val) {
+    setDraft(d => ({ ...d, [key]: val }));
+  }
+
+  async function uploadImage(key, file) {
+    if (!file) return;
+    setUploading(u => ({ ...u, [key]: true }));
+    try {
+      const compressed = await window.compressImage(file, { maxLong: 2000, quality: 0.82 });
+      const result = await window.postData('uploadPosterImage', {
+        filename: 'homepage-mobile-' + key + '-' + file.name.replace(/\.[^.]+$/, '.jpg'),
+        mimeType: compressed.mimeType,
+        dataBase64: compressed.dataBase64,
+      });
+      if (result && result.url) {
+        setVal(key, result.url);
+        window.toast.success('画像をアップロードしました');
+      }
+    } catch (err) {
+      window.toast.error('アップロード失敗: ' + (err.message || err));
+    } finally {
+      setUploading(u => ({ ...u, [key]: false }));
+    }
+  }
+
+  async function saveAll() {
+    setSaving(true);
+    try {
+      // 差分のみ送信、保存時に _mobile サフィックスを付与
+      const changed = {};
+      Object.keys(draft).forEach(k => {
+        if (draft[k] !== settings[k]) {
+          changed[k + '_mobile'] = draft[k];
+        }
+      });
+      if (Object.keys(changed).length === 0) {
+        window.toast.info('変更はありません');
+        return;
+      }
+      await window.postData('updateSettings', { settings: changed });
+      window.toast.success('モバイル設定を保存しました (' + Object.keys(changed).length + '件)');
+      await fetchAll();
+    } catch (e) {
+      window.toast.error('保存失敗: ' + (e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dirty = Object.keys(draft).some(k => draft[k] !== settings[k]);
+
+  if (loading) {
+    return <div className="page" data-page="homepage-mobile-settings"><div style={{padding:24,color:'var(--ink2)'}}>読み込み中...</div></div>;
+  }
+
+  return (
+    <div className="page" data-page="homepage-mobile-settings">
+      <div className="page-head">
+        <div className="ph-left">
+          <div className="ph-crumbs"><span>設定</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>ホームページ設定 (モバイル)</span></div>
+          <h1>ホームページ設定 (モバイル)<i>.</i></h1>
+          <div className="ph-sub">参加者サイトのモバイル版ホームページ専用設定。 ここでの値は <code>_mobile</code> サフィックス付きで保存され、 モバイル時に優先されます。 未設定なら共通値 (PC設定) にフォールバック。</div>
+        </div>
+        <div className="ph-right">
+          <button className="btn btn-primary" disabled={!dirty || saving} onClick={saveAll}>
+            {saving ? '保存中…' : (dirty ? 'モバイル設定を保存' : '保存済み')}
+          </button>
+        </div>
+      </div>
+
+      {/* 説明バナー */}
+      <div style={{
+        padding:'12px 16px', background:'#eff6ff', color:'#1e40af',
+        borderRadius:8, marginBottom:16, fontSize:13, lineHeight:1.6,
+        border:'1px solid #bfdbfe',
+      }}>
+        <strong>📱 モバイル専用設定ページ</strong><br/>
+        ここでは <strong>モバイル表示時のみ</strong> 適用される設定を編集します。空欄のキーは <strong>PC共通値</strong> に自動でフォールバックします。 PC・モバイルで同じ内容なら、ここではなく<a href="#/settings/homepage" style={{color:'#1e40af', textDecoration:'underline'}}>PC設定</a>を編集してください。
+      </div>
+
+      {error && <div style={{padding:'12px 16px', background:'#fee2e2', color:'#991b1b', borderRadius:8, marginBottom:16}}>{error}</div>}
+
+      <div style={{display:'flex', flexDirection:'column', gap:32, maxWidth:920}}>
+        {SETTING_DEFS.map((def, i) => {
+          if (def.section) {
+            return (
+              <div key={'sec-'+i} style={{
+                fontSize:11,
+                fontWeight:700,
+                letterSpacing:'0.18em',
+                color:'var(--ink2)',
+                textTransform:'uppercase',
+                paddingTop: i === 0 ? 0 : 16,
+                borderTop: i === 0 ? 'none' : '1px solid var(--line)',
+                marginTop: i === 0 ? 0 : 12,
+              }}>
+                {def.section} <span style={{marginLeft:8, color:'var(--ink3)', fontWeight:400, textTransform:'none', letterSpacing:0}}>{def.label}</span>
+              </div>
+            );
+          }
+          const val = draft[def.key] || '';
+          if (def.type === 'image') {
+            return (
+              <div key={def.key} style={{display:'flex', flexDirection:'column', gap:8}}>
+                <label style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>{def.label}</label>
+                {val ? (
+                  <div style={{position:'relative', width:'100%', maxWidth:480, borderRadius:12, overflow:'hidden', background:'#f3f4f6'}}>
+                    <img src={val} alt="" style={{width:'100%', height:'auto', display:'block'}}/>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => setVal(def.key, '')}
+                      style={{position:'absolute', top:8, right:8, background:'rgba(255,255,255,0.9)'}}
+                    >削除</button>
+                  </div>
+                ) : (
+                  <div style={{
+                    width:'100%', maxWidth:480, height:200,
+                    border:'2px dashed var(--line)',
+                    borderRadius:12,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    color:'var(--ink3)', fontSize:13,
+                  }}>(画像未設定 - 共通値にフォールバック)</div>
+                )}
+                <input type="file" accept="image/*" disabled={uploading[def.key]}
+                  onChange={(e) => uploadImage(def.key, e.target.files[0])}
+                  style={{maxWidth:480}}
+                />
+                {uploading[def.key] && <div style={{fontSize:12, color:'var(--ink2)'}}>アップロード中...</div>}
+              </div>
+            );
+          }
+          if (def.type === 'textarea') {
+            return (
+              <div key={def.key} style={{display:'flex', flexDirection:'column', gap:8}}>
+                <label style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>{def.label}</label>
+                <textarea
+                  value={val}
+                  placeholder={def.ph || ''}
+                  onChange={(e) => setVal(def.key, e.target.value)}
+                  rows={4}
+                  style={{
+                    padding:'10px 12px',
+                    border:'1px solid var(--line)',
+                    borderRadius:8,
+                    fontSize:14,
+                    fontFamily:'inherit',
+                    resize:'vertical',
+                    maxWidth:680,
+                  }}
+                />
+              </div>
+            );
+          }
+          return (
+            <div key={def.key} style={{display:'flex', flexDirection:'column', gap:8}}>
+              <label style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>{def.label}</label>
+              <input
+                type="text"
+                value={val}
+                placeholder={def.ph || ''}
+                onChange={(e) => setVal(def.key, e.target.value)}
+                style={{
+                  padding:'10px 12px',
+                  border:'1px solid var(--line)',
+                  borderRadius:8,
+                  fontSize:14,
+                  maxWidth:680,
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// =================================================================
 // PageNewsFront — ニュース管理 (Phase 7.3 統合版)
 // CRUD + 参加者サイト表示制御 + フィルタ + 検索 + ステータス循環 + ドラッグ並び替え
 // =================================================================
@@ -13978,6 +14325,7 @@ window.PageAds = PageAds;
 window.PageSettings = PageSettings;
 window.PageHeroSettings = PageHeroSettings;
 window.PageHomepageSettings = PageHomepageSettings;
+window.PageHomepageMobileSettings = PageHomepageMobileSettings;
 window.PageNewsFront = PageNewsFront;
 
 })();
@@ -14051,6 +14399,7 @@ const PAGES = {
   // ----- 設定 (Phase 5新-E) -----
   'hero-settings': () => renderPage('PageHeroSettings'),
   'homepage-settings': () => renderPage('PageHomepageSettings'),
+  'homepage-mobile-settings': () => renderPage('PageHomepageMobileSettings'),
   // (Phase 7.3) 旧 #news-front は #news にリダイレクト
   'news-front':    () => renderPage('PageNewsFront'),
   settings:       () => renderPage('PageSettings'),
