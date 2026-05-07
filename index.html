@@ -741,7 +741,8 @@ svg{display:block}
 
     <div class="nav-section">
       <div class="nav-label"><span>設定</span></div>
-      <a href="#hero-settings" class="nav-item" data-nav="hero-settings"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>ヒーロー設定</a>
+      <a href="#hero-settings" class="nav-item" data-nav="hero-settings"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>ヒーロー設定 (PC)</a>
+      <a href="#hero-settings-mobile" class="nav-item" data-nav="hero-settings-mobile"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="9" r="1.5" fill="currentColor"/></svg>ヒーロー設定 (モバイル)</a>
       <a href="#homepage-settings" class="nav-item" data-nav="homepage-settings"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>ホームページ (PC)</a>
       <a href="#homepage-mobile-settings" class="nav-item" data-nav="homepage-mobile-settings"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>ホームページ (モバイル)</a>
       <a href="#settings" class="nav-item" data-nav="settings"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>通知・PWA</a>
@@ -2188,7 +2189,8 @@ const STUB_META = {
   org:            {title:"団体紹介",          icon:"building",  phase:"Phase 2新-D", desc:"団体ページ・採用ページのCMS。多言語対応、公開/下書き管理。"},
   ads:            {title:"広告",              icon:"megaphone", phase:"Phase 2新-D", desc:"参加者向けバナー、外部メディア掲載枠の管理。掲載期間、クリック数の集計。"},
   mobile:         {title:"現地オペレーション", icon:"phone",     phase:"Phase 2新-C", desc:"イベント当日のスマホ向けUI。受付QR、進行スクリプト、緊急連絡先を集約。"},
-  "hero-settings": {title:"ヒーロー設定",      icon:"img",       phase:"Phase 6.3",   desc:"参加者ページのトップに表示する常設ヒーロースライド (最大5枚) を管理。イベントが無い時のデフォルト + 混在表示。"},
+  "hero-settings": {title:"ヒーロー設定 (PC)",      icon:"img",       phase:"Phase 6.3",   desc:"PC版参加者ページのトップに表示する常設ヒーロースライド (最大10枚) を管理。横長キャンバス (1193×920)。"},
+  "hero-settings-mobile": {title:"ヒーロー設定 (モバイル)",      icon:"img",       phase:"Phase 15.S7",   desc:"モバイル版参加者ページのトップに表示する常設ヒーロースライド (最大10枚) を管理。縦長キャンバス (380×700)、 PC とは完全分離。"},
   "homepage-settings": {title:"ホームページ設定 (PC)",  icon:"home",      phase:"Phase 6.9",   desc:"参加者サイトの Concept / News / Events 各セクションのコピー、背景画像、CTAを設定。PC版がメイン。"},
   "homepage-mobile-settings": {title:"ホームページ設定 (モバイル)",  icon:"smartphone",      phase:"Phase 15",   desc:"モバイル専用ホームページ設定。Hero / Nav 4分割 / Featured / Concept / News / Contact の6セクションを上書き。空欄なら PC設定にフォールバック。"},
   "news-front":   {title:"ニュース管理",       icon:"news",      phase:"Phase 6.9",   desc:"参加者サイト News セクションに表示するニュース (最大3件) を管理。本文、表示順序、CTA を編集。"},
@@ -10659,7 +10661,21 @@ function useCanvasScale(virtualWidth) {
   return [ref, scale];
 }
 
-function PageHeroSettings(){
+function PageHeroSettings({ isMobile = false } = {}){
+  // (Phase 15.S7) isMobile=true のとき、 HeroSlidesMobile API を使用
+  const api = isMobile ? {
+    list: 'listHeroSlidesMobile',
+    create: 'createHeroSlideMobile',
+    update: 'updateHeroSlideMobile',
+    delete: 'deleteHeroSlideMobile',
+    reorder: 'reorderHeroSlidesMobile',
+  } : {
+    list: 'listHeroSlides',
+    create: 'createHeroSlide',
+    update: 'updateHeroSlide',
+    delete: 'deleteHeroSlide',
+    reorder: 'reorderHeroSlides',
+  };
   const [slides, setSlides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -10671,7 +10687,7 @@ function PageHeroSettings(){
   async function fetchAll() {
     setLoading(true);
     try {
-      const list = await window.fetchData('listHeroSlides');
+      const list = await window.fetchData(api.list);
       const arr = Array.isArray(list) ? list : [];
       setSlides(arr);
       // index 範囲外ならリセット
@@ -10689,10 +10705,10 @@ function PageHeroSettings(){
   async function handleSave(payload) {
     try {
       if (editing && editing.mode === 'edit') {
-        await window.postData('updateHeroSlide', { slideId: editing.slide.id, fields: payload });
+        await window.postData(api.update, { slideId: editing.slide.id, fields: payload });
         window.toast.success('スライドを更新しました');
       } else {
-        await window.postData('createHeroSlide', payload);
+        await window.postData(api.create, payload);
         window.toast.success('スライドを追加しました');
       }
       setEditing(null);
@@ -10711,7 +10727,7 @@ function PageHeroSettings(){
     });
     if (!ok) return;
     try {
-      await window.postData('deleteHeroSlide', { slideId: slide.id });
+      await window.postData(api.delete, { slideId: slide.id });
       window.toast.success('削除しました');
       await fetchAll();
     } catch (e) {
@@ -10721,7 +10737,7 @@ function PageHeroSettings(){
 
   async function handleToggleEnabled(slide) {
     try {
-      await window.postData('updateHeroSlide', { slideId: slide.id, fields: { enabled: !slide.enabled } });
+      await window.postData(api.update, { slideId: slide.id, fields: { enabled: !slide.enabled } });
       await fetchAll();
     } catch (e) {
       window.toast.error('変更失敗: ' + e.message);
@@ -10736,7 +10752,7 @@ function PageHeroSettings(){
     const reordered = [...sorted];
     [reordered[idx], reordered[newIdx]] = [reordered[newIdx], reordered[idx]];
     try {
-      await window.postData('reorderHeroSlides', { order: reordered.map(s => s.id) });
+      await window.postData(api.reorder, { order: reordered.map(s => s.id) });
       await fetchAll();
     } catch (e) {
       window.toast.error('並べ替え失敗: ' + e.message);
@@ -10762,27 +10778,19 @@ function PageHeroSettings(){
 
   const sortedSlides = [...slides].sort((a,b) => a.order - b.order);
   const enabledCount = slides.filter(s => s.enabled).length;
-  // (Phase 15) device別カウント
-  const desktopCount = slides.filter(s => s.enabled && (!s.device || s.device === 'desktop' || s.device === 'all')).length;
-  const mobileCount = slides.filter(s => s.enabled && (!s.device || s.device === 'mobile' || s.device === 'all')).length;
   const previewSlide = sortedSlides[previewIdx] || null;
-  // (Phase 15.S6) プレビュー用フォント補正係数
-  const previewFontScale = (previewSlide && previewSlide.device === 'mobile') ? (380 / 1193) : 1;
-  // (Phase 15) device フィルタ: 'all' / 'desktop' / 'mobile'
-  const [deviceFilter, setDeviceFilter] = useState('all');
-  const filteredSlides = sortedSlides.filter(s => {
-    if (deviceFilter === 'all') return true;
-    if (deviceFilter === 'desktop') return !s.device || s.device === 'desktop' || s.device === 'all';
-    if (deviceFilter === 'mobile') return !s.device || s.device === 'mobile' || s.device === 'all';
-    return true;
-  });
+  // (Phase 15.S7) PC 専用 — 互換性のため filteredSlides は sortedSlides をそのまま使う
+  const filteredSlides = sortedSlides;
+  const previewFontScale = 1;
 
   return (
     <div className="ph">
       <div className="ph-head">
-        <div className="ph-crumbs"><span>設定</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>ヒーロー設定</span></div>
-        <h1 className="ph-title">ヒーロー <span style={{color:'var(--coral)',fontStyle:'italic'}}>設定</span></h1>
-        <p className="ph-sub">参加者ページのトップに表示する常設スライドを管理。イベントスライドと交互にローテーションされます。</p>
+        <div className="ph-crumbs"><span>設定</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>ヒーロー設定 ({isMobile ? 'モバイル' : 'PC'})</span></div>
+        <h1 className="ph-title">ヒーロー <span style={{color:'var(--coral)',fontStyle:'italic'}}>設定 ({isMobile ? '📱 モバイル' : '🖥 PC'})</span></h1>
+        <p className="ph-sub">{isMobile
+          ? 'モバイル版参加者ページの Hero に表示する縦長スライドを管理。 PC 版とは完全に別管理 (HeroSlidesMobile シート)。 オーバーレイで作ったテキスト・図形・アニメーションがフロントにそのまま表示されます。'
+          : 'PC 版参加者ページの Hero に表示する横長スライドを管理。 モバイル版は別の「ヒーロー設定 (モバイル)」で管理。 イベントスライドと交互にローテーションされます。'}</p>
       </div>
 
       {error && <ErrorBanner error={error} onClose={()=>setError(null)}/>}
@@ -10805,31 +10813,26 @@ function PageHeroSettings(){
               {slides.length} <span style={{color:'var(--ink5)',fontSize:16}}>/ 10</span>
             </div>
           </div>
-          {/* スロット視覚化 (10枠に拡張) */}
+          {/* スロット視覚化 (10枠) */}
           <div style={{display:'flex',gap:4,alignItems:'center'}}>
             {[0,1,2,3,4,5,6,7,8,9].map(i => {
               const slot = sortedSlides[i];
               const filled = !!slot;
               const enabledSlot = filled && slot.enabled;
-              const dev = filled ? slot.device : '';
-              const slotColor = !filled ? 'transparent'
-                : !enabledSlot ? 'var(--ink5)'
-                : dev === 'mobile' ? '#22c55e'  // 緑 (モバイル)
-                : dev === 'desktop' ? '#3b82f6' // 青 (PC)
-                : 'var(--indigo)';              // 両方
               return (
                 <div key={i} style={{
                   width: 24, height: 18, borderRadius: 4,
-                  background: slotColor,
+                  background: enabledSlot ? 'var(--indigo)' : (filled ? 'var(--ink5)' : 'transparent'),
                   border: filled ? 'none' : '1px dashed var(--ink5)',
                   transition: 'all .25s',
-                }} title={filled ? `${enabledSlot ? '有効' : '無効'} / ${dev || '両方'}` : '空き'}/>
+                }} title={filled ? (enabledSlot ? '有効' : '無効') : '空き'}/>
               );
             })}
           </div>
           <div style={{fontSize:11,color:'var(--ink4)'}}>
-            <span style={{color:'#3b82f6',fontWeight:600}}>● {desktopCount}</span> PC表示 ・
-            <span style={{color:'#22c55e',fontWeight:600}}> ● {mobileCount}</span> モバイル表示
+            <span style={{color:'var(--green)',fontWeight:600}}>● {enabledCount}</span> 有効 ・
+            <span style={{color:'var(--ink5)'}}> ● {slides.length - enabledCount}</span> 無効 ・
+            <span style={{color:'var(--ink5)'}}> ○ {10 - slides.length}</span> 空き
           </div>
         </div>
         <button
@@ -10839,40 +10842,6 @@ function PageHeroSettings(){
           style={{padding: '10px 18px'}}>
           <Icon n="plus" s={14}/> 新規スライドを追加
         </button>
-      </div>
-
-      {/* (Phase 15) Device フィルタ */}
-      <div style={{
-        display:'flex',gap:8,alignItems:'center',
-        marginBottom:16,
-        padding:'10px 14px',
-        background:'var(--bg2)',
-        borderRadius:10,
-        border:'1px solid var(--line)',
-      }}>
-        <div style={{fontSize:11,color:'var(--ink4)',fontWeight:600,marginRight:6}}>表示フィルタ:</div>
-        {[
-          { v: 'all',     label: 'すべて',          icon: '🖥📱' },
-          { v: 'desktop', label: 'PC で表示される',  icon: '🖥' },
-          { v: 'mobile',  label: 'モバイルで表示される', icon: '📱' },
-        ].map(opt => (
-          <button key={opt.v}
-            onClick={() => setDeviceFilter(opt.v)}
-            style={{
-              padding:'6px 12px',
-              background: deviceFilter === opt.v ? 'var(--indigo)' : '#fff',
-              color: deviceFilter === opt.v ? '#fff' : 'var(--ink2)',
-              border: deviceFilter === opt.v ? '1px solid var(--indigo)' : '1px solid var(--line)',
-              borderRadius:6,
-              cursor:'pointer',
-              fontSize:11,
-              fontWeight: deviceFilter === opt.v ? 600 : 400,
-              transition:'all .2s',
-            }}>{opt.icon} {opt.label}</button>
-        ))}
-        <div style={{marginLeft:'auto',fontSize:11,color:'var(--ink4)'}}>
-          {filteredSlides.length} / {slides.length} 件
-        </div>
       </div>
 
       {loading ? (
@@ -11091,7 +11060,7 @@ function PageHeroSettings(){
             <div style={{
               fontFamily:'var(--mono)',fontSize:10,color:'var(--ink4)',
               letterSpacing:'0.2em',fontWeight:700,marginBottom:10,
-            }}>ALL SLIDES ({filteredSlides.length}{deviceFilter !== 'all' ? ` / ${slides.length}` : ''})</div>
+            }}>ALL SLIDES ({filteredSlides.length})</div>
 
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               {filteredSlides.map((slide, idx, arr) => {
@@ -11224,36 +11193,7 @@ function PageHeroSettings(){
                               color:'var(--ink4)',
                               letterSpacing:'0.18em',fontWeight:700,
                               marginBottom:4,
-                              display:'flex',alignItems:'center',gap:6,
-                            }}>
-                              <span>SLIDE {String(slide.order).padStart(2,'0')}</span>
-                              {/* (Phase 15) device バッジ */}
-                              {slide.device === 'mobile' ? (
-                                <span style={{
-                                  padding:'2px 6px',
-                                  background:'#22c55e',color:'#fff',
-                                  borderRadius:3,
-                                  fontSize:8,fontWeight:700,
-                                  letterSpacing:'0.1em',
-                                }}>📱 モバイル</span>
-                              ) : slide.device === 'desktop' ? (
-                                <span style={{
-                                  padding:'2px 6px',
-                                  background:'#3b82f6',color:'#fff',
-                                  borderRadius:3,
-                                  fontSize:8,fontWeight:700,
-                                  letterSpacing:'0.1em',
-                                }}>🖥 PC のみ</span>
-                              ) : (
-                                <span style={{
-                                  padding:'2px 6px',
-                                  background:'var(--bg2)',color:'var(--ink3)',
-                                  borderRadius:3,
-                                  fontSize:8,fontWeight:600,
-                                  letterSpacing:'0.1em',
-                                }}>両方</span>
-                              )}
-                            </div>
+                            }}>SLIDE {String(slide.order).padStart(2,'0')}</div>
                             <div style={{
                               fontSize:13,color:'var(--ink)',
                               fontWeight:500,marginBottom:3,
@@ -11373,6 +11313,8 @@ function PageHeroSettings(){
           slide={editing.mode === 'edit' ? editing.slide : null}
           onSave={handleSave}
           onCancel={() => setEditing(null)}
+          isMobile={isMobile}
+          api={api}
         />
       )}
     </div>
@@ -11380,12 +11322,15 @@ function PageHeroSettings(){
 }
 
 // HeroSlideEditor — ライブプレビュー付き編集モーダル
-function HeroSlideEditor({mode, slide, onSave, onCancel}) {
+// (Phase 15.S7) isMobile prop でモバイル編集モードに切替
+//   - false (PC編集): キャンバス 1193×920 横長、 fontSize/borderWidth 補正なし
+//   - true (モバイル編集): キャンバス 380×700 縦長、 fontSize/borderWidth は実機サイズで表示
+function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
+  // (Phase 15.S7) api prop でモバイル/PC のエンドポイント切替
+  const updateAction = (api && api.update) ? api.update : 'updateHeroSlide';
   const [imageUrl, setImageUrl] = useState(slide?.imageUrl || '');
   const [enabled, setEnabled] = useState(slide?.enabled !== false);
   const [uploading, setUploading] = useState(false);
-  // (Phase 15) 表示デバイス: '' (両方) / 'desktop' / 'mobile'
-  const [device, setDevice] = useState(slide?.device || '');
   // (Phase 7.8) 多言語フィールド (eyebrow + サブコピー × easy/en)
   const [eyebrowEasy, setEyebrowEasy] = useState(slide?.eyebrow_easy || '');
   const [eyebrowEn, setEyebrowEn] = useState(slide?.eyebrow_en || '');
@@ -11412,11 +11357,13 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     return slide?.bgColor || '';
   });
   // (Phase 7.7) DRAFT/LIVEプレビューの参加者サイト換算スケール
-  const [draftWrapRef, draftScale] = useCanvasScale(device === 'mobile' ? 380 : 1193);
-  const [liveWrapRef, liveScale] = useCanvasScale(device === 'mobile' ? 380 : 1193);
-  // (Phase 15.S6) デバイス補正係数: モバイルキャンバス時はフォント・ボーダーを 380/1193 倍
-  // これにより PC キャンバスとモバイルキャンバスで「同じ見た目の大きさ」を実現
-  const fontScaleAdjust = device === 'mobile' ? (380 / 1193) : 1;
+  // (Phase 15.S7) isMobile=true のとき 380px キャンバス、そうでなければ 1193px (PC)
+  const canvasWidth = isMobile ? 380 : 1193;
+  const [draftWrapRef, draftScale] = useCanvasScale(canvasWidth);
+  const [liveWrapRef, liveScale] = useCanvasScale(canvasWidth);
+  // (Phase 15.S7) 補正係数 — モバイル編集時は実機サイズで表示するため 1.0
+  // (シート保存時の値はモバイル基準なので、 表示時は scale だけかければよい)
+  const fontScaleAdjust = 1;
   // (Phase 7.6) オーバーレイ・背景色の自動保存 (2秒デバウンス)
   // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle');
@@ -11441,7 +11388,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     autoSaveTimerRef.current = setTimeout(async () => {
       setAutoSaveStatus('saving');
       try {
-        await window.postData('updateHeroSlide', {
+        await window.postData(updateAction, {
           slideId: slide.id,
           fields: {
             overlayDraft: JSON.stringify(overlay || []),
@@ -11493,7 +11440,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
         autoSaveTimerRef.current = null;
       }
       // 公開版とドラフトを同時に上書き (ドラフトはクリア)
-      await window.postData('updateHeroSlide', {
+      await window.postData(updateAction, {
         slideId: slide.id,
         fields: {
           overlay: JSON.stringify(overlay || []),
@@ -11524,7 +11471,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     if (autoSaveStatus === 'pending' || autoSaveStatus === 'saving') {
       try {
         if (mode === 'edit' && slide?.id) {
-          await window.postData('updateHeroSlide', {
+          await window.postData(updateAction, {
             slideId: slide.id,
             fields: {
               overlayDraft: JSON.stringify(overlay || []),
@@ -11631,7 +11578,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
     onSave({
       imageUrl: imageUrl.trim(),
       enabled,
-      device,                       // (Phase 15) '' / 'desktop' / 'mobile'
       overlay: JSON.stringify(overlay || []),
       bgColor: bgColor || '',
       // (Phase 7.8) 多言語
@@ -11757,7 +11703,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               参加者ページに反映するには右上の「LIVE PREVIEWに反映」ボタンを押してください。
             </div>
 
-            {/* (Phase 15) device バッジ: どのデバイス向けの編集か視覚化 */}
+            {/* (Phase 15.S7) 編集中デバイスのバッジ */}
             <div style={{
               display:'flex',alignItems:'center',gap:8,
               marginBottom:10,
@@ -11766,31 +11712,26 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
               color:'var(--ink4)',
             }}>
               <span>EDITING FOR:</span>
-              {device === 'mobile' ? (
+              {isMobile ? (
                 <span style={{
                   padding:'4px 10px',background:'#22c55e',color:'#fff',
                   borderRadius:4,fontSize:10,fontWeight:700,letterSpacing:'0.1em',
                 }}>📱 モバイル (380×700)</span>
-              ) : device === 'desktop' ? (
+              ) : (
                 <span style={{
                   padding:'4px 10px',background:'#3b82f6',color:'#fff',
                   borderRadius:4,fontSize:10,fontWeight:700,letterSpacing:'0.1em',
-                }}>🖥 PC のみ (1193×920)</span>
-              ) : (
-                <span style={{
-                  padding:'4px 10px',background:'var(--indigo)',color:'#fff',
-                  borderRadius:4,fontSize:10,fontWeight:700,letterSpacing:'0.1em',
-                }}>🖥📱 両方 (PC比率で表示)</span>
+                }}>🖥 PC (1193×920)</span>
               )}
             </div>
 
-            {/* 大型プレビュー — device に応じて比率を切替 (PC: 1193:920 / モバイル: 380:700) */}
+            {/* 大型プレビュー — isMobile で比率を切替 (PC: 1193:920 / モバイル: 380:700) */}
             <div ref={draftWrapRef} style={{
               position:'relative',
               width:'100%',
-              maxWidth: device === 'mobile' ? 380 : '100%',
-              margin: device === 'mobile' ? '0 auto' : 'unset',
-              aspectRatio: device === 'mobile' ? '380/700' : '1193/920',
+              maxWidth: isMobile ? 380 : '100%',
+              margin: isMobile ? '0 auto' : 'unset',
+              aspectRatio: isMobile ? '380/700' : '1193/920',
               flexShrink: 0,
               background: imageUrl
                 ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/contain no-repeat`
@@ -11960,7 +11901,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                 <div ref={liveWrapRef} style={{
                   position:'relative',
                   width:'100%',
-                  aspectRatio: device === 'mobile' ? '380/700' : '1193/920',
+                  aspectRatio: isMobile ? '380/700' : '1193/920',
                   flexShrink: 0,
                   background: imageUrl
                     ? `#0a2960 url(${normalizeImageUrl(imageUrl)}) center/contain no-repeat`
@@ -12147,80 +12088,6 @@ function HeroSlideEditor({mode, slide, onSave, onCancel}) {
                   </div>
                 </div>
               </label>
-            </div>
-
-            {/* (Phase 15) 表示デバイス選択 */}
-            <div>
-              <div style={{
-                fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',
-                letterSpacing:'0.22em',fontWeight:700,marginBottom:8,
-              }}>DEVICE</div>
-              <div style={{fontSize:11,color:'var(--ink4)',marginBottom:8}}>
-                このスライドを表示するデバイスを選択
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
-                {[
-                  { v: '',         label: '両方',    desc: 'PCもモバイルも', icon: '🖥📱' },
-                  { v: 'desktop',  label: 'PC のみ', desc: 'モバイルでは非表示', icon: '🖥' },
-                  { v: 'mobile',   label: 'モバイルのみ', desc: 'PCでは非表示', icon: '📱' },
-                ].map(opt => (
-                  <button key={opt.v}
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (device === opt.v) return;
-                      // (#3) キャンバス比率が変わる遷移を検知して警告
-                      const wasMobile = device === 'mobile';
-                      const willBeMobile = opt.v === 'mobile';
-                      const ratioChanges = wasMobile !== willBeMobile;
-                      const hasOverlay = (overlay && overlay.length > 0);
-                      if (ratioChanges && hasOverlay) {
-                        const ok = window.confirm(
-                          'デバイス切替で表示比率が変わります (PC は横長 1193×920、 モバイルは縦長 380×700)。\n\n' +
-                          'オーバーレイ要素 (' + overlay.length + '個) は %ベースで配置されているため、 比率変化により位置・サイズが視覚的にずれて見える可能性があります。\n\n' +
-                          '切替を続行しますか?'
-                        );
-                        if (!ok) return;
-                      }
-                      setDevice(opt.v);
-                    }}
-                    style={{
-                      padding: '10px 8px',
-                      background: device === opt.v ? 'var(--indigo-50, #e0e7ff)' : 'var(--bg2)',
-                      color: device === opt.v ? 'var(--indigo, #4f46e5)' : 'var(--ink2)',
-                      border: device === opt.v ? '2px solid var(--indigo, #4f46e5)' : '1px solid var(--line)',
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      fontWeight: device === opt.v ? 700 : 500,
-                      textAlign: 'center',
-                      transition: 'all .2s',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}>
-                    <div style={{fontSize:14,opacity:0.85}}>{opt.icon}</div>
-                    <div>{opt.label}</div>
-                    <div style={{fontSize:9,fontWeight:400,color:'var(--ink4)',lineHeight:1.3}}>{opt.desc}</div>
-                  </button>
-                ))}
-              </div>
-              {/* (#3) device がモバイルでオーバーレイがある場合の補助情報 */}
-              {(overlay && overlay.length > 0) && (
-                <div style={{
-                  marginTop:8,
-                  padding:'8px 12px',
-                  background:'rgba(251, 191, 36, 0.08)',
-                  border:'1px solid rgba(251, 191, 36, 0.25)',
-                  borderRadius:6,
-                  fontSize:10,color:'var(--ink3)',lineHeight:1.5,
-                }}>
-                  💡 ヒント: オーバーレイ要素の位置 (x/y/w/h) は%、 サイズ (fontSize/borderWidth) はキャンバス連動補正済み。
-                  ただしキャンバス比率 (PC横長 vs モバイル縦長) が変わると視覚的に位置がずれます。
-                  切替後はプレビューで位置を確認してください。
-                </div>
-              )}
             </div>
 
             {/* (Phase 7.8) 多言語フィールド (eyebrow + サブコピー × easy/en) */}
@@ -14514,6 +14381,11 @@ window.PageOrg = PageOrg;
 window.PageAds = PageAds;
 window.PageSettings = PageSettings;
 window.PageHeroSettings = PageHeroSettings;
+// (Phase 15.S7) モバイル Hero 専用ラッパー (PageHeroSettings に isMobile=true を渡すだけ)
+function PageHeroSettingsMobile() {
+  return <PageHeroSettings isMobile={true} />;
+}
+window.PageHeroSettingsMobile = PageHeroSettingsMobile;
 window.PageHomepageSettings = PageHomepageSettings;
 window.PageHomepageMobileSettings = PageHomepageMobileSettings;
 window.PageNewsFront = PageNewsFront;
@@ -14588,6 +14460,7 @@ const PAGES = {
 
   // ----- 設定 (Phase 5新-E) -----
   'hero-settings': () => renderPage('PageHeroSettings'),
+  'hero-settings-mobile': () => renderPage('PageHeroSettingsMobile'),
   'homepage-settings': () => renderPage('PageHomepageSettings'),
   'homepage-mobile-settings': () => renderPage('PageHomepageMobileSettings'),
   // (Phase 7.3) 旧 #news-front は #news にリダイレクト
