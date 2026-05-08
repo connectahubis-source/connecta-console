@@ -10744,6 +10744,24 @@ function PageHeroSettings({ isMobile = false } = {}){
     }
   }
 
+  // (Phase 15.S8 #7) 別 device に同じスライドをコピー
+  async function handleCopyToOther(slide) {
+    const sourceType = isMobile ? 'mobile' : 'pc';
+    const targetType = isMobile ? 'pc' : 'mobile';
+    const targetLabel = isMobile ? 'PC' : 'モバイル';
+    if (!window.confirm(`このスライドを ${targetLabel} 設定にコピーしますか?\n\n元スライドはそのまま残ります。 オーバーレイの位置 (%) は ${targetLabel} のキャンバス比率に再描画されます。`)) return;
+    try {
+      await window.postData('copyHeroSlide', {
+        sourceSlideId: slide.id,
+        sourceType,
+        targetType,
+      });
+      window.toast.success(`${targetLabel} 設定にコピーしました`);
+    } catch (e) {
+      window.toast.error('コピー失敗: ' + e.message);
+    }
+  }
+
   async function handleMove(slide, direction) {
     const sorted = [...slides].sort((a,b) => a.order - b.order);
     const idx = sorted.findIndex(s => s.id === slide.id);
@@ -10793,6 +10811,23 @@ function PageHeroSettings({ isMobile = false } = {}){
           : 'PC 版参加者ページの Hero に表示する横長スライドを管理。 モバイル版は別の「ヒーロー設定 (モバイル)」で管理。 イベントスライドと交互にローテーションされます。'}</p>
       </div>
 
+      {/* (Phase 15.S8 #6) 推奨サイズ・比率の案内バナー */}
+      <div style={{
+        padding:'12px 16px',
+        background: isMobile ? 'rgba(34, 197, 94, 0.08)' : 'rgba(59, 130, 246, 0.08)',
+        border: isMobile ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)',
+        borderRadius:8,
+        marginBottom:16,
+        fontSize:12,color:'var(--ink2)',lineHeight:1.6,
+      }}>
+        <strong style={{color: isMobile ? '#16a34a' : '#2563eb'}}>
+          {isMobile ? '📱 モバイル推奨' : '🖥 PC 推奨'}
+        </strong>:
+        {isMobile
+          ? ' 縦長 4:5 (1080×1350px) または 9:16 (1080×1920px) の画像を推奨。 オーバーレイは縦長キャンバス (380×700) で配置。 上端 / 下端は Nav やインジケータと重なる可能性があるため、 重要な要素は中央 60% に配置すること。'
+          : ' 横長 16:9 (1920×1080px) または 4:3 (1600×1200px) の画像を推奨。 オーバーレイは横長キャンバス (1193×920) で配置。 イベントスライドと交互ローテーションされるため、 ブランド要素は中央寄せが安全。'}
+      </div>
+
       {error && <ErrorBanner error={error} onClose={()=>setError(null)}/>}
 
       {/* スロットカウンター + 追加ボタン */}
@@ -10835,13 +10870,41 @@ function PageHeroSettings({ isMobile = false } = {}){
             <span style={{color:'var(--ink5)'}}> ○ {10 - slides.length}</span> 空き
           </div>
         </div>
-        <button
-          className="btn btn-indigo"
-          onClick={() => setEditing({mode:'create'})}
-          disabled={slides.length >= 10}
-          style={{padding: '10px 18px'}}>
-          <Icon n="plus" s={14}/> 新規スライドを追加
-        </button>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          {/* (Phase 15.S8 #9) 一括有効/無効切替 (スライドが2枚以上ある時のみ表示) */}
+          {slides.length >= 2 && (
+            <button
+              className="btn btn-ghost"
+              onClick={async () => {
+                const allEnabled = slides.every(s => s.enabled);
+                const newState = !allEnabled;
+                const action = newState ? '全て有効' : '全て無効';
+                if (!window.confirm(`${slides.length} 枚のスライドを ${action} にしますか?`)) return;
+                try {
+                  await Promise.all(
+                    slides
+                      .filter(s => s.enabled !== newState)
+                      .map(s => window.postData(api.update, { slideId: s.id, fields: { enabled: newState } }))
+                  );
+                  await fetchAll();
+                  window.toast.success(`${action}にしました`);
+                } catch (e) {
+                  window.toast.error('一括変更失敗: ' + e.message);
+                }
+              }}
+              style={{padding: '10px 14px', fontSize: 12}}
+              title={slides.every(s => s.enabled) ? '全て無効にする' : '全て有効にする'}>
+              {slides.every(s => s.enabled) ? '全て無効' : '全て有効'}
+            </button>
+          )}
+          <button
+            className="btn btn-indigo"
+            onClick={() => setEditing({mode:'create'})}
+            disabled={slides.length >= 10}
+            style={{padding: '10px 18px'}}>
+            <Icon n="plus" s={14}/> 新規スライドを追加
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -10881,12 +10944,19 @@ function PageHeroSettings({ isMobile = false } = {}){
 
             <div ref={previewWrapRef} style={{
               position: 'relative',
-              aspectRatio: '1193 / 920',
+              aspectRatio: isMobile ? '380 / 700' : '1193 / 920',
+              maxWidth: isMobile ? 380 : '100%',
+              margin: isMobile ? '0 auto' : '0',
               borderRadius: 14,
               overflow: 'hidden',
               background: '#0a2960',
               boxShadow: '0 14px 36px -16px rgba(10,41,96,0.4), 0 4px 12px -4px rgba(10,41,96,0.2)',
             }}>
+              {/* (Phase 15.S8 #24) previewIdx 変更時のフェード/スライド */}
+              <div key={`preview-${previewIdx}`} style={{
+                position: 'absolute', inset: 0,
+                animation: 'cca-fade-in-soft 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards',
+              }}>
               {previewSlide ? (() => {
                 // (Phase 7.7) heroOverlay: JSON文字列または配列
                 let overlay = [];
@@ -11004,6 +11074,7 @@ function PageHeroSettings({ isMobile = false } = {}){
                   <div style={{marginTop:10}}>NO PREVIEW</div>
                 </div>
               )}
+              </div>{/* (Phase 15.S8 #24) preview-${previewIdx} fade key div */}
 
               {/* プレビューのインジケータ (どのスライド見てるか) */}
               {sortedSlides.length > 1 && (
@@ -11249,6 +11320,22 @@ function PageHeroSettings({ isMobile = false } = {}){
                           }}>
                           <Icon n="edit" s={11}/>
                         </button>
+                        {/* (Phase 15.S8 #7) コピー (PC ⇔ Mobile) */}
+                        <button
+                          className="btn-icon"
+                          onClick={(e) => { e.stopPropagation(); handleCopyToOther(slide); }}
+                          title={isMobile ? 'PC にコピー' : 'モバイルにコピー'}
+                          style={{
+                            width:22,height:22,padding:0,
+                            background:'var(--white)',
+                            border:'1px solid var(--line)',
+                            borderRadius:4,cursor:'pointer',
+                            display:'flex',alignItems:'center',justifyContent:'center',
+                            color:'var(--indigo)',
+                            fontSize:11,
+                          }}>
+                          {isMobile ? '🖥' : '📱'}
+                        </button>
                         <button
                           className="btn-icon"
                           onClick={(e) => { e.stopPropagation(); handleDelete(slide); }}
@@ -11315,6 +11402,7 @@ function PageHeroSettings({ isMobile = false } = {}){
           onCancel={() => setEditing(null)}
           isMobile={isMobile}
           api={api}
+          onPublished={fetchAll}
         />
       )}
     </div>
@@ -11325,7 +11413,7 @@ function PageHeroSettings({ isMobile = false } = {}){
 // (Phase 15.S7) isMobile prop でモバイル編集モードに切替
 //   - false (PC編集): キャンバス 1193×920 横長、 fontSize/borderWidth 補正なし
 //   - true (モバイル編集): キャンバス 380×700 縦長、 fontSize/borderWidth は実機サイズで表示
-function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
+function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api, onPublished}) {
   // (Phase 15.S7) api prop でモバイル/PC のエンドポイント切替
   const updateAction = (api && api.update) ? api.update : 'updateHeroSlide';
   const [imageUrl, setImageUrl] = useState(slide?.imageUrl || '');
@@ -11371,7 +11459,17 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
   const autoSaveSavedAtRef = useRef(0);
   const isInitialRenderRef = useRef(true);
 
-  // 自動保存関数 (デバウンス付き)
+  // (Phase 15.S7) publish 後、 LIVE PREVIEW を即時更新するためのローカル overlay
+  const [publishedOverlayLocal, setPublishedOverlayLocal] = useState(null);
+  const [publishedBgColorLocal, setPublishedBgColorLocal] = useState(null);
+
+  // (Phase 15.S7) slide.id が変わった (別スライドに切替えた) ら publish 後のローカル値をリセット
+  React.useEffect(() => {
+    setPublishedOverlayLocal(null);
+    setPublishedBgColorLocal(null);
+  }, [slide?.id]);
+
+  // 自動保存関数 (デバウンス付き) — Phase 15.S7 で 2000ms → 800ms に短縮 (反映を速く)
   React.useEffect(() => {
     // 新規作成中 (slideIdがない) は自動保存スキップ
     if (mode !== 'edit' || !slide?.id) return;
@@ -11384,7 +11482,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
     setAutoSaveStatus('pending');
     // 既存タイマーをクリア
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    // 2秒後に保存実行
+    // 800ms後に保存実行 (旧2秒 → 編集を止めてから一拍で反映される程度に短縮)
     autoSaveTimerRef.current = setTimeout(async () => {
       setAutoSaveStatus('saving');
       try {
@@ -11408,26 +11506,31 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
         setAutoSaveStatus('error');
         if (window.toast) window.toast.error('自動保存に失敗しました: ' + (err.message || err));
       }
-    }, 2000);
+    }, 800);
   }, [overlay, bgColor, mode, slide?.id]);
 
   // (Phase 7.7) LIVE PREVIEW (公開版) に反映 — ドラフトを公開版へ昇格
   const [publishStatus, setPublishStatus] = useState('idle'); // 'idle' | 'publishing' | 'published'
 
-  // 未公開差分があるか
+  // 未公開差分があるか (publish 直後はローカル値で判定)
   const hasUnpublishedChanges = React.useMemo(() => {
     const currentOverlayJson = JSON.stringify(overlay || []);
     let publishedOverlayJson = '';
     try {
-      const ov = slide?.overlay;
-      if (Array.isArray(ov)) publishedOverlayJson = JSON.stringify(ov);
-      else if (typeof ov === 'string' && ov) publishedOverlayJson = JSON.stringify(JSON.parse(ov));
-      else publishedOverlayJson = JSON.stringify([]);
+      if (publishedOverlayLocal !== null) {
+        publishedOverlayJson = JSON.stringify(publishedOverlayLocal);
+      } else {
+        const ov = slide?.overlay;
+        if (Array.isArray(ov)) publishedOverlayJson = JSON.stringify(ov);
+        else if (typeof ov === 'string' && ov) publishedOverlayJson = JSON.stringify(JSON.parse(ov));
+        else publishedOverlayJson = JSON.stringify([]);
+      }
     } catch (e) { publishedOverlayJson = JSON.stringify([]); }
     if (currentOverlayJson !== publishedOverlayJson) return true;
-    if ((bgColor || '') !== (slide?.bgColor || '')) return true;
+    const liveBg = (publishedBgColorLocal !== null) ? publishedBgColorLocal : (slide?.bgColor || '');
+    if ((bgColor || '') !== liveBg) return true;
     return false;
-  }, [overlay, bgColor, slide?.overlay, slide?.bgColor]);
+  }, [overlay, bgColor, slide?.overlay, slide?.bgColor, publishedOverlayLocal, publishedBgColorLocal]);
 
   // 公開コミット
   const handlePublish = async () => {
@@ -11449,11 +11552,14 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
           bgColorDraft: '',
         },
       });
+      // (Phase 15.S7) ローカルで即時に LIVE PREVIEW 用の overlay を更新
+      setPublishedOverlayLocal([...(overlay || [])]);
+      setPublishedBgColorLocal(bgColor || '');
       setPublishStatus('published');
       setAutoSaveStatus('idle');
       if (window.toast) window.toast.success('参加者ページに反映しました');
-      // slide.overlay/bgColor を更新するために親のfetchが必要。onSaveを呼ぶと再fetchが走る
-      // ただし re-mountを避けるため、minimum fields で呼ぶ
+      // 親に通知 (一覧再fetch)
+      if (typeof onPublished === 'function') onPublished();
       setTimeout(() => setPublishStatus('idle'), 3000);
     } catch (err) {
       console.error('[HeroSlideEditor] publish failed:', err);
@@ -11639,6 +11745,42 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
                 {autoSaveStatus === 'saved' && (<><Icon n="check" s={11}/>下書き保存済み</>)}
                 {autoSaveStatus === 'error' && (<><Icon n="alert" s={11}/>下書き保存失敗</>)}
               </div>
+            )}
+            {/* (Phase 15.S7) 「今すぐ保存」ボタン: ペンディング中なら待たずに即実行 */}
+            {mode === 'edit' && autoSaveStatus === 'pending' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (autoSaveTimerRef.current) {
+                    clearTimeout(autoSaveTimerRef.current);
+                    autoSaveTimerRef.current = null;
+                  }
+                  setAutoSaveStatus('saving');
+                  try {
+                    await window.postData(updateAction, {
+                      slideId: slide.id,
+                      fields: {
+                        overlayDraft: JSON.stringify(overlay || []),
+                        bgColorDraft: bgColor || '',
+                      },
+                    });
+                    autoSaveSavedAtRef.current = Date.now();
+                    setAutoSaveStatus('saved');
+                    setTimeout(() => {
+                      if (Date.now() - autoSaveSavedAtRef.current >= 3000) {
+                        setAutoSaveStatus('idle');
+                      }
+                    }, 3000);
+                  } catch (err) {
+                    setAutoSaveStatus('error');
+                  }
+                }}
+                style={{
+                  padding:'5px 10px',fontSize:10,fontWeight:600,
+                  background:'var(--ink2)',color:'#fff',
+                  border:'none',borderRadius:4,cursor:'pointer',
+                  letterSpacing:'0.05em',
+                }}>今すぐ保存</button>
             )}
             {mode === 'edit' && (
               <button
@@ -11889,14 +12031,18 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api}) {
             </div>
 
             {(() => {
-              // 公開版のオーバーレイをパース
+              // 公開版のオーバーレイをパース (publish 直後はローカル値を優先)
               let publishedOverlay = [];
-              try {
-                const ov = slide?.overlay;
-                if (Array.isArray(ov)) publishedOverlay = ov;
-                else if (typeof ov === 'string' && ov) publishedOverlay = JSON.parse(ov);
-              } catch (e) { publishedOverlay = []; }
-              const publishedBgColor = slide?.bgColor || '';
+              if (publishedOverlayLocal !== null) {
+                publishedOverlay = publishedOverlayLocal;
+              } else {
+                try {
+                  const ov = slide?.overlay;
+                  if (Array.isArray(ov)) publishedOverlay = ov;
+                  else if (typeof ov === 'string' && ov) publishedOverlay = JSON.parse(ov);
+                } catch (e) { publishedOverlay = []; }
+              }
+              const publishedBgColor = (publishedBgColorLocal !== null) ? publishedBgColorLocal : (slide?.bgColor || '');
               return (
                 <div ref={liveWrapRef} style={{
                   position:'relative',
