@@ -12669,6 +12669,13 @@ function PageHomepageSettings(){
     { key: 'terms_en',   label: '本文 (英)',    ph: 'These terms govern your use of our service...', type: 'textarea' },
     { key: 'terms_easy', label: '本文 (やさしい日本語)', ph: 'このサービスを つかうための ルールです...', type: 'textarea' },
     { key: 'terms_updated_at', label: '最終更新日', ph: '2026-05-01', type: 'text' },
+
+    // (Phase 15.S10 #1) イベントポリシー (デフォルト) — 各イベントで上書き可能
+    { section: 'Event Policy (Default)', label: 'イベントポリシー (デフォルト)', help: '各イベントごとに「ポリシー」フィールドで上書きできます。 ここに入力した値は、 イベント側で未設定の場合のデフォルトとして使われます (将来拡張用)。' },
+    { key: 'event_policy_default_ja',   label: '本文 (日)',    ph: '当イベントの参加にあたり、 以下にご同意ください...', type: 'textarea' },
+    { key: 'event_policy_default_en',   label: '本文 (英)',    ph: 'By participating in this event, you agree to the following...', type: 'textarea' },
+    { key: 'event_policy_default_easy', label: '本文 (やさしい日本語)', ph: 'このイベントに さんかするとき、 つぎのことに どうい してください...', type: 'textarea' },
+    { key: 'event_policy_default_updated_at', label: '最終更新日', ph: '2026-05-01', type: 'text' },
   ];
 
   async function fetchAll() {
@@ -12763,16 +12770,33 @@ function PageHomepageSettings(){
           if (def.section) {
             return (
               <div key={'sec-'+i} style={{
-                fontSize:11,
-                fontWeight:700,
-                letterSpacing:'0.18em',
-                color:'var(--ink2)',
-                textTransform:'uppercase',
                 paddingTop: i === 0 ? 0 : 16,
                 borderTop: i === 0 ? 'none' : '1px solid var(--line)',
                 marginTop: i === 0 ? 0 : 12,
               }}>
-                {def.section} <span style={{marginLeft:8, color:'var(--ink3)', fontWeight:400, textTransform:'none', letterSpacing:0}}>{def.label}</span>
+                <div style={{
+                  fontSize:11,
+                  fontWeight:700,
+                  letterSpacing:'0.18em',
+                  color:'var(--ink2)',
+                  textTransform:'uppercase',
+                }}>
+                  {def.section} <span style={{marginLeft:8, color:'var(--ink3)', fontWeight:400, textTransform:'none', letterSpacing:0}}>{def.label}</span>
+                </div>
+                {def.help && (
+                  <div style={{
+                    fontSize:12,
+                    color:'var(--ink3)',
+                    fontWeight:400,
+                    letterSpacing:0,
+                    marginTop:6,
+                    lineHeight:1.6,
+                    background:'rgba(28, 137, 232, 0.05)',
+                    border:'1px solid rgba(28, 137, 232, 0.15)',
+                    padding:'10px 14px',
+                    borderRadius:6,
+                  }}>{def.help}</div>
+                )}
               </div>
             );
           }
@@ -13108,16 +13132,33 @@ function PageHomepageMobileSettings(){
           if (def.section) {
             return (
               <div key={'sec-'+i} style={{
-                fontSize:11,
-                fontWeight:700,
-                letterSpacing:'0.18em',
-                color:'var(--ink2)',
-                textTransform:'uppercase',
                 paddingTop: i === 0 ? 0 : 16,
                 borderTop: i === 0 ? 'none' : '1px solid var(--line)',
                 marginTop: i === 0 ? 0 : 12,
               }}>
-                {def.section} <span style={{marginLeft:8, color:'var(--ink3)', fontWeight:400, textTransform:'none', letterSpacing:0}}>{def.label}</span>
+                <div style={{
+                  fontSize:11,
+                  fontWeight:700,
+                  letterSpacing:'0.18em',
+                  color:'var(--ink2)',
+                  textTransform:'uppercase',
+                }}>
+                  {def.section} <span style={{marginLeft:8, color:'var(--ink3)', fontWeight:400, textTransform:'none', letterSpacing:0}}>{def.label}</span>
+                </div>
+                {def.help && (
+                  <div style={{
+                    fontSize:12,
+                    color:'var(--ink3)',
+                    fontWeight:400,
+                    letterSpacing:0,
+                    marginTop:6,
+                    lineHeight:1.6,
+                    background:'rgba(28, 137, 232, 0.05)',
+                    border:'1px solid rgba(28, 137, 232, 0.15)',
+                    padding:'10px 14px',
+                    borderRadius:6,
+                  }}>{def.help}</div>
+                )}
               </div>
             );
           }
