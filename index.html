@@ -6752,10 +6752,7 @@ function PayPayLinkManager({ eventId, links, activeLink, onRefresh }) {
   const [newMemo, setNewMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // (Phase 15.S44) 発行・編集権限: 代表 + マネージャー のみ
-  const currentRole = (window.currentUser && window.currentUser.member && window.currentUser.member.role) || '';
-  const canManageLinks = ['代表', 'マネージャー', 'オーナー', '管理者', 'owner', 'admin'].includes(currentRole);
-
+  // (Phase 15.S47) 発行・編集権限: 全 admin (Admin ダッシュボードに入れる人なら誰でも)
   const handleCreate = async () => {
     if (!newUrl) return;
     if (!/^https?:\/\//i.test(newUrl)) {
@@ -6806,16 +6803,8 @@ function PayPayLinkManager({ eventId, links, activeLink, onRefresh }) {
         </div>
       )}
 
-      {/* 新規発行フォーム — 代表/マネージャー のみ */}
-      {!canManageLinks ? (
-        <div style={{
-          padding:'10px 14px', fontSize:11, color:'var(--ink3)',
-          background:'var(--bg2)', borderRadius:6,
-          fontStyle:'italic',
-        }}>
-          🔒 決済リンクの発行・編集は 代表 または マネージャー のみ可能です
-        </div>
-      ) : !showForm ? (
+      {/* (Phase 15.S47) 新規発行フォーム — 全 admin が発行可能 */}
+      {!showForm ? (
         <button onClick={() => setShowForm(true)} className="btn-primary" style={{
           padding:'8px 16px', fontSize:12, fontWeight:600,
         }}>
@@ -6915,8 +6904,9 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
     return status === '決済済み' || (status === '確定' && paid);
   });
 
+  // (Phase 15.S47) GAS が返す `id` キーで検索 (旧 UserID/userId は互換)
   const findUser = (userId) => participants.find(p =>
-    (p.UserID || p.userId) === userId
+    (p.id || p.UserID || p.userId) === userId
   ) || {};
 
   const toggleSelect = (regId) => {
@@ -6990,15 +6980,16 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
           border:'1px solid var(--line)', borderRadius:6, overflow:'hidden',
         }}>
           {pending.map(r => {
-            const regId = r.RegID || r.regId;
-            const userId = r.UserID || r.userId;
+            // (Phase 15.S47) GAS が返す r.userName 等を優先 (findUser fallback はキャッシュ等で空のとき用)
+            const regId = r.id || r.RegID || r.regId;
+            const userId = r.userId || r.UserID;
             const user = findUser(userId);
-            const userName = user['名前'] || user.name || '';
-            const userKana = user['フリガナ'] || user.kana || '';
-            const userEmail = user['メール'] || user.email || '';
-            const userPayPayName = user['PayPay表示名'] || user.paypayDisplayName || '';
-            const memo = r['備考'] || r.memo || '';
-            const amount = Number(r['金額'] || r.amount) || 0;
+            const userName = r.userName || user.name || user['名前'] || '';
+            const userKana = r.userKana || user.kana || user['カナ'] || '';
+            const userEmail = r.userEmail || user.email || user['メール'] || '';
+            const userPayPayName = r.userPaypayDisplayName || user.paypayDisplayName || user['PayPay表示名'] || '';
+            const memo = r.note || r['備考'] || r.memo || '';
+            const amount = Number(r.amount || r['金額']) || 0;
             const isSel = selected.has(regId);
             return (
               <div key={regId} style={{
@@ -7013,25 +7004,40 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
                   onChange={() => toggleSelect(regId)}
                   style={{width:16, height:16, cursor:'pointer'}}/>
                 <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>
-                    {userName} {userKana && <span style={{fontSize:11, fontWeight:400, color:'var(--ink4)'}}>({userKana})</span>}
-                  </div>
-                  {/* (Phase 15.S46) PayPay 表示名 を強調表示 */}
-                  {userPayPayName && (
+                  {/* (Phase 15.S47) PayPay 表示名を主役に — 照合のため */}
+                  {userPayPayName ? (
                     <div style={{
-                      fontSize:11, fontWeight:600, color:'#92400e',
-                      marginTop:3, padding:'2px 8px',
+                      fontSize:14, fontWeight:700, color:'#92400e',
+                      display:'inline-flex', alignItems:'center', gap:6,
+                      padding:'4px 10px',
                       background:'#fff5e6',
                       border:'1px solid #fde68a',
+                      borderRadius:4,
+                      marginBottom:5,
+                    }}>
+                      <span style={{fontSize:13}}>💰</span>
+                      <span>{userPayPayName}</span>
+                    </div>
+                  ) : (
+                    <div style={{
+                      fontSize:11, fontWeight:600, color:'#991b1b',
+                      padding:'3px 8px',
+                      background:'#fef2f2',
+                      border:'1px solid #fecaca',
                       borderRadius:3,
                       display:'inline-block',
+                      marginBottom:5,
                     }}>
-                      💰 PayPay: {userPayPayName}
+                      ⚠ PayPay 表示名 未登録 — 照合困難
                     </div>
                   )}
-                  <div style={{fontSize:10, color:'var(--ink4)', marginTop:2, display:'flex', gap:12, flexWrap:'wrap'}}>
+                  {/* 氏名 (補足) */}
+                  <div style={{fontSize:12, color:'var(--ink2)', fontWeight:500}}>
+                    {userName} {userKana && <span style={{fontSize:10, fontWeight:400, color:'var(--ink4)'}}>({userKana})</span>}
+                  </div>
+                  <div style={{fontSize:10, color:'var(--ink4)', marginTop:3, display:'flex', gap:12, flexWrap:'wrap'}}>
                     <span style={{fontFamily:'monospace'}}>{regId}</span>
-                    <span>¥{amount.toLocaleString()}</span>
+                    <span style={{fontWeight:600, color:'#92400e'}}>¥{amount.toLocaleString()}</span>
                     {userEmail && <span>{userEmail}</span>}
                   </div>
                 </div>
@@ -7088,23 +7094,46 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
           </summary>
           <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:4}}>
             {paidList.map(r => {
-              const regId = r.RegID || r.regId;
-              const userId = r.UserID || r.userId;
+              const regId = r.id || r.RegID || r.regId;
+              const userId = r.userId || r.UserID;
               const user = findUser(userId);
-              const userName = user['名前'] || user.name || '';
+              const userName = r.userName || user.name || user['名前'] || '';
+              const userPayPayName = r.userPaypayDisplayName || user.paypayDisplayName || user['PayPay表示名'] || '';
+              const amount = Number(r.amount || r['金額']) || 0;
               const confirmedAt = r['決済確認日時'] || '';
               const emailSentAt = r['決済完了メール送信'] || '';
               return (
                 <div key={regId} style={{
-                  padding:'8px 12px',
+                  padding:'10px 12px',
                   background:'#f0fdf4',
                   border:'1px solid #bbf7d0',
                   borderRadius:4,
                   fontSize:11,
-                  display:'flex', alignItems:'center', gap:10,
+                  display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
                 }}>
-                  <span style={{color:'#166534', fontSize:12}}>✓</span>
-                  <span style={{flex:1, color:'var(--ink2)'}}>{userName}</span>
+                  <span style={{color:'#166534', fontSize:14, flexShrink:0}}>✓</span>
+                  <div style={{flex:1, minWidth:0}}>
+                    {/* PayPay 表示名 を主役 */}
+                    {userPayPayName ? (
+                      <div style={{
+                        fontSize:13, fontWeight:700, color:'#92400e',
+                        display:'inline-flex', alignItems:'center', gap:5,
+                      }}>
+                        <span>💰</span>
+                        <span>{userPayPayName}</span>
+                      </div>
+                    ) : (
+                      <span style={{fontSize:11, color:'var(--ink4)', fontStyle:'italic'}}>
+                        (PayPay 表示名なし)
+                      </span>
+                    )}
+                    <div style={{fontSize:10, color:'var(--ink3)', marginTop:2}}>
+                      {userName}
+                    </div>
+                  </div>
+                  <span style={{color:'#166534', fontSize:11, fontFamily:'monospace', fontWeight:600}}>
+                    ¥{amount.toLocaleString()}
+                  </span>
                   <span style={{color:'var(--ink4)', fontSize:10}}>{(confirmedAt || '').toString().slice(0,10)}</span>
                   {!emailSentAt && (
                     <button onClick={() => handleSendEmailOnly(regId)}
