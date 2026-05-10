@@ -2334,7 +2334,168 @@ function EventMapEmbed({venue, address, height = 200, mode = 'search'}){
   );
 }
 
-function EventCard({e, onDelete, onMapClick}){
+// (Phase 15.S41) 中止/延期 モーダル
+function CancelPostponeModal({ target, onSubmit, onClose }) {
+  const isCancel = target.mode === 'cancel';
+  const isPostpone = target.mode === 'postpone';
+  const ev = target.event;
+  const [reason, setReason] = React.useState('');
+  const [customMessage, setCustomMessage] = React.useState('');
+  const [newDate, setNewDate] = React.useState('');
+  const [newTime, setNewTime] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [confirmed, setConfirmed] = React.useState(false);
+
+  const title = isCancel ? `イベントを中止` : `イベントを延期`;
+  const titleColor = isCancel ? '#dc2626' : '#b45309';
+  const icon = isCancel ? 'x' : 'clock';
+
+  async function handleSubmit() {
+    if (isPostpone && !newDate) {
+      window.toast.error('新しい日付を入力してください');
+      return;
+    }
+    if (!confirmed) {
+      window.toast.error('チェックボックスを確認してください');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        reason: reason.trim(),
+        customMessage: customMessage.trim(),
+        newDate: newDate || '',
+        newTime: newTime || '',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onClose}>
+      <div className="card" style={{width:680,maxWidth:'94%',maxHeight:'90vh',overflow:'auto'}} onClick={(e)=>e.stopPropagation()}>
+        <div className="card-head">
+          <div className="card-title" style={{color: titleColor}}>
+            <Icon n={icon} s={16}/> {title}: {ev.title}
+          </div>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose} disabled={submitting}>
+            <Icon n="x" s={14}/>
+          </button>
+        </div>
+
+        <div className="card-body stack" style={{gap:14}}>
+          {/* 警告ボックス */}
+          <div style={{
+            padding:12,
+            background: isCancel ? '#fef2f2' : '#fffbeb',
+            border: `1px solid ${isCancel ? '#fecaca' : '#fed7aa'}`,
+            borderRadius:6,
+            fontSize:12,
+            color: isCancel ? '#991b1b' : '#92400e',
+          }}>
+            <div style={{fontWeight:600, marginBottom:6}}>
+              {isCancel ? '⚠ この操作は元に戻せません' : '⚠ この操作で申込者全員に通知が届きます'}
+            </div>
+            <ul style={{margin:0, paddingLeft:18, lineHeight:1.6}}>
+              <li>申込済みの参加者全員に通知メールが送信されます</li>
+              {isCancel && <li>イベントのステータスが「中止」になります</li>}
+              {isCancel && <li>このイベントの PayPay 決済リンクが全て無効化されます</li>}
+              {isPostpone && <li>イベントのステータスが「延期」になり、新しい日程が表示されます</li>}
+            </ul>
+          </div>
+
+          {/* イベント情報サマリ */}
+          <div style={{padding:12, background:'var(--bg2)', borderRadius:6, fontSize:12}}>
+            <div style={{fontWeight:600, marginBottom:4}}>{ev.title}</div>
+            <div style={{color:'var(--ink4)', fontSize:11}}>
+              {ev.date} {ev.time} · {ev.venue || '会場未設定'} · 申込 {ev.registered || 0} 名
+            </div>
+          </div>
+
+          {/* 延期: 新日程 */}
+          {isPostpone && (
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+              <div className="field">
+                <label className="field-label">新しい日付 <span className="field-req">*</span></label>
+                <input type="date" className="input" value={newDate} onChange={e=>setNewDate(e.target.value)} disabled={submitting}/>
+              </div>
+              <div className="field">
+                <label className="field-label">新しい時間 (任意)</label>
+                <input className="input" value={newTime} onChange={e=>setNewTime(e.target.value)} placeholder="例: 14:00-17:00" disabled={submitting}/>
+              </div>
+            </div>
+          )}
+
+          {/* 理由 */}
+          <div className="field">
+            <label className="field-label">理由 (内部記録用、任意)</label>
+            <input className="input" value={reason} onChange={e=>setReason(e.target.value)} placeholder="例: 会場都合 / 講師の急病 / 天候不良" disabled={submitting}/>
+            <div className="field-hint">参加者にも通知メール内で表示されます</div>
+          </div>
+
+          {/* カスタムメッセージ */}
+          <div className="field">
+            <label className="field-label">追加メッセージ (任意)</label>
+            <textarea className="input" style={{height:120, padding:12, resize:'vertical', fontSize:13, lineHeight:1.6}}
+              value={customMessage} onChange={e=>setCustomMessage(e.target.value)}
+              placeholder="参加者へのお詫びや、 振替案内、 連絡先など。 メール本文の末尾に追加されます。"
+              disabled={submitting}
+            />
+          </div>
+
+          {/* メールプレビュー */}
+          <details style={{padding:10, background:'var(--bg2)', borderRadius:6, fontSize:12}}>
+            <summary style={{cursor:'pointer', fontWeight:600, color:'var(--ink3)'}}>📧 送信されるメールのプレビュー (日本語版)</summary>
+            <pre style={{whiteSpace:'pre-wrap', fontFamily:'inherit', fontSize:11, color:'var(--ink4)', marginTop:10, lineHeight:1.7}}>
+{`件名: ${isCancel ? '【中止】' : '【延期】'}${ev.title}
+
+[参加者名] さん
+
+${isCancel
+  ? '誠に申し訳ございませんが、 イベントが中止となりました。'
+  : '誠に申し訳ございませんが、 イベントが延期となりました。 新しい日程は下記の通りです。'}
+
+イベント名: ${ev.title}
+元の日程: ${ev.date} ${ev.time || ''}
+${isPostpone && newDate ? `\n== 新しい日程 ==\n日付: ${newDate} ${newTime}` : ''}
+${isCancel && (ev.feeType === 'paid' || (Number(ev.fee) > 0 && ev.feeType !== 'free')) ? `\n== 返金について ==\nお支払いいただいた参加費は別途返金いたします。 7営業日以内に運営より個別にご連絡いたします。` : ''}
+${reason ? `\n== 理由 ==\n${reason}` : ''}
+${customMessage ? `\n--\n${customMessage}` : ''}
+
+--
+connec+a 運営チーム`}
+            </pre>
+          </details>
+
+          {/* 確認チェックボックス */}
+          <label style={{display:'flex', alignItems:'flex-start', gap:8, padding:10, background:'var(--bg2)', borderRadius:6, cursor:'pointer', fontSize:12}}>
+            <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} disabled={submitting} style={{marginTop:2}}/>
+            <span>
+              {isCancel
+                ? '上記内容で中止することを確認し、 申込者全員に通知メールが送信されることに同意します'
+                : '上記内容で延期することを確認し、 申込者全員に通知メールが送信されることに同意します'}
+            </span>
+          </label>
+        </div>
+
+        <div style={{padding:14, borderTop:'1px solid var(--line)', display:'flex', justifyContent:'flex-end', gap:8}}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>キャンセル</button>
+          <button
+            className="btn"
+            onClick={handleSubmit}
+            disabled={submitting || !confirmed || (isPostpone && !newDate)}
+            style={{background: titleColor, color:'#fff', borderColor: titleColor}}
+          >
+            {submitting ? '処理中...' : (isCancel ? '中止して通知' : '延期して通知')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EventCard({e, onDelete, onMapClick, onCancel, onPostpone}){
   const cap = e.capacity || 0;
   const reg = e.registered || 0;
   const pct = cap > 0 ? Math.round(reg / cap * 100) : 0;
@@ -2346,10 +2507,15 @@ function EventCard({e, onDelete, onMapClick}){
   const isMulti = e.format === 'multi';
   const sessionCount = e.sessionCount || 0;
 
+  // (Phase 15.S41) 中止/延期 ステータス対応
   const statusBadge = e.status === "公開中"   ? "badge-green"
                     : e.status === "満員"     ? "badge-coral"
+                    : e.status === "中止"     ? "badge-coral"
+                    : e.status === "延期"     ? "badge-amber"
                     : e.status === "アーカイブ" ? "badge-ink"
                     : "badge-ink";
+  const isCancelled = e.status === '中止';
+  const isPostponed = e.status === '延期';
 
   return (
     <div className="card" style={{overflow:'hidden',cursor:'pointer',transition:'box-shadow .15s', opacity: e.status === "アーカイブ" ? 0.6 : 1}}>
@@ -2424,6 +2590,17 @@ function EventCard({e, onDelete, onMapClick}){
             {onDelete && e.status !== "アーカイブ" && window.canDo('events.delete') && (
               <button className="btn btn-soft btn-sm btn-icon" title="アーカイブ" onClick={(ev)=>{ev.stopPropagation(); onDelete(e.id);}}>
                 <Icon n="trash" s={12}/>
+              </button>
+            )}
+            {/* (Phase 15.S41) 中止/延期 ボタン (アーカイブ・中止以外で表示) */}
+            {onPostpone && e.status !== "アーカイブ" && e.status !== "中止" && window.canDo('events.update') && (
+              <button className="btn btn-soft btn-sm btn-icon" title="延期" onClick={(ev)=>{ev.stopPropagation(); onPostpone();}} style={{color:'#b45309'}}>
+                <Icon n="clock" s={12}/>
+              </button>
+            )}
+            {onCancel && e.status !== "アーカイブ" && e.status !== "中止" && window.canDo('events.delete') && (
+              <button className="btn btn-soft btn-sm btn-icon" title="中止" onClick={(ev)=>{ev.stopPropagation(); onCancel();}} style={{color:'#dc2626'}}>
+                <Icon n="x" s={12}/>
               </button>
             )}
           </div>
@@ -2576,6 +2753,47 @@ function PageEvents(){
     }
   }
 
+  // (Phase 15.S41) 中止/延期 モーダル制御
+  const [cancelPostponeTarget, setCancelPostponeTarget] = useState(null);  // { event, mode: 'cancel'|'postpone' }
+
+  async function handleCancelPostponeSubmit(payload) {
+    const target = cancelPostponeTarget;
+    if (!target) return;
+    const adminMemberId = (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '';
+    try {
+      let result;
+      if (target.mode === 'cancel') {
+        result = await window.postData('cancelEvent', {
+          eventId: target.event.id,
+          reason: payload.reason || '',
+          customMessage: payload.customMessage || '',
+          adminMemberId,
+        });
+        const msg = `中止処理完了 — ${result.notified} 名に通知メール送信、 ${result.paymentLinksDisabled} 個の決済リンクを無効化${result.failed > 0 ? ` (失敗 ${result.failed} 件)` : ''}`;
+        window.toast.success(msg);
+        setEvents(prev => prev.map(e => e.id === target.event.id ? {...e, status: '中止'} : e));
+      } else {
+        if (!payload.newDate) { window.toast.error('新しい日付を入力してください'); return; }
+        result = await window.postData('postponeEvent', {
+          eventId: target.event.id,
+          newDate: payload.newDate,
+          newTime: payload.newTime || '',
+          reason: payload.reason || '',
+          customMessage: payload.customMessage || '',
+          adminMemberId,
+        });
+        const msg = `延期処理完了 — ${result.notified} 名に通知メール送信${result.failed > 0 ? ` (失敗 ${result.failed} 件)` : ''}`;
+        window.toast.success(msg);
+        setEvents(prev => prev.map(e => e.id === target.event.id
+          ? {...e, status: '延期', postponedDate: payload.newDate, postponedTime: payload.newTime || ''}
+          : e));
+      }
+      setCancelPostponeTarget(null);
+    } catch (err) {
+      window.toast.error('処理失敗: ' + (err.message || err));
+    }
+  }
+
   // フィルタ済みイベント
   const filtered = events.filter(e => {
     // タブフィルタ
@@ -2668,7 +2886,12 @@ function PageEvents(){
 
       {!loading && filtered.length > 0 && view === "grid" && (
         <div className="grid-3">
-          {filtered.map(e => <EventCard key={e.id} e={e} onDelete={handleDelete} onMapClick={setMapEvent}/>)}
+          {filtered.map(e => <EventCard key={e.id} e={e}
+            onDelete={handleDelete}
+            onMapClick={setMapEvent}
+            onCancel={() => setCancelPostponeTarget({ event: e, mode: 'cancel' })}
+            onPostpone={() => setCancelPostponeTarget({ event: e, mode: 'postpone' })}
+          />)}
         </div>
       )}
 
@@ -2744,6 +2967,15 @@ function PageEvents(){
       )}
 
       {!loading && filtered.length > 0 && view === "cal" && <EventCalendar events={filtered}/>}
+
+      {/* (Phase 15.S41) 中止/延期 モーダル */}
+      {cancelPostponeTarget && (
+        <CancelPostponeModal
+          target={cancelPostponeTarget}
+          onSubmit={handleCancelPostponeSubmit}
+          onClose={() => setCancelPostponeTarget(null)}
+        />
+      )}
 
       {/* 地図モーダル */}
       {mapEvent && (
@@ -13319,7 +13551,14 @@ function PageHomepageSettings(){
     { key: 'footer_tagline_ja',  label: 'キャッチコピー (日)', ph: '東京を、もうひとつのふるさとに。', type: 'text' },
     { key: 'footer_tagline_easy',label: 'キャッチコピー (やさしい日本語)', ph: 'とうきょうを、もうひとつの ふるさとに。', type: 'text' },
     { key: 'footer_est_year',    label: '設立年 (EST.)', ph: '2018', type: 'text' },
-    { key: 'footer_copyright',   label: '著作権表記', ph: '© connec+a 2026', type: 'text' },
+    // (Phase 15.S40) 法人情報 + 著作権を Admin 編集可能に
+    { key: 'footer_legal_name_ja',     label: '法人名 (日)', ph: '一般社団法人 connec+a', type: 'text' },
+    { key: 'footer_legal_name_en',     label: '法人名 (英)', ph: 'General Incorporated Association connec+a', type: 'text' },
+    { key: 'footer_legal_name_easy',   label: '法人名 (やさしい日本語)', ph: 'いっぱん しゃだん ほうじん connec+a', type: 'text' },
+    { key: 'footer_legal_address_ja',   label: '所在地 (日)', ph: '東京都', type: 'text' },
+    { key: 'footer_legal_address_en',   label: '所在地 (英)', ph: 'Tokyo, Japan', type: 'text' },
+    { key: 'footer_legal_address_easy', label: '所在地 (やさしい日本語)', ph: 'とうきょう', type: 'text' },
+    { key: 'footer_copyright',   label: '著作権表記', ph: '© 2018-2026 CONNEC+A · ALL RIGHTS RESERVED', type: 'text', help: '空欄の場合は自動で年が更新されます' },
 
     // (Part D) プライバシーポリシー — 申込・登録時に同意必須
     { section: 'Privacy Policy', label: 'プライバシーポリシー (個人情報の取扱)' },
@@ -13372,6 +13611,24 @@ function PageHomepageSettings(){
     { key: 'payment_complete_email_body_en',      label: '本文 (英)',     ph: 'Dear {userName},\n\nThank you for registering...', type: 'textarea' },
     { key: 'payment_complete_email_subject_easy', label: '件名 (やさしい日本語)', ph: '【connec+a】{eventTitle} の しはらいを かくにん しました', type: 'text' },
     { key: 'payment_complete_email_body_easy',    label: '本文 (やさしい日本語)', ph: '{userName} さま\n\nさんか ありがとうございます...', type: 'textarea' },
+
+    // (Phase 15.S41) 中止/延期 通知メール テンプレ
+    { section: 'Cancel / Postpone Mail', label: '中止/延期 通知メール テンプレ', help: 'イベント中止または延期時に申込者全員に送られるメール。 空欄の場合はデフォルト文言が使われます。' },
+    { key: 'mail_cancel_subject_ja',   label: '中止: 件名 (日)',     ph: '【中止】{eventTitle}', type: 'text' },
+    { key: 'mail_cancel_body_ja',      label: '中止: 本文 (日)',     ph: '誠に申し訳ございませんが、 イベントが中止となりました。', type: 'textarea' },
+    { key: 'mail_cancel_subject_en',   label: '中止: 件名 (英)',     ph: '[Cancelled] {eventTitle}', type: 'text' },
+    { key: 'mail_cancel_body_en',      label: '中止: 本文 (英)',     ph: 'We regret to inform you that the event has been cancelled.', type: 'textarea' },
+    { key: 'mail_cancel_subject_easy', label: '中止: 件名 (やさしい日本語)', ph: '【ちゅうし】{eventTitle}', type: 'text' },
+    { key: 'mail_cancel_body_easy',    label: '中止: 本文 (やさしい日本語)', ph: 'もうしわけありません。 イベントが ちゅうしに なりました。', type: 'textarea' },
+    { key: 'mail_cancel_refund_ja',    label: '返金記載 (日)',        ph: 'お支払いいただいた参加費は別途返金いたします。 7営業日以内に運営より個別にご連絡いたします。', type: 'textarea', help: '有料イベントを中止した時のみメールに自動追加されます' },
+    { key: 'mail_cancel_refund_en',    label: '返金記載 (英)',        ph: 'A refund will be issued separately. Our staff will contact you within 7 business days.', type: 'textarea' },
+    { key: 'mail_cancel_refund_easy',  label: '返金記載 (やさしい日本語)', ph: 'はらった おかねは あとで かえします。 7にち いない に スタッフから れんらく します。', type: 'textarea' },
+    { key: 'mail_postpone_subject_ja',   label: '延期: 件名 (日)',     ph: '【延期】{eventTitle}', type: 'text' },
+    { key: 'mail_postpone_body_ja',      label: '延期: 本文 (日)',     ph: '誠に申し訳ございませんが、 イベントが延期となりました。 新しい日程は下記の通りです。', type: 'textarea' },
+    { key: 'mail_postpone_subject_en',   label: '延期: 件名 (英)',     ph: '[Postponed] {eventTitle}', type: 'text' },
+    { key: 'mail_postpone_body_en',      label: '延期: 本文 (英)',     ph: 'We regret to inform you that the event has been postponed. Please find the new schedule below.', type: 'textarea' },
+    { key: 'mail_postpone_subject_easy', label: '延期: 件名 (やさしい日本語)', ph: '【えんき】{eventTitle}', type: 'text' },
+    { key: 'mail_postpone_body_easy',    label: '延期: 本文 (やさしい日本語)', ph: 'イベントの 日が かわりました。 あたらしい 日は したに かいてあります。', type: 'textarea' },
   ];
 
   async function fetchAll() {
