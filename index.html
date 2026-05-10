@@ -13591,9 +13591,18 @@ function PageHomepageMobileSettings(){
   const SETTING_DEFS = [
     // === Header ===
     { section: 'Header', label: 'ヘッダー (上部)' },
-    { key: 'home_header_tagline_ja',   label: 'タグライン (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_ja',   label: 'タグライン (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: 'ロゴの下に小さく出る常時表示テキスト (例: connec+a hub)' },
     { key: 'home_header_tagline_en',   label: 'タグライン (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
     { key: 'home_header_tagline_easy', label: 'タグライン (やさしい日本語)', ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+
+    // === Opening Curtain (Phase 15.S38) ===
+    { section: 'Opening (起動演出)', label: 'オープニング画面', help: 'サイトを開いた瞬間の演出画面 (1.9秒間表示)' },
+    { key: 'opening_main_ja',          label: 'メインコピー (日)',   ph: 'WELCOME TO TOKYO', type: 'text' },
+    { key: 'opening_main_en',          label: 'メインコピー (英)',   ph: 'WELCOME TO TOKYO', type: 'text' },
+    { key: 'opening_main_easy',        label: 'メインコピー (やさしい日本語)', ph: 'ようこそ とうきょうへ', type: 'text' },
+    { key: 'opening_subtitle_ja',      label: 'サブタイトル (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: '画面下に小さく表示される装飾テキスト' },
+    { key: 'opening_subtitle_en',      label: 'サブタイトル (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'opening_subtitle_easy',    label: 'サブタイトル (やさしい日本語)', ph: '2018 ねん から · とうきょう', type: 'text' },
 
     // === Hero ===
     { section: 'Hero', label: 'メインヒーロー' },
