@@ -610,6 +610,17 @@ svg{display:block}
 
   /* モーダル: 全画面に近く */
   .modal{width:100%;max-width:none;height:100%;max-height:none;border-radius:0}
+  /* (Phase 15.S11 B3) modal-backdrop の中身にも適用 */
+  .modal-backdrop > div:not(.modal-backdrop){
+    max-width:100% !important;
+    max-height:100vh !important;
+    width:100%;
+  }
+  /* 大きなモーダル (Hero エディタ等) は overflow scroll */
+  .modal-content,
+  [class*="modal-"]:not(.modal-backdrop){
+    -webkit-overflow-scrolling: touch;
+  }
 
   /* フォーム入力: 16px 以上にして iOS のズーム防止 */
   .input,.input-lg{font-size:16px !important}
@@ -729,6 +740,7 @@ svg{display:block}
       <a href="#todo" class="nav-item" data-nav="todo"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Todo</a>
       <a href="#photos" class="nav-item" data-nav="photos"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>写真</a>
       <a href="#payments" class="nav-item" data-nav="payments"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>決済・精算</a>
+      <a href="#paypay" class="nav-item" data-nav="paypay"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a3 3 0 0 1 0 6H9V8zm0 6v4"/></svg>PayPay 決済管理</a>
       <a href="#departments" class="nav-item" data-nav="departments"><svg class="ic" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>部署 / チーム</a>
       <a href="#org" class="nav-item" data-nav="org"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>団体紹介</a>
       <a href="#ads" class="nav-item" data-nav="ads"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>広告</a>
@@ -4195,12 +4207,25 @@ function PageMail(){
 /**
  * News 作成・編集モーダル。
  */
+// (Phase 15.S35) 画像URLを表示可能な形式に正規化 (Google Drive 等の対応)
+function normalizeImageUrlForPreview(url) {
+  if (!url || typeof url !== 'string') return url || '';
+  let m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w800';
+  m = url.match(/drive\.google\.com\/uc.*?[?&]id=([^&]+)/);
+  if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w800';
+  return url;
+}
+
 function NewsModal({mode, initialValues, onSave, onCancel}){
   const init = initialValues || {};
   const [title, setTitle] = useState(init.title || "");
   const [category, setCategory] = useState(init.category || "お知らせ");
   const [body, setBody] = useState(init.body || "");
   const [status, setStatus] = useState(init.status || "下書き");
+  // (Phase 15.S35) 画像 URL
+  const [coverImageUrl, setCoverImageUrl] = useState(init.coverImageUrl || "");
+  const [thumbnailImageUrl, setThumbnailImageUrl] = useState(init.thumbnailImageUrl || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -4215,6 +4240,8 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
         category,
         body,
         status: publishStatus || status,
+        coverImageUrl: coverImageUrl.trim(),
+        thumbnailImageUrl: thumbnailImageUrl.trim(),
       });
     } catch (err) {
       setError(err.message || String(err));
@@ -4263,6 +4290,29 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
             <label className="field-label">本文 <span className="field-req">*</span></label>
             <textarea className="input" style={{height:280,padding:12,resize:'vertical',fontSize:13,lineHeight:1.6}} value={body} onChange={e=>setBody(e.target.value)} placeholder="記事本文を入力..."/>
             <div className="field-hint">Markdown 記法に対応</div>
+          </div>
+          {/* (Phase 15.S35) 画像 URL */}
+          <div className="grid-2" style={{gap:14}}>
+            <div className="field">
+              <label className="field-label">カバー画像URL</label>
+              <input className="input" value={coverImageUrl} onChange={e=>setCoverImageUrl(e.target.value)} placeholder="https://drive.google.com/... もしくは直接URL"/>
+              <div className="field-hint">記事ヒーロー (大きい画像)。 Drive リンクも可</div>
+              {coverImageUrl && (
+                <div style={{marginTop:8}}>
+                  <img src={normalizeImageUrlForPreview(coverImageUrl)} alt="" style={{width:'100%', maxHeight:120, objectFit:'cover', border:'1px solid var(--line)', borderRadius:4}} onError={(e)=>{e.currentTarget.style.display='none';}}/>
+                </div>
+              )}
+            </div>
+            <div className="field">
+              <label className="field-label">サムネイル画像URL <span style={{color:'var(--ink-mute,#6b7280)',fontSize:11}}>(任意)</span></label>
+              <input className="input" value={thumbnailImageUrl} onChange={e=>setThumbnailImageUrl(e.target.value)} placeholder="一覧カード用 (空ならカバー画像を使用)"/>
+              <div className="field-hint">小さいサムネ。 空なら カバー画像が使われます</div>
+              {thumbnailImageUrl && (
+                <div style={{marginTop:8}}>
+                  <img src={normalizeImageUrlForPreview(thumbnailImageUrl)} alt="" style={{width:'100%', maxHeight:80, objectFit:'cover', border:'1px solid var(--line)', borderRadius:4}} onError={(e)=>{e.currentTarget.style.display='none';}}/>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div style={{padding:14,borderTop:'1px solid var(--line)',display:'flex',justifyContent:'space-between',gap:8}}>
@@ -6234,6 +6284,557 @@ function PaymentModal({events, participants, onSave, onCancel}){
   );
 }
 
+// (Phase 15.S20 Step 4) PayPay 決済管理ページ
+// - 全イベントの 決済リンク状態 一覧
+// - イベント別 リンク履歴 + 新規発行
+// - 申込済み参加者の 決済済み手動マーク + メール送信
+function PagePayPay() {
+  const [events, setEvents] = useState([]);
+  const [registrations, setRegistrations] = useState([]);
+  const [linksMap, setLinksMap] = useState({});  // eventId → links[]
+  const [activeEventId, setActiveEventId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // 初期ロード
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      window.fetchData('listEvents'),
+      window.fetchData('listRegistrations'),
+    ]).then(([evs, regs]) => {
+      setEvents(Array.isArray(evs) ? evs : []);
+      setRegistrations(Array.isArray(regs) ? regs : []);
+      setLoading(false);
+    }).catch(e => {
+      setError(e.message);
+      setLoading(false);
+    });
+  }, [refreshKey]);
+
+  // 各イベントの決済リンク履歴をロード (有料イベントのみ)
+  useEffect(() => {
+    const paidEvents = events.filter(ev => Number(ev.fee) > 0);
+    const newMap = {};
+    Promise.all(paidEvents.map(ev =>
+      window.fetchData('listPaymentLinks', { eventId: ev.EventID || ev.id, adminMemberId: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '' }).then(links => {
+        newMap[ev.EventID || ev.id] = Array.isArray(links) ? links : [];
+      }).catch(() => {
+        newMap[ev.EventID || ev.id] = [];
+      })
+    )).then(() => setLinksMap(newMap));
+  }, [events]);
+
+  // ヘルパー: 各イベントの集計
+  const eventStats = events
+    .filter(ev => Number(ev.fee) > 0)
+    .map(ev => {
+      const eventId = ev.EventID || ev.id;
+      const eventRegs = registrations.filter(r => (r.EventID || r.eventId) === eventId);
+      const pending = eventRegs.filter(r => {
+        const status = r['ステータス'] || r.status || '';
+        const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
+        return (status === '申込済み' || status === '未決済') && !paid;
+      });
+      const paidRegs = eventRegs.filter(r => {
+        const status = r['ステータス'] || r.status || '';
+        const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
+        return status === '決済済み' || (status === '確定' && paid);
+      });
+      const links = linksMap[eventId] || [];
+      const activeLink = links.find(l => l.isActive);
+      return {
+        event: ev,
+        eventId: eventId,
+        title: ev.タイトル || ev.title || '',
+        date: ev.日付 || ev.date || '',
+        fee: Number(ev.fee) || 0,
+        registeredCount: eventRegs.length,
+        pendingCount: pending.length,
+        paidCount: paidRegs.length,
+        activeLink: activeLink,
+        hasExpiredLink: activeLink && activeLink.isExpired,
+        daysLeft: activeLink ? activeLink.daysLeft : 0,
+      };
+    });
+
+  // 期限切れ近いリンクのカウント
+  const expiringSoonCount = eventStats.filter(s =>
+    s.activeLink && (s.activeLink.isExpired || s.activeLink.daysLeft <= 1)
+  ).length;
+
+  if (loading) return (<div className="p-8 ink3 sm">読み込み中...</div>);
+  if (error) return (<div className="p-8 error">エラー: {error}</div>);
+
+  return (
+    <div className="page">
+      {/* ヘッダー */}
+      <div style={{padding:'24px 32px 16px', borderBottom:'1px solid var(--line)'}}>
+        <h1 style={{fontSize:24, fontWeight:700, margin:'0 0 4px', color:'var(--ink1)'}}>
+          PayPay 決済管理
+        </h1>
+        <div style={{fontSize:13, color:'var(--ink3)'}}>
+          イベントごとの PayPay 決済リンクの管理 + 入金確認 + メール送信
+        </div>
+      </div>
+
+      {/* アラート: 期限切れ近い */}
+      {expiringSoonCount > 0 && (
+        <div style={{
+          margin:'16px 32px 0',
+          padding:'14px 18px',
+          background:'rgba(245, 158, 11, 0.1)',
+          border:'1px solid #fbbf24',
+          borderLeft:'3px solid #f59e0b',
+          borderRadius:6,
+          display:'flex',
+          alignItems:'center',
+          gap:12,
+        }}>
+          <span style={{fontSize:20}}>⏰</span>
+          <div style={{flex:1}}>
+            <strong style={{color:'#92400e', fontSize:13}}>
+              {expiringSoonCount} 件の決済リンクが 24時間以内に失効します
+            </strong>
+            <div style={{fontSize:11, color:'#92400e', opacity:0.8, marginTop:2}}>
+              下記のリストで該当イベントを確認し、 新しいリンクを発行してください。
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* イベント別リスト */}
+      <div style={{padding:'16px 32px 32px'}}>
+        {eventStats.length === 0 ? (
+          <div className="empty-state">
+            <div style={{fontSize:14, color:'var(--ink3)'}}>有料イベントがありません</div>
+          </div>
+        ) : (
+          <div style={{display:'flex', flexDirection:'column', gap:12}}>
+            {eventStats.map(stat => (
+              <PayPayEventCard
+                key={stat.eventId}
+                stat={stat}
+                links={linksMap[stat.eventId] || []}
+                registrations={registrations.filter(r =>
+                  (r.EventID || r.eventId) === stat.eventId
+                )}
+                onRefresh={() => setRefreshKey(k => k + 1)}
+                expanded={activeEventId === stat.eventId}
+                onToggleExpand={() => setActiveEventId(
+                  activeEventId === stat.eventId ? null : stat.eventId
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// PayPay イベント別カード (展開可能、 リンク発行 + 申込者一覧)
+function PayPayEventCard({ stat, links, registrations, onRefresh, expanded, onToggleExpand }) {
+  const { event, eventId, title, fee, registeredCount, pendingCount, paidCount, activeLink, daysLeft } = stat;
+
+  // 失効バッジ
+  const linkBadge = !activeLink ? { text: 'リンク未発行', bg: '#f3f4f6', fg: '#6b7280' }
+                  : activeLink.isExpired ? { text: '期限切れ', bg: '#fee2e2', fg: '#991b1b' }
+                  : daysLeft <= 1 ? { text: `残り ${daysLeft <= 0 ? '0' : daysLeft}日`, bg: '#fef3c7', fg: '#92400e' }
+                  : { text: `残り ${daysLeft}日`, bg: '#dcfce7', fg: '#166534' };
+
+  return (
+    <div style={{
+      background:'#fff',
+      border:'1px solid var(--line)',
+      borderRadius:8,
+      overflow:'hidden',
+    }}>
+      {/* 概要行 */}
+      <div onClick={onToggleExpand} style={{
+        padding:'16px 20px',
+        cursor:'pointer',
+        display:'flex',
+        alignItems:'center',
+        gap:16,
+        borderBottom: expanded ? '1px solid var(--line)' : 'none',
+      }}>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{
+            fontSize:14, fontWeight:600, color:'var(--ink1)',
+            whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+            marginBottom:4,
+          }}>{title}</div>
+          <div style={{display:'flex', gap:14, fontSize:11, color:'var(--ink3)', flexWrap:'wrap'}}>
+            <span>¥{fee.toLocaleString()}</span>
+            <span>申込 {registeredCount}</span>
+            <span style={{color: pendingCount > 0 ? '#92400e' : 'var(--ink3)'}}>
+              未決済 {pendingCount}
+            </span>
+            <span style={{color:'#166534'}}>決済済み {paidCount}</span>
+          </div>
+        </div>
+        <span style={{
+          padding:'4px 10px',
+          background:linkBadge.bg,
+          color:linkBadge.fg,
+          fontSize:10,
+          fontWeight:700,
+          letterSpacing:'0.05em',
+          borderRadius:4,
+          whiteSpace:'nowrap',
+        }}>{linkBadge.text}</span>
+        <span style={{fontSize:14, color:'var(--ink4)', flexShrink:0}}>
+          {expanded ? '▲' : '▼'}
+        </span>
+      </div>
+
+      {/* 展開時のコンテンツ */}
+      {expanded && (
+        <div style={{padding:'20px'}}>
+          {/* リンク管理 */}
+          <PayPayLinkManager
+            eventId={eventId}
+            links={links}
+            activeLink={activeLink}
+            onRefresh={onRefresh}
+          />
+
+          {/* 申込者一覧 + 決済済みマーク */}
+          <PayPayRegistrationsList
+            eventId={eventId}
+            registrations={registrations}
+            onRefresh={onRefresh}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// リンク管理 UI (新規発行 + 履歴一覧)
+function PayPayLinkManager({ eventId, links, activeLink, onRefresh }) {
+  const [showForm, setShowForm] = useState(false);
+  const [newUrl, setNewUrl] = useState('');
+  const [newMemo, setNewMemo] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleCreate = async () => {
+    if (!newUrl) return;
+    if (!/^https?:\/\//i.test(newUrl)) {
+      alert('URL は http:// または https:// で始まる必要があります');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const memberId = (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '';
+      await window.fetchData('createPaymentLink', { eventId, url: newUrl, memo: newMemo, createdBy: memberId, adminMemberId: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '' });
+      setNewUrl(''); setNewMemo(''); setShowForm(false);
+      onRefresh();
+    } catch (e) {
+      alert('発行に失敗しました: ' + e.message);
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div style={{marginBottom:24}}>
+      <div style={{
+        fontSize:12, fontWeight:700, color:'var(--ink2)',
+        letterSpacing:'0.1em', textTransform:'uppercase',
+        marginBottom:10,
+      }}>決済リンク</div>
+
+      {/* 現在のアクティブリンク */}
+      {activeLink && (
+        <div style={{
+          padding:'12px 14px',
+          background: activeLink.isExpired ? '#fee2e2' : '#f0f9ff',
+          border:'1px solid ' + (activeLink.isExpired ? '#fca5a5' : '#bae6fd'),
+          borderRadius:6,
+          marginBottom:10,
+        }}>
+          <div style={{fontSize:11, color:'var(--ink3)', marginBottom:4}}>
+            {activeLink.isExpired ? '⚠ 期限切れリンク' : '✓ 現在有効なリンク'}
+          </div>
+          <a href={activeLink.url} target="_blank" rel="noopener noreferrer" style={{
+            fontSize:12, fontFamily:'monospace', color:'#1e40af',
+            wordBreak:'break-all', display:'block', marginBottom:4,
+          }}>{activeLink.url}</a>
+          <div style={{display:'flex', gap:14, fontSize:11, color:'var(--ink3)'}}>
+            <span>発行: {(activeLink.issuedAt || '').slice(0,10)}</span>
+            <span>失効: {(activeLink.expiresAt || '').slice(0,10)}</span>
+            {activeLink.memo && <span>{activeLink.memo}</span>}
+          </div>
+        </div>
+      )}
+
+      {/* 新規発行フォーム */}
+      {!showForm ? (
+        <button onClick={() => setShowForm(true)} className="btn-primary" style={{
+          padding:'8px 16px', fontSize:12, fontWeight:600,
+        }}>
+          {activeLink ? '+ 新しいリンクで交換' : '+ 決済リンクを発行'}
+        </button>
+      ) : (
+        <div style={{
+          padding:'14px',
+          background:'#fafbfc',
+          border:'1px solid var(--line)',
+          borderRadius:6,
+        }}>
+          <div className="field" style={{marginBottom:10}}>
+            <label className="field-label" style={{fontSize:11}}>PayPay 個別 URL <span className="field-req">*</span></label>
+            <input className="input" type="url" value={newUrl}
+              onChange={e => setNewUrl(e.target.value)}
+              placeholder="https://pay.paypay.ne.jp/xxxxx"
+              autoFocus/>
+            <div className="field-hint" style={{fontSize:10}}>
+              PayPay マイコード機能で発行した個別リンク (4日有効)
+            </div>
+          </div>
+          <div className="field" style={{marginBottom:10}}>
+            <label className="field-label" style={{fontSize:11}}>備考 (任意)</label>
+            <input className="input" type="text" value={newMemo}
+              onChange={e => setNewMemo(e.target.value)}
+              placeholder="例: メッセージ欄にイベント名を設定済み"/>
+          </div>
+          <div style={{display:'flex', gap:8}}>
+            <button onClick={handleCreate} className="btn-primary"
+              disabled={submitting || !newUrl}
+              style={{fontSize:12, padding:'8px 16px'}}>
+              {submitting ? '発行中...' : 'リンクを発行 (3日有効)'}
+            </button>
+            <button onClick={() => { setShowForm(false); setNewUrl(''); setNewMemo(''); }}
+              className="btn-secondary" style={{fontSize:12, padding:'8px 16px'}}>
+              キャンセル
+            </button>
+          </div>
+          <div style={{fontSize:10, color:'var(--ink4)', marginTop:8, lineHeight:1.6}}>
+            既存のアクティブリンクは自動で非アクティブ化されます。 履歴は全て保存されます。
+          </div>
+        </div>
+      )}
+
+      {/* 過去のリンク履歴 (展開可能) */}
+      {links.length > 1 && (
+        <details style={{marginTop:14}}>
+          <summary style={{
+            fontSize:11, color:'var(--ink3)', cursor:'pointer', userSelect:'none',
+          }}>過去のリンク履歴 ({links.length} 件)</summary>
+          <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:6}}>
+            {links.filter(l => !l.isActive).map(l => (
+              <div key={l.linkId} style={{
+                padding:'8px 12px',
+                background:'#f9fafb',
+                border:'1px solid var(--line)',
+                borderRadius:4,
+                fontSize:10, color:'var(--ink4)',
+              }}>
+                <div style={{fontFamily:'monospace', wordBreak:'break-all'}}>{l.url}</div>
+                <div style={{marginTop:2}}>
+                  発行: {(l.issuedAt || '').slice(0,10)} · 失効: {(l.expiresAt || '').slice(0,10)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// 申込者一覧 (決済済みマーク + メール送信)
+function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
+  const [selected, setSelected] = useState(new Set());
+  const [submitting, setSubmitting] = useState(false);
+  const [participants, setParticipants] = useState([]);
+
+  useEffect(() => {
+    window.fetchData('listParticipants').then(ps => {
+      setParticipants(Array.isArray(ps) ? ps : []);
+    }).catch(() => {});
+  }, []);
+
+  // 申込済み (未決済) のみ
+  const pending = registrations.filter(r => {
+    const status = r['ステータス'] || r.status || '';
+    const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
+    return (status === '申込済み' || status === '未決済') && !paid;
+  });
+
+  // 決済済みも 履歴として表示
+  const paidList = registrations.filter(r => {
+    const status = r['ステータス'] || r.status || '';
+    const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
+    return status === '決済済み' || (status === '確定' && paid);
+  });
+
+  const findUser = (userId) => participants.find(p =>
+    (p.UserID || p.userId) === userId
+  ) || {};
+
+  const toggleSelect = (regId) => {
+    const next = new Set(selected);
+    if (next.has(regId)) next.delete(regId); else next.add(regId);
+    setSelected(next);
+  };
+
+  const handleMarkPaid = async (regId, isBulk) => {
+    if (!confirm(isBulk
+      ? `${selected.size} 件を「決済済み」にし、メール送信しますか?`
+      : '「決済済み」にしてメール送信しますか?')) return;
+    setSubmitting(true);
+    try {
+      const memberId = (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '';
+      if (isBulk) {
+        const result = await window.fetchData('bulkMarkPaid', { regIds: Array.from(selected),
+          adminUserId: memberId,
+          sendEmail: true, adminMemberId: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '' });
+        alert(`完了: ${result.success}/${result.total} 件処理`);
+        setSelected(new Set());
+      } else {
+        await window.fetchData('markRegistrationPaid', { regId, adminUserId: memberId, sendEmail: true, adminMemberId: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '' });
+      }
+      onRefresh();
+    } catch (e) {
+      alert('処理に失敗: ' + e.message);
+    }
+    setSubmitting(false);
+  };
+
+  const handleSendEmailOnly = async (regId) => {
+    if (!confirm('決済完了メールを再送信しますか?')) return;
+    setSubmitting(true);
+    try {
+      await window.fetchData('sendPaymentCompleteEmail', { regId, adminMemberId: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '' });
+      alert('送信しました');
+      onRefresh();
+    } catch (e) {
+      alert('送信失敗: ' + e.message);
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div>
+      <div style={{
+        display:'flex', alignItems:'center', justifyContent:'space-between',
+        marginBottom:10,
+      }}>
+        <div style={{
+          fontSize:12, fontWeight:700, color:'var(--ink2)',
+          letterSpacing:'0.1em', textTransform:'uppercase',
+        }}>申込者 ({pending.length} 件未決済 / {paidList.length} 件決済済み)</div>
+        {selected.size > 0 && (
+          <button onClick={() => handleMarkPaid(null, true)}
+            disabled={submitting}
+            className="btn-primary" style={{fontSize:11, padding:'6px 14px'}}>
+            選択 {selected.size} 件を 決済済みにマーク
+          </button>
+        )}
+      </div>
+
+      {pending.length === 0 ? (
+        <div style={{
+          padding:'20px', background:'#f9fafb', borderRadius:6,
+          fontSize:12, color:'var(--ink3)', textAlign:'center',
+        }}>未決済の申込者はいません</div>
+      ) : (
+        <div style={{
+          border:'1px solid var(--line)', borderRadius:6, overflow:'hidden',
+        }}>
+          {pending.map(r => {
+            const regId = r.RegID || r.regId;
+            const userId = r.UserID || r.userId;
+            const user = findUser(userId);
+            const userName = user['名前'] || user.name || '';
+            const userKana = user['フリガナ'] || user.kana || '';
+            const userEmail = user['メール'] || user.email || '';
+            const memo = r['備考'] || r.memo || '';
+            const amount = Number(r['金額'] || r.amount) || 0;
+            const isSel = selected.has(regId);
+            return (
+              <div key={regId} style={{
+                padding:'12px 14px',
+                borderBottom:'1px solid var(--line)',
+                display:'flex',
+                alignItems:'center',
+                gap:12,
+                background: isSel ? 'rgba(28, 137, 232, 0.04)' : '#fff',
+              }}>
+                <input type="checkbox" checked={isSel}
+                  onChange={() => toggleSelect(regId)}
+                  style={{width:16, height:16, cursor:'pointer'}}/>
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>
+                    {userName} {userKana && <span style={{fontSize:11, fontWeight:400, color:'var(--ink4)'}}>({userKana})</span>}
+                  </div>
+                  <div style={{fontSize:10, color:'var(--ink4)', marginTop:2, display:'flex', gap:12}}>
+                    <span style={{fontFamily:'monospace'}}>{regId}</span>
+                    <span>¥{amount.toLocaleString()}</span>
+                    {userEmail && <span>{userEmail}</span>}
+                  </div>
+                </div>
+                <button onClick={() => handleMarkPaid(regId, false)}
+                  disabled={submitting}
+                  className="btn-primary" style={{fontSize:10, padding:'6px 12px'}}>
+                  決済済みにマーク
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 決済済み一覧 (折りたたみ) */}
+      {paidList.length > 0 && (
+        <details style={{marginTop:14}}>
+          <summary style={{fontSize:11, color:'var(--ink3)', cursor:'pointer', userSelect:'none'}}>
+            決済済み一覧 ({paidList.length} 件)
+          </summary>
+          <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:4}}>
+            {paidList.map(r => {
+              const regId = r.RegID || r.regId;
+              const userId = r.UserID || r.userId;
+              const user = findUser(userId);
+              const userName = user['名前'] || user.name || '';
+              const confirmedAt = r['決済確認日時'] || '';
+              const emailSentAt = r['決済完了メール送信'] || '';
+              return (
+                <div key={regId} style={{
+                  padding:'8px 12px',
+                  background:'#f0fdf4',
+                  border:'1px solid #bbf7d0',
+                  borderRadius:4,
+                  fontSize:11,
+                  display:'flex', alignItems:'center', gap:10,
+                }}>
+                  <span style={{color:'#166534', fontSize:12}}>✓</span>
+                  <span style={{flex:1, color:'var(--ink2)'}}>{userName}</span>
+                  <span style={{color:'var(--ink4)', fontSize:10}}>{(confirmedAt || '').toString().slice(0,10)}</span>
+                  {!emailSentAt && (
+                    <button onClick={() => handleSendEmailOnly(regId)}
+                      disabled={submitting}
+                      style={{
+                        padding:'3px 8px', fontSize:9,
+                        background:'#fff', border:'1px solid #166534',
+                        color:'#166534', borderRadius:3, cursor:'pointer',
+                      }}>メール送信</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+window.PagePayPay = PagePayPay;
+
 function PagePayments(){
   const [payments, setPayments] = useState([]);
   const [events, setEvents] = useState([]);
@@ -7897,6 +8498,8 @@ function PageEventCreate(){
   // 決済
   const [fee, setFee] = useState("");
   const [paymentMethods, setPaymentMethods] = useState(["PayPay"]);   // 配列、デフォルトはPayPay
+  // (Phase 15.S16) 決済URL — 事前決済系 (PayPay/Stripe等) の支払いリンク
+  const [paymentUrl, setPaymentUrl] = useState("");
   const [earlyBird, setEarlyBird] = useState("");
   const [cancelPolicy, setCancelPolicy] = useState("");
   // (Part D) イベントポリシー (申込画面で表示、必須)
@@ -8048,6 +8651,8 @@ function PageEventCreate(){
           const methods = String(methodsRaw).split(',').map(s => s.trim()).filter(Boolean);
           setPaymentMethods(methods.length > 0 ? methods : ["PayPay"]);
         }
+        // (Phase 15.S16) 決済URL
+        setPaymentUrl(ev.paymentUrl || "");
         // (Phase 7.8) 多言語フィールド (easy/en) ロード — タイトルは翻訳対象外
         setVenueEasy(ev.venue_easy || "");
         setVenueEn(ev.venue_en || "");
@@ -8128,6 +8733,7 @@ function PageEventCreate(){
       fee: Number(fee) || 0,
       paymentMethod: paymentMethods.join(', '),    // 旧列 (互換のため残す)
       paymentMethods: paymentMethods.join(','),    // (Part D) 新列、カンマ区切り (スペース無し)
+      paymentUrl: paymentUrl || '',                 // (Phase 15.S16) 決済URL
       earlyBird: earlyBird || '',
       cancelPolicy: cancelPolicy || '',
       // (Part D) イベントポリシー (申込画面で表示)
@@ -8703,6 +9309,65 @@ function PageEventCreate(){
                     <div className="field-hint">参加者の申込画面で選択肢として表示されます</div>
                   </div>
                 </div>
+
+                {/* (Phase 15.S16) 決済URL — 事前決済系 (PayPay/Stripe等) に必須 */}
+                {(() => {
+                  // 事前決済系が含まれているかを判定
+                  const prepaidPatterns = [
+                    'paypay', 'ペイペイ', 'クレジット', 'クレカ', 'credit', 'card',
+                    '銀行振込', '振込', 'bank', 'stripe', 'paypal',
+                    '事前決済', 'オンライン', 'online', 'd払い', 'au払い',
+                    '楽天ペイ', 'メルペイ', 'line pay', 'linepay', 'amazon pay',
+                    'wechat', 'alipay', 'カカオ', 'kakao',
+                  ];
+                  const hasPrepaid = paymentMethods.some(m => {
+                    const ml = String(m).toLowerCase();
+                    return prepaidPatterns.some(p => ml.includes(p.toLowerCase()));
+                  });
+                  const isPaid = Number(fee) > 0;
+                  const isRequired = isPaid && hasPrepaid;
+                  const isMissing = isRequired && !paymentUrl;
+
+                  return (
+                    <div className="field" style={isMissing ? {
+                      padding: 14,
+                      background: 'rgba(245, 158, 11, 0.08)',
+                      borderLeft: '3px solid #f59e0b',
+                      borderRadius: 6,
+                    } : {}}>
+                      <label className="field-label">
+                        決済URL
+                        {isRequired && <span className="field-req" style={{marginLeft:6}}>*</span>}
+                        {!isRequired && <span style={{fontSize:10,color:'var(--ink4)',fontWeight:400,marginLeft:6}}>(任意)</span>}
+                      </label>
+                      <input className="input" type="url"
+                        value={paymentUrl}
+                        onChange={e => setPaymentUrl(e.target.value)}
+                        placeholder="例: https://pay.paypay.ne.jp/xxxxx, https://buy.stripe.com/xxxxx"/>
+                      <div className="field-hint" style={isMissing ? {color:'#92400e',fontWeight:500} : {}}>
+                        {isMissing ? (
+                          <>⚠ 事前決済系の支払い方法を設定しているのに決済URLが未設定です。 参加者は申込できますが「決済リンク未設定」エラーになります。</>
+                        ) : (
+                          <>事前決済系 (PayPay/クレジットカード/Stripe等) を選択した場合、 ここに支払いリンクを入力してください。 申込完了後、 参加者がこの URL に遷移して決済します。</>
+                        )}
+                      </div>
+                      {paymentUrl && !/^https?:\/\//i.test(paymentUrl) && (
+                        <div style={{marginTop:6,padding:'8px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:4,fontSize:11,color:'#991b1b'}}>
+                          ⚠ URL は http:// または https:// で始まる必要があります
+                        </div>
+                      )}
+                      {paymentUrl && /^https?:\/\//i.test(paymentUrl) && (
+                        <div style={{marginTop:6,fontSize:11,color:'var(--ink4)',display:'flex',alignItems:'center',gap:6}}>
+                          <span>✓ 有効な URL</span>
+                          <a href={paymentUrl} target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)'}}>
+                            開いて確認 →
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="field">
                   <label className="field-label">早割 (任意)</label>
                   <IMEInput className="input" value={earlyBird} onChange={e=>setEarlyBird(e.target.value)} placeholder="例: 申込締切1週間前まで 2,500円"/>
@@ -12671,11 +13336,42 @@ function PageHomepageSettings(){
     { key: 'terms_updated_at', label: '最終更新日', ph: '2026-05-01', type: 'text' },
 
     // (Phase 15.S10 #1) イベントポリシー (デフォルト) — 各イベントで上書き可能
+    // (Phase 15.S35) About ページ (#/about) の編集 — 「わたしたちのこと」
+    { section: 'About Page (わたしたちのこと)', label: 'About ページ', help: '参加者サイトの「わたしたちのこと」(#/about) の各セクション本文。 多言語対応。' },
+    { key: 'about_hero_title',           label: 'Hero タイトル (日)',     ph: '東京を、もうひとつのふるさとに。', type: 'text' },
+    { key: 'about_hero_title_easy',      label: 'Hero タイトル (やさしい日本語)', ph: 'とうきょうを、 もうひとつの ふるさとに。', type: 'text' },
+    { key: 'about_hero_title_en',        label: 'Hero タイトル (英)',     ph: 'Make Tokyo home.', type: 'text' },
+    { key: 'about_hero_lead',            label: 'Hero リード (日)',       type: 'textarea' },
+    { key: 'about_hero_lead_easy',       label: 'Hero リード (やさしい日本語)', type: 'textarea' },
+    { key: 'about_hero_lead_en',         label: 'Hero リード (英)',       type: 'textarea' },
+    { key: 'about_mission_title',        label: 'ミッション タイトル (日)', type: 'text' },
+    { key: 'about_mission_title_easy',   label: 'ミッション タイトル (やさしい日本語)', type: 'text' },
+    { key: 'about_mission_title_en',     label: 'ミッション タイトル (英)', type: 'text' },
+    { key: 'about_mission_body',         label: 'ミッション 本文 (日)',   type: 'textarea' },
+    { key: 'about_mission_body_easy',    label: 'ミッション 本文 (やさしい日本語)', type: 'textarea' },
+    { key: 'about_mission_body_en',      label: 'ミッション 本文 (英)',   type: 'textarea' },
+    { key: 'about_story_title',          label: 'ストーリー タイトル (日)', type: 'text' },
+    { key: 'about_story_title_easy',     label: 'ストーリー タイトル (やさしい日本語)', type: 'text' },
+    { key: 'about_story_title_en',       label: 'ストーリー タイトル (英)', type: 'text' },
+    { key: 'about_cta_title',            label: 'CTA タイトル (日)',      type: 'text' },
+    { key: 'about_cta_title_easy',       label: 'CTA タイトル (やさしい日本語)', type: 'text' },
+    { key: 'about_cta_title_en',         label: 'CTA タイトル (英)',      type: 'text' },
+
     { section: 'Event Policy (Default)', label: 'イベントポリシー (デフォルト)', help: '各イベントごとに「ポリシー」フィールドで上書きできます。 ここに入力した値は、 イベント側で未設定の場合のデフォルトとして使われます (将来拡張用)。' },
     { key: 'event_policy_default_ja',   label: '本文 (日)',    ph: '当イベントの参加にあたり、 以下にご同意ください...', type: 'textarea' },
     { key: 'event_policy_default_en',   label: '本文 (英)',    ph: 'By participating in this event, you agree to the following...', type: 'textarea' },
     { key: 'event_policy_default_easy', label: '本文 (やさしい日本語)', ph: 'このイベントに さんかするとき、 つぎのことに どうい してください...', type: 'textarea' },
     { key: 'event_policy_default_updated_at', label: '最終更新日', ph: '2026-05-01', type: 'text' },
+
+    // (Phase 15.S20 Step 5) 決済完了メールテンプレ
+    { section: 'Payment Complete Email', label: '決済完了メール テンプレ', help: 'Admin が 「決済済み」 にマークした時に参加者に自動送信されるメール。 placeholder: {eventTitle} {userName} {eventDate} {amount}' },
+    { key: 'admin_notification_email', label: 'システム通知先メアド (失敗時)', ph: 'admin@connecta.example.com', type: 'text' },
+    { key: 'payment_complete_email_subject_ja',   label: '件名 (日)',     ph: '【connec+a】{eventTitle} 決済を確認しました', type: 'text' },
+    { key: 'payment_complete_email_body_ja',      label: '本文 (日)',     ph: '{userName} 様\n\nご参加申込ありがとうございます。\n{eventTitle} の決済を確認いたしました。\n\nイベント詳細:\n日時: {eventDate}\n金額: ¥{amount}\n\n当日お会いできるのを楽しみにしております。\n\nconnec+a 運営', type: 'textarea' },
+    { key: 'payment_complete_email_subject_en',   label: '件名 (英)',     ph: '[connec+a] Payment confirmed for {eventTitle}', type: 'text' },
+    { key: 'payment_complete_email_body_en',      label: '本文 (英)',     ph: 'Dear {userName},\n\nThank you for registering...', type: 'textarea' },
+    { key: 'payment_complete_email_subject_easy', label: '件名 (やさしい日本語)', ph: '【connec+a】{eventTitle} の しはらいを かくにん しました', type: 'text' },
+    { key: 'payment_complete_email_body_easy',    label: '本文 (やさしい日本語)', ph: '{userName} さま\n\nさんか ありがとうございます...', type: 'textarea' },
   ];
 
   async function fetchAll() {
@@ -14638,6 +15334,7 @@ const PAGES = {
   todo:           () => renderPage('PageTodo'),
   photos:         () => renderPage('PagePhotos'),
   payments:       () => renderPage('PagePayments'),
+  paypay:         () => renderPage('PagePayPay'),
   departments:    () => renderPage('PageDepartments'),
   org:            () => renderPage('PageOrg'),
   ads:            () => renderPage('PageAds'),
