@@ -6979,9 +6979,9 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
         <div style={{
           border:'1px solid var(--line)', borderRadius:6, overflow:'hidden',
         }}>
-          {pending.map(r => {
+          {pending.map((r, i) => {
             // (Phase 15.S47) GAS が返す r.userName 等を優先 (findUser fallback はキャッシュ等で空のとき用)
-            const regId = r.id || r.RegID || r.regId;
+            const regId = r.id || r.RegID || r.regId || `pending-${i}`;
             const userId = r.userId || r.UserID;
             const user = findUser(userId);
             const userName = r.userName || user.name || user['名前'] || '';
@@ -7093,8 +7093,8 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
             決済済み一覧 ({paidList.length} 件)
           </summary>
           <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:4}}>
-            {paidList.map(r => {
-              const regId = r.id || r.RegID || r.regId;
+            {paidList.map((r, i) => {
+              const regId = r.id || r.RegID || r.regId || `paid-${i}`;
               const userId = r.userId || r.UserID;
               const user = findUser(userId);
               const userName = r.userName || user.name || user['名前'] || '';
