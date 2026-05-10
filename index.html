@@ -6752,6 +6752,10 @@ function PayPayLinkManager({ eventId, links, activeLink, onRefresh }) {
   const [newMemo, setNewMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // (Phase 15.S44) 発行・編集権限: 代表 + マネージャー のみ
+  const currentRole = (window.currentUser && window.currentUser.member && window.currentUser.member.role) || '';
+  const canManageLinks = ['代表', 'マネージャー', 'オーナー', '管理者', 'owner', 'admin'].includes(currentRole);
+
   const handleCreate = async () => {
     if (!newUrl) return;
     if (!/^https?:\/\//i.test(newUrl)) {
@@ -6802,8 +6806,16 @@ function PayPayLinkManager({ eventId, links, activeLink, onRefresh }) {
         </div>
       )}
 
-      {/* 新規発行フォーム */}
-      {!showForm ? (
+      {/* 新規発行フォーム — 代表/マネージャー のみ */}
+      {!canManageLinks ? (
+        <div style={{
+          padding:'10px 14px', fontSize:11, color:'var(--ink3)',
+          background:'var(--bg2)', borderRadius:6,
+          fontStyle:'italic',
+        }}>
+          🔒 決済リンクの発行・編集は 代表 または マネージャー のみ可能です
+        </div>
+      ) : !showForm ? (
         <button onClick={() => setShowForm(true)} className="btn-primary" style={{
           padding:'8px 16px', fontSize:12, fontWeight:600,
         }}>
@@ -8777,6 +8789,11 @@ function PageEventCreate(){
   const [paymentMethods, setPaymentMethods] = useState(["PayPay"]);   // 配列、デフォルトはPayPay
   // (Phase 15.S16) 決済URL — 事前決済系 (PayPay/Stripe等) の支払いリンク
   const [paymentUrl, setPaymentUrl] = useState("");
+  // (Phase 15.S44) 支払い方法ごとの URL — Methods に応じて動的表示
+  const [paymentUrl_paypay, setPaymentUrl_paypay] = useState("");
+  const [paymentUrl_stripe, setPaymentUrl_stripe] = useState("");
+  const [paymentUrl_bank,   setPaymentUrl_bank]   = useState("");  // 銀行振込先情報 (テキスト)
+  const [paymentUrl_other,  setPaymentUrl_other]  = useState("");
   const [earlyBird, setEarlyBird] = useState("");
   const [cancelPolicy, setCancelPolicy] = useState("");
   // (Part D) イベントポリシー (申込画面で表示、必須)
@@ -8930,6 +8947,11 @@ function PageEventCreate(){
         }
         // (Phase 15.S16) 決済URL
         setPaymentUrl(ev.paymentUrl || "");
+        // (Phase 15.S44) 支払い方法ごとの URL ロード (旧 paymentUrl からのフォールバック)
+        setPaymentUrl_paypay(ev.paymentUrl_paypay || (ev.paymentMethods && ev.paymentMethods.includes('PayPay') ? (ev.paymentUrl || '') : ''));
+        setPaymentUrl_stripe(ev.paymentUrl_stripe || '');
+        setPaymentUrl_bank(ev.paymentUrl_bank || '');
+        setPaymentUrl_other(ev.paymentUrl_other || '');
         // (Phase 7.8) 多言語フィールド (easy/en) ロード — タイトルは翻訳対象外
         setVenueEasy(ev.venue_easy || "");
         setVenueEn(ev.venue_en || "");
@@ -9010,7 +9032,13 @@ function PageEventCreate(){
       fee: Number(fee) || 0,
       paymentMethod: paymentMethods.join(', '),    // 旧列 (互換のため残す)
       paymentMethods: paymentMethods.join(','),    // (Part D) 新列、カンマ区切り (スペース無し)
-      paymentUrl: paymentUrl || '',                 // (Phase 15.S16) 決済URL
+      paymentUrl: paymentUrl || '',                 // (Phase 15.S16) 決済URL (互換維持)
+      // (Phase 15.S44) 支払い方法ごとの URL
+      paymentUrl_paypay: paymentUrl_paypay || '',
+      paymentUrl_stripe: paymentUrl_stripe || '',
+      paymentUrl_bank:   paymentUrl_bank   || '',
+      paymentUrl_other:  paymentUrl_other  || '',
+      adminMemberId: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '',
       earlyBird: earlyBird || '',
       cancelPolicy: cancelPolicy || '',
       // (Part D) イベントポリシー (申込画面で表示)
@@ -9594,60 +9622,88 @@ function PageEventCreate(){
                   </div>
                 </div>
 
-                {/* (Phase 15.S16) 決済URL — 事前決済系 (PayPay/Stripe等) に必須 */}
+                {/* (Phase 15.S44) 支払い方法ごとの URL — 選択された方法のみ表示 */}
                 {(() => {
-                  // 事前決済系が含まれているかを判定
-                  const prepaidPatterns = [
-                    'paypay', 'ペイペイ', 'クレジット', 'クレカ', 'credit', 'card',
-                    '銀行振込', '振込', 'bank', 'stripe', 'paypal',
-                    '事前決済', 'オンライン', 'online', 'd払い', 'au払い',
-                    '楽天ペイ', 'メルペイ', 'line pay', 'linepay', 'amazon pay',
-                    'wechat', 'alipay', 'カカオ', 'kakao',
-                  ];
-                  const hasPrepaid = paymentMethods.some(m => {
-                    const ml = String(m).toLowerCase();
-                    return prepaidPatterns.some(p => ml.includes(p.toLowerCase()));
-                  });
                   const isPaid = Number(fee) > 0;
-                  const isRequired = isPaid && hasPrepaid;
-                  const isMissing = isRequired && !paymentUrl;
-
+                  const hasPayPay = paymentMethods.includes('PayPay');
+                  const hasCard = paymentMethods.some(m => /クレジット|カード|stripe|paypal/i.test(String(m).toLowerCase()) || m === 'クレジットカード');
+                  const hasBank = paymentMethods.includes('銀行振込');
+                  const hasOtherPrepaid = paymentMethods.some(m => /事前決済|オンライン|d払い|楽天ペイ|メルペイ|line/i.test(String(m).toLowerCase()));
+                  const hasAnyPrepaid = hasPayPay || hasCard || hasBank || hasOtherPrepaid;
+                  if (!isPaid || !hasAnyPrepaid) return null;
                   return (
-                    <div className="field" style={isMissing ? {
+                    <div className="field" style={{
                       padding: 14,
-                      background: 'rgba(245, 158, 11, 0.08)',
-                      borderLeft: '3px solid #f59e0b',
+                      background: 'rgba(99, 102, 241, 0.04)',
+                      border: '1px solid rgba(99, 102, 241, 0.2)',
                       borderRadius: 6,
-                    } : {}}>
-                      <label className="field-label">
-                        決済URL
-                        {isRequired && <span className="field-req" style={{marginLeft:6}}>*</span>}
-                        {!isRequired && <span style={{fontSize:10,color:'var(--ink4)',fontWeight:400,marginLeft:6}}>(任意)</span>}
+                    }}>
+                      <label className="field-label" style={{fontSize:13, color:'var(--indigo)', marginBottom:10}}>
+                        💳 支払いリンク (選択した方法ごとに入力)
                       </label>
-                      <input className="input" type="url"
-                        value={paymentUrl}
-                        onChange={e => setPaymentUrl(e.target.value)}
-                        placeholder="例: https://pay.paypay.ne.jp/xxxxx, https://buy.stripe.com/xxxxx"/>
-                      <div className="field-hint" style={isMissing ? {color:'#92400e',fontWeight:500} : {}}>
-                        {isMissing ? (
-                          <>⚠ 事前決済系の支払い方法を設定しているのに決済URLが未設定です。 参加者は申込できますが「決済リンク未設定」エラーになります。</>
-                        ) : (
-                          <>事前決済系 (PayPay/クレジットカード/Stripe等) を選択した場合、 ここに支払いリンクを入力してください。 申込完了後、 参加者がこの URL に遷移して決済します。</>
+                      <div className="stack" style={{gap:12}}>
+                        {hasPayPay && (
+                          <div className="field" style={{margin:0}}>
+                            <label className="field-label" style={{fontSize:12,fontWeight:600}}>
+                              PayPay リンク <span className="field-req" style={{marginLeft:6}}>*</span>
+                            </label>
+                            <input className="input" type="url"
+                              value={paymentUrl_paypay}
+                              onChange={e => setPaymentUrl_paypay(e.target.value)}
+                              placeholder="https://pay.paypay.ne.jp/..."/>
+                            <div className="field-hint" style={{marginTop:4}}>
+                              💡 ここに入力した URL は <strong>PayPay 決済管理</strong> に自動で初期登録されます。 以降の変更は決済管理画面で行ってください。
+                            </div>
+                            {paymentUrl_paypay && /^https?:\/\//i.test(paymentUrl_paypay) && (
+                              <div style={{marginTop:6,fontSize:11,color:'var(--ink4)'}}>
+                                ✓ 有効な URL <a href={paymentUrl_paypay} target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',marginLeft:8}}>確認 →</a>
+                              </div>
+                            )}
+                            {paymentUrl_paypay && !/^https?:\/\//i.test(paymentUrl_paypay) && (
+                              <div style={{marginTop:6,padding:'6px 8px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:4,fontSize:11,color:'#991b1b'}}>
+                                ⚠ http:// または https:// で始まる必要があります
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {hasCard && (
+                          <div className="field" style={{margin:0}}>
+                            <label className="field-label" style={{fontSize:12,fontWeight:600}}>
+                              クレジットカード決済リンク <span style={{fontSize:10,color:'var(--ink4)',fontWeight:400,marginLeft:6}}>(Stripe / Square 等)</span>
+                            </label>
+                            <input className="input" type="url"
+                              value={paymentUrl_stripe}
+                              onChange={e => setPaymentUrl_stripe(e.target.value)}
+                              placeholder="https://buy.stripe.com/..."/>
+                            <div className="field-hint" style={{marginTop:4}}>Stripe や Square などのカード決済リンク</div>
+                          </div>
+                        )}
+                        {hasBank && (
+                          <div className="field" style={{margin:0}}>
+                            <label className="field-label" style={{fontSize:12,fontWeight:600}}>
+                              銀行振込先情報
+                            </label>
+                            <IMETextarea className="input"
+                              style={{height:80,padding:10,fontSize:13,resize:'vertical',fontFamily:'monospace'}}
+                              value={paymentUrl_bank}
+                              onChange={e => setPaymentUrl_bank(e.target.value)}
+                              placeholder={`例:\n○○銀行 ○○支店 普通 1234567\nイッパンシャダンホウジン connec+a`}/>
+                            <div className="field-hint" style={{marginTop:4}}>口座情報を直接入力 (URL ではなくテキスト)</div>
+                          </div>
+                        )}
+                        {hasOtherPrepaid && (
+                          <div className="field" style={{margin:0}}>
+                            <label className="field-label" style={{fontSize:12,fontWeight:600}}>
+                              その他前払い リンク
+                            </label>
+                            <input className="input" type="url"
+                              value={paymentUrl_other}
+                              onChange={e => setPaymentUrl_other(e.target.value)}
+                              placeholder="https://..."/>
+                            <div className="field-hint" style={{marginTop:4}}>その他のオンライン決済リンク</div>
+                          </div>
                         )}
                       </div>
-                      {paymentUrl && !/^https?:\/\//i.test(paymentUrl) && (
-                        <div style={{marginTop:6,padding:'8px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:4,fontSize:11,color:'#991b1b'}}>
-                          ⚠ URL は http:// または https:// で始まる必要があります
-                        </div>
-                      )}
-                      {paymentUrl && /^https?:\/\//i.test(paymentUrl) && (
-                        <div style={{marginTop:6,fontSize:11,color:'var(--ink4)',display:'flex',alignItems:'center',gap:6}}>
-                          <span>✓ 有効な URL</span>
-                          <a href={paymentUrl} target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)'}}>
-                            開いて確認 →
-                          </a>
-                        </div>
-                      )}
                     </div>
                   );
                 })()}
