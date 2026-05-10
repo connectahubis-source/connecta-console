@@ -6996,6 +6996,7 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
             const userName = user['名前'] || user.name || '';
             const userKana = user['フリガナ'] || user.kana || '';
             const userEmail = user['メール'] || user.email || '';
+            const userPayPayName = user['PayPay表示名'] || user.paypayDisplayName || '';
             const memo = r['備考'] || r.memo || '';
             const amount = Number(r['金額'] || r.amount) || 0;
             const isSel = selected.has(regId);
@@ -7015,17 +7016,64 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
                   <div style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>
                     {userName} {userKana && <span style={{fontSize:11, fontWeight:400, color:'var(--ink4)'}}>({userKana})</span>}
                   </div>
-                  <div style={{fontSize:10, color:'var(--ink4)', marginTop:2, display:'flex', gap:12}}>
+                  {/* (Phase 15.S46) PayPay 表示名 を強調表示 */}
+                  {userPayPayName && (
+                    <div style={{
+                      fontSize:11, fontWeight:600, color:'#92400e',
+                      marginTop:3, padding:'2px 8px',
+                      background:'#fff5e6',
+                      border:'1px solid #fde68a',
+                      borderRadius:3,
+                      display:'inline-block',
+                    }}>
+                      💰 PayPay: {userPayPayName}
+                    </div>
+                  )}
+                  <div style={{fontSize:10, color:'var(--ink4)', marginTop:2, display:'flex', gap:12, flexWrap:'wrap'}}>
                     <span style={{fontFamily:'monospace'}}>{regId}</span>
                     <span>¥{amount.toLocaleString()}</span>
                     {userEmail && <span>{userEmail}</span>}
                   </div>
                 </div>
-                <button onClick={() => handleMarkPaid(regId, false)}
-                  disabled={submitting}
-                  className="btn-primary" style={{fontSize:10, padding:'6px 12px'}}>
-                  決済済みにマーク
-                </button>
+                <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+                  {/* (Phase 15.S46) PayPay アプリで確認ボタン */}
+                  <button
+                    onClick={() => {
+                      // PayPay 表示名をクリップボードにコピー
+                      if (userPayPayName) {
+                        try {
+                          navigator.clipboard.writeText(userPayPayName);
+                        } catch (e) {}
+                      }
+                      // PayPay アプリ起動 / Web 版フォールバック
+                      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+                      if (isMobile) {
+                        window.location.href = 'paypay://';
+                        setTimeout(() => {
+                          if (!document.hidden) window.open('https://paypay.ne.jp/', '_blank', 'noopener,noreferrer');
+                        }, 1500);
+                      } else {
+                        window.open('https://business.paypay.ne.jp/', '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                    disabled={submitting}
+                    title={userPayPayName ? `「${userPayPayName}」をコピーして PayPay を開く` : 'PayPay を開く'}
+                    style={{
+                      fontSize:10, padding:'6px 10px',
+                      background:'#fff5e6', color:'#92400e',
+                      border:'1px solid #f59e0b', borderRadius:3,
+                      cursor: submitting ? 'not-allowed' : 'pointer',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                    }}>
+                    📱 PayPay で確認
+                  </button>
+                  <button onClick={() => handleMarkPaid(regId, false)}
+                    disabled={submitting}
+                    className="btn-primary" style={{fontSize:10, padding:'6px 12px'}}>
+                    決済済みにマーク
+                  </button>
+                </div>
               </div>
             );
           })}
