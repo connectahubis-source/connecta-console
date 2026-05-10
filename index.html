@@ -8610,6 +8610,21 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
           <IMEInput className="input" value={session.name || ''} onChange={e=>update('name', e.target.value)} placeholder={`例: 鎌倉散策 / Day ${index + 1}`}/>
         </div>
 
+        {/* (Phase 15.S43) セッション名 多言語 — 折りたたみ */}
+        <details style={{padding:'4px 8px',background:'var(--bg2)',borderRadius:4,fontSize:11}}>
+          <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>🌐 セッション名 多言語 (任意)</summary>
+          <div className="grid-2" style={{gap:6,marginTop:6}}>
+            <div className="field">
+              <label className="field-label" style={{fontSize:10}}>やさしい日本語</label>
+              <IMEInput className="input" style={{padding:6,fontSize:11}} value={session.name_easy || ''} onChange={e=>update('name_easy', e.target.value)} placeholder="空ならjaフォールバック"/>
+            </div>
+            <div className="field">
+              <label className="field-label" style={{fontSize:10}}>英語</label>
+              <IMEInput className="input" style={{padding:6,fontSize:11}} value={session.name_en || ''} onChange={e=>update('name_en', e.target.value)} placeholder={`Day ${index + 1}`}/>
+            </div>
+          </div>
+        </details>
+
         <div className="grid-2">
           <div className="field">
             <label className="field-label" style={{fontSize:11}}>日付</label>
@@ -8648,6 +8663,21 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
               <label className="field-label" style={{fontSize:11}}>会場名</label>
               <IMEInput className="input" value={session.venue || ''} onChange={e=>update('venue', e.target.value)} placeholder="例: 鎌倉駅西口"/>
             </div>
+
+            {/* (Phase 15.S43) 会場名 多言語 */}
+            <details style={{padding:'4px 8px',background:'var(--bg2)',borderRadius:4,fontSize:11}}>
+              <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>🌐 会場名 多言語 (任意)</summary>
+              <div className="grid-2" style={{gap:6,marginTop:6}}>
+                <div className="field">
+                  <label className="field-label" style={{fontSize:10}}>やさしい日本語</label>
+                  <IMEInput className="input" style={{padding:6,fontSize:11}} value={session.venue_easy || ''} onChange={e=>update('venue_easy', e.target.value)} placeholder="空ならjaフォールバック"/>
+                </div>
+                <div className="field">
+                  <label className="field-label" style={{fontSize:10}}>英語</label>
+                  <IMEInput className="input" style={{padding:6,fontSize:11}} value={session.venue_en || ''} onChange={e=>update('venue_en', e.target.value)} placeholder="Kamakura Station West"/>
+                </div>
+              </div>
+            </details>
             <div className="field">
               <label className="field-label" style={{fontSize:11}}>住所</label>
               <IMEInput className="input" value={session.address || ''} onChange={e=>update('address', e.target.value)} placeholder="例: 神奈川県鎌倉市御成町1-15"/>
@@ -8690,6 +8720,21 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
           <label className="field-label" style={{fontSize:11}}>備考</label>
           <IMEInput className="input" value={session.notes || ''} onChange={e=>update('notes', e.target.value)} placeholder="任意 / 持ち物、注意事項など"/>
         </div>
+
+        {/* (Phase 15.S43) 備考 多言語 */}
+        <details style={{padding:'4px 8px',background:'var(--bg2)',borderRadius:4,fontSize:11}}>
+          <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>🌐 備考 多言語 (任意)</summary>
+          <div className="grid-2" style={{gap:6,marginTop:6}}>
+            <div className="field">
+              <label className="field-label" style={{fontSize:10}}>やさしい日本語</label>
+              <IMETextarea className="input" style={{padding:6,fontSize:11,height:50,resize:'vertical'}} value={session.notes_easy || ''} onChange={e=>update('notes_easy', e.target.value)} placeholder="空ならjaフォールバック"/>
+            </div>
+            <div className="field">
+              <label className="field-label" style={{fontSize:10}}>英語</label>
+              <IMETextarea className="input" style={{padding:6,fontSize:11,height:50,resize:'vertical'}} value={session.notes_en || ''} onChange={e=>update('notes_en', e.target.value)} placeholder="Bring water, comfortable shoes..."/>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -9042,6 +9087,13 @@ function PageEventCreate(){
             capacity: Number(sess.capacity) || 0,
             fee: Number(sess.fee) || 0,
             notes: sess.notes,
+            // (Phase 15.S43) 多言語フィールド
+            name_easy:  sess.name_easy  || '',
+            name_en:    sess.name_en    || '',
+            venue_easy: sess.venue_easy || '',
+            venue_en:   sess.venue_en   || '',
+            notes_easy: sess.notes_easy || '',
+            notes_en:   sess.notes_en   || '',
           };
           if (isNew) {
             await window.postData('createEventSession', sessPayload);
@@ -13522,29 +13574,37 @@ function PageHomepageSettings(){
     { section: 'Concept', label: 'コンセプト' },
     { key: 'concept_main_en',   label: 'メインコピー (英)',  ph: 'Make Tokyo home.', type: 'text' },
     { key: 'concept_main_ja',   label: 'メインコピー (日)',  ph: '東京を、もうひとつのふるさとに。', type: 'text' },
+    { key: 'concept_main_easy', label: 'メインコピー (やさしい日本語)', ph: 'とうきょうを、もうひとつの ふるさとに。', type: 'text' },
     { key: 'concept_body_en',   label: '本文 (英)',           ph: 'For international students arriving in Tokyo...', type: 'textarea' },
     { key: 'concept_body_ja',   label: '本文 (日)',           ph: 'イベントではなく、出会いを。\n一夜限りでなく、日常のなかで。', type: 'textarea' },
+    { key: 'concept_body_easy', label: '本文 (やさしい日本語)', ph: 'イベントだけ じゃなくて、 であい。\nひとよ だけ じゃなくて、 まいにちの なかで。', type: 'textarea' },
     { key: 'concept_image_url', label: '右側の写真',           type: 'image' },
     { key: 'concept_button_link', label: '「もっと知る」リンク', ph: '#/about', type: 'text' },
 
     { section: 'Events', label: 'Events 入口セクション' },
     { key: 'events_section_bg_image',  label: '背景画像',     type: 'image' },
-    { key: 'events_section_label_en',  label: '英ラベル',     ph: 'Events', type: 'text' },
-    { key: 'events_section_label_ja',  label: '日ラベル',     ph: 'イベント一覧', type: 'text' },
+    { key: 'events_section_label_en',  label: 'ラベル (英)',     ph: 'Events', type: 'text' },
+    { key: 'events_section_label_ja',  label: 'ラベル (日)',     ph: 'イベント一覧', type: 'text' },
+    { key: 'events_section_label_easy',label: 'ラベル (やさしい日本語)', ph: 'イベント', type: 'text' },
     { key: 'events_section_body_en',   label: '本文 (英)',    ph: 'A space to meet, not just join...', type: 'textarea' },
-    { key: 'events_section_body',      label: '本文 (日)',    ph: '初めての方も、一人での参加も大歓迎です。', type: 'textarea' },
-    { key: 'events_section_cta_text',  label: 'CTA文言 (参加する)',     ph: '参加する', type: 'text' },
-    { key: 'events_section_cta_link',  label: 'CTAリンク (参加する)',   ph: '#events-list', type: 'text' },
+    { key: 'events_section_body_ja',   label: '本文 (日)',    ph: '初めての方も、一人での参加も大歓迎です。', type: 'textarea' },
+    { key: 'events_section_body_easy', label: '本文 (やさしい日本語)', ph: 'はじめての ひとも、 ひとりの ひとも だいかんげい。', type: 'textarea' },
+    { key: 'events_section_cta_text_ja',   label: 'CTA文言 (日)',     ph: '参加する', type: 'text' },
+    { key: 'events_section_cta_text_en',   label: 'CTA文言 (英)',     ph: 'Join', type: 'text' },
+    { key: 'events_section_cta_text_easy', label: 'CTA文言 (やさしい日本語)', ph: 'さんかする', type: 'text' },
+    { key: 'events_section_cta_link',  label: 'CTAリンク',     ph: '#events-list', type: 'text' },
     { key: 'events_gallery_link',      label: '「過去のイベントを見る」リンク', ph: '#/gallery', type: 'text' },
 
     { section: 'Upcoming Events', label: '近日開催イベントセクション' },
-    { key: 'upcoming_events_label_en', label: '英ラベル',     ph: 'Events', type: 'text' },
-    { key: 'upcoming_events_label_ja', label: '日ラベル',     ph: '近日開催', type: 'text' },
+    { key: 'upcoming_events_label_en',   label: 'ラベル (英)',     ph: 'Events', type: 'text' },
+    { key: 'upcoming_events_label_ja',   label: 'ラベル (日)',     ph: '近日開催', type: 'text' },
+    { key: 'upcoming_events_label_easy', label: 'ラベル (やさしい日本語)', ph: 'もうすぐの イベント', type: 'text' },
 
     { section: 'News', label: 'News セクション' },
-    { key: 'news_section_bg_image',    label: '背景画像 (固定)', type: 'image' },
-    { key: 'news_section_label_en',    label: '英ラベル',     ph: 'News', type: 'text' },
-    { key: 'news_section_label_ja',    label: '日ラベル',     ph: '最新のお知らせ', type: 'text' },
+    { key: 'news_section_bg_image',      label: '背景画像 (固定)', type: 'image' },
+    { key: 'news_section_label_en',      label: 'ラベル (英)',     ph: 'News', type: 'text' },
+    { key: 'news_section_label_ja',      label: 'ラベル (日)',     ph: '最新のお知らせ', type: 'text' },
+    { key: 'news_section_label_easy',    label: 'ラベル (やさしい日本語)', ph: 'おしらせ', type: 'text' },
 
     { section: 'Footer', label: 'フッター' },
     { key: 'footer_tagline_en',  label: 'キャッチコピー (英)', ph: 'Make Tokyo home.', type: 'text' },
