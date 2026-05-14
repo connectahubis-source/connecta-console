@@ -9952,10 +9952,10 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
   const visible = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     return registrations.filter(r => {
-      const status = r['ステータス'] || r.status || '';
-      const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
-      const eventId = r['EventID'] || r.eventId || '';
-      const refundAmount = Number(r['返金額']) || 0;
+      const status = r.status || '';
+      const paid = r.paid === true;
+      const eventId = r.eventId || '';
+      const refundAmount = Number(r.refundAmount) || 0;
 
       // ステータスフィルタ
       if (statusFilter === 'paid' && !paid) return false;
@@ -9968,12 +9968,12 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
 
       // 検索
       if (q) {
-        const regId = (r['RegID'] || r.regId || '').toLowerCase();
-        const userId = (r['UserID'] || r.userId || '').toLowerCase();
-        const userName = (partMap[r['UserID'] || r.userId] || '').toLowerCase();
+        const regId = (r.id || '').toLowerCase();
+        const userId = (r.userId || '').toLowerCase();
+        const userName = (partMap[r.userId] || '').toLowerCase();
         const evTitle = (evMap[eventId] || '').toLowerCase();
-        const memo = (r['備考'] || r.memo || '').toLowerCase();
-        const actualMethod = (r['実支払い方法'] || '').toLowerCase();
+        const memo = (r.note || '').toLowerCase();
+        const actualMethod = (r.actualPaymentMethod || '').toLowerCase();
         if (!regId.includes(q) && !userId.includes(q) && !userName.includes(q)
             && !evTitle.includes(q) && !memo.includes(q) && !actualMethod.includes(q)) {
           return false;
@@ -9982,8 +9982,8 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
 
       return true;
     }).sort((a, b) => {
-      const ta = a['申込日時'] || a.createdAt || '';
-      const tb = b['申込日時'] || b.createdAt || '';
+      const ta = a.appliedAt || '';
+      const tb = b.appliedAt || '';
       return String(tb).localeCompare(String(ta));
     });
   }, [registrations, statusFilter, selectedEventId, search, partMap, evMap]);
@@ -10039,17 +10039,17 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
             </tr></thead>
             <tbody>
               {visible.map(r => {
-                const regId = r['RegID'] || r.regId || '';
-                const userId = r['UserID'] || r.userId || '';
+                const regId = r.id || '';
+                const userId = r.userId || '';
                 const userName = partMap[userId] || userId;
-                const eventId = r['EventID'] || r.eventId || '';
+                const eventId = r.eventId || '';
                 const evTitle = evMap[eventId] || '(不明)';
-                const status = r['ステータス'] || r.status || '';
-                const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
-                const amount = Number(r['金額']) || 0;
-                const memo = r['備考'] || r.memo || '';
-                const actualMethod = r['実支払い方法'] || '';
-                const refundAmount = Number(r['返金額']) || 0;
+                const status = r.status || '';
+                const paid = r.paid === true;
+                const amount = Number(r.amount) || 0;
+                const memo = r.note || '';
+                const actualMethod = r.actualPaymentMethod || '';
+                const refundAmount = Number(r.refundAmount) || 0;
                 const isCancelled = status === 'キャンセル';
                 const isRefunded = status === '返金' || refundAmount > 0;
 
@@ -10096,7 +10096,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
                     </td>
                     <td><span style={{padding:'2px 8px',background:statusBadge.bg,color:statusBadge.fg,borderRadius:4,fontSize:11,fontWeight:600}}>{statusBadge.label}</span></td>
                     <td className="mono" style={{fontSize:10,color:'var(--ink4)',whiteSpace:'nowrap'}}>
-                      {r['申込日時'] ? new Date(r['申込日時']).toLocaleDateString('ja-JP') : '—'}
+                      {r.appliedAt ? new Date(r.appliedAt).toLocaleDateString('ja-JP') : '—'}
                     </td>
                     <td style={{whiteSpace:'nowrap'}}>
                       {!isCancelled && (
