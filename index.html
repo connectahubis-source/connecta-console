@@ -741,6 +741,7 @@ svg{display:block}
       <a href="#photos" class="nav-item" data-nav="photos"><svg class="ic" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>写真</a>
       <a href="#payments" class="nav-item" data-nav="payments"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>決済・精算</a>
       <a href="#paypay" class="nav-item" data-nav="paypay"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a3 3 0 0 1 0 6H9V8zm0 6v4"/></svg>PayPay 決済管理</a>
+      <a href="#coupons" class="nav-item" data-nav="coupons"><svg class="ic" viewBox="0 0 24 24"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>クーポン管理</a>
       <a href="#departments" class="nav-item" data-nav="departments"><svg class="ic" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>部署 / チーム</a>
       <a href="#org" class="nav-item" data-nav="org"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>団体紹介</a>
       <a href="#ads" class="nav-item" data-nav="ads"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>広告</a>
@@ -2681,7 +2682,7 @@ function EventCalendar({events}){
         {multiEvents.length > 0 && (
           <div style={{marginTop:14,padding:12,background:'var(--violet-50)',border:'1px solid var(--violet-100)',borderRadius:8}}>
             <div style={{fontSize:11,fontWeight:700,color:'var(--violet)',marginBottom:8,letterSpacing:'.05em'}}>
-              📅 複数日程イベント ({multiEvents.length}件)
+              複数日程イベント ({multiEvents.length}件)
             </div>
             <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
               {multiEvents.map(e => (
@@ -3613,7 +3614,7 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
           {isMulti && (
             <div className="field" style={{padding:14,background:'var(--violet-50)',borderRadius:8,border:'1px solid var(--violet-100)'}}>
               <label className="field-label" style={{color:'var(--violet)',fontWeight:700,marginBottom:10}}>
-                📅 複数日開催イベント — 対象を選んでください
+                複数日開催イベント — 対象を選んでください
               </label>
               <div style={{display:'flex',flexDirection:'column',gap:8,fontSize:13}}>
                 <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor: mode === 'edit' ? 'not-allowed' : 'pointer',opacity: mode === 'edit' ? 0.6 : 1}}>
@@ -7156,6 +7157,690 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
 
 window.PagePayPay = PagePayPay;
 
+// =============================================================================
+// (Phase 15.S114) PageCoupons — クーポン管理
+// =============================================================================
+function PageCoupons() {
+  const [coupons, setCoupons] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);  // null = 一覧、 {} = 新規、 {id, ...} = 編集
+  const [usageTarget, setUsageTarget] = useState(null);  // 使用履歴を見るクーポン
+  const [usage, setUsage] = useState([]);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [filterActive, setFilterActive] = useState('all');  // 'all' / 'active' / 'inactive' / 'expired'
+  const [shareTarget, setShareTarget] = useState(null);  // (Phase 15.S115) URL 共有モーダル対象
+  const [toast, setToast] = useState('');  // (Phase 15.S115) コピー通知
+  // (Phase 15.S115) 参加者サイト ベース URL — Admin が変更可
+  const [siteBaseUrl, setSiteBaseUrl] = useState(() => {
+    return localStorage.getItem('cca_participants_base_url') || 'https://connectahubis-source.github.io/event/';
+  });
+  const updateSiteBaseUrl = (v) => {
+    setSiteBaseUrl(v);
+    localStorage.setItem('cca_participants_base_url', v);
+  };
+
+  // (Phase 15.S115) クーポン取得 URL を生成
+  const buildClaimUrl = (code) => {
+    let base = siteBaseUrl;
+    if (!base.endsWith('/')) base += '/';
+    return base + '#/coupon/' + encodeURIComponent(code);
+  };
+
+  // (Phase 15.S115) クリップボードコピー
+  const copyToClipboard = async (text, msg = 'コピーしました') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast(msg);
+      setTimeout(() => setToast(''), 2000);
+    } catch (e) {
+      // fallback (古いブラウザ用)
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); setToast(msg); } catch (_) { alert('コピーに失敗しました'); }
+      document.body.removeChild(ta);
+      setTimeout(() => setToast(''), 2000);
+    }
+  };
+
+  const refetch = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await window.postData('admin.listCoupons', {});
+      setCoupons(data.coupons || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => { refetch(); }, []);
+
+  // イベント一覧 (適用イベント選択用)
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const list = await window.fetchData('listEvents');
+        setEvents(list || []);
+      } catch (e) { /* silently */ }
+    })();
+  }, []);
+
+  const handleDelete = async (couponId, code) => {
+    if (!confirm(`クーポン「${code}」 を削除しますか?\nこの操作は元に戻せません。`)) return;
+    try {
+      await window.postData('admin.deleteCoupon', { couponId });
+      refetch();
+    } catch (e) {
+      alert('削除失敗: ' + e.message);
+    }
+  };
+
+  const openUsage = async (coupon) => {
+    setUsageTarget(coupon);
+    setUsageLoading(true);
+    try {
+      const data = await window.postData('admin.listCouponUsage', { couponId: coupon.id });
+      setUsage(data.usage || []);
+    } catch (e) {
+      alert('使用履歴取得失敗: ' + e.message);
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  // フィルタ適用
+  const filteredCoupons = React.useMemo(() => {
+    const now = new Date();
+    return coupons.filter(c => {
+      const isExpired = c.expiresAt && new Date(c.expiresAt) < now;
+      const isLimitReached = c.usageLimit > 0 && c.usedCount >= c.usageLimit;
+      if (filterActive === 'active') return c.active && !isExpired && !isLimitReached;
+      if (filterActive === 'inactive') return !c.active;
+      if (filterActive === 'expired') return isExpired || isLimitReached;
+      return true;
+    });
+  }, [coupons, filterActive]);
+
+  if (editTarget !== null) {
+    return React.createElement(CouponEditForm, {
+      target: editTarget,
+      events: events,
+      onCancel: () => setEditTarget(null),
+      onSaved: () => { setEditTarget(null); refetch(); },
+    });
+  }
+
+  if (usageTarget) {
+    return React.createElement(CouponUsageView, {
+      coupon: usageTarget,
+      usage: usage,
+      loading: usageLoading,
+      onClose: () => { setUsageTarget(null); setUsage([]); },
+    });
+  }
+
+  return (
+    <div className="page" style={{padding:'24px',position:'relative'}}>
+      <div className="page-head" style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:12}}>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:700,margin:0,color:'var(--ink1)'}}>クーポン管理</h1>
+          <div style={{fontSize:12,color:'var(--ink3)',marginTop:4}}>イベント参加費の割引クーポンを発行・管理します</div>
+        </div>
+        <button className="btn btn-primary"
+          onClick={() => setEditTarget({})}
+          style={{background:'#0a2960',color:'#fff',border:'none',padding:'10px 20px',borderRadius:6,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+          + 新規クーポン
+        </button>
+      </div>
+
+      {/* (Phase 15.S115) 参加者サイト ベース URL 設定 */}
+      <div style={{padding:'10px 14px',background:'#f0f7ff',border:'1px solid #cfe4ff',borderRadius:6,marginBottom:14,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <span style={{fontSize:12,color:'#0a2960',fontWeight:600,whiteSpace:'nowrap'}}>取得 URL のベース:</span>
+        <input className="input" type="text" value={siteBaseUrl} onChange={e => updateSiteBaseUrl(e.target.value)}
+          style={{flex:1,minWidth:280,fontSize:12,fontFamily:'var(--mono)'}}
+          placeholder="https://your-site.com/" />
+        <span style={{fontSize:11,color:'var(--ink3)'}}>※ 参加者サイトの URL (末尾「/」付き)</span>
+      </div>
+
+      {/* フィルタ */}
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+        {[
+          {val:'all', label:'すべて'},
+          {val:'active', label:'有効'},
+          {val:'inactive', label:'無効化'},
+          {val:'expired', label:'期限切れ / 上限到達'},
+        ].map(opt => (
+          <button key={opt.val} onClick={() => setFilterActive(opt.val)}
+            style={{
+              padding:'6px 14px',
+              borderRadius:999,
+              border:`1px solid ${filterActive === opt.val ? '#0a2960' : 'var(--line)'}`,
+              background: filterActive === opt.val ? '#eef2ff' : '#fff',
+              color: filterActive === opt.val ? '#0a2960' : 'var(--ink2)',
+              fontSize:12,fontWeight: filterActive === opt.val ? 600 : 400,
+              cursor:'pointer',
+            }}>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <div style={{padding:14,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:6,color:'#991b1b',marginBottom:16,fontSize:13}}>
+          エラー: {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{padding:48,textAlign:'center',color:'var(--ink3)',fontSize:13}}>読み込み中...</div>
+      ) : filteredCoupons.length === 0 ? (
+        <div style={{padding:48,textAlign:'center',background:'var(--bg2)',border:'1px dashed var(--line)',borderRadius:6,color:'var(--ink3)',fontSize:13}}>
+          {coupons.length === 0 ? 'クーポンがまだありません。 「新規クーポン」 から作成してください。' : '条件に合うクーポンがありません。'}
+        </div>
+      ) : (
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',background:'#fff',border:'1px solid var(--line)',fontSize:13}}>
+            <thead>
+              <tr style={{background:'var(--bg2)',borderBottom:'1px solid var(--line)'}}>
+                <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>コード</th>
+                <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>名称</th>
+                <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>割引</th>
+                <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>有効期限</th>
+                <th style={{padding:'10px 12px',textAlign:'center',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>使用済 / 上限</th>
+                <th style={{padding:'10px 12px',textAlign:'right',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>総割引額</th>
+                <th style={{padding:'10px 12px',textAlign:'center',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>適用範囲</th>
+                <th style={{padding:'10px 12px',textAlign:'center',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>状態</th>
+                <th style={{padding:'10px 12px',textAlign:'right',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCoupons.map(c => {
+                const isExpired = c.expiresAt && new Date(c.expiresAt) < new Date();
+                const isLimitReached = c.usageLimit > 0 && c.usedCount >= c.usageLimit;
+                const statusBadge = !c.active
+                  ? { label:'無効化', bg:'#f3f4f6', fg:'#6b7280' }
+                  : isExpired
+                  ? { label:'期限切れ', bg:'#fef2f2', fg:'#991b1b' }
+                  : isLimitReached
+                  ? { label:'上限到達', bg:'#fef3c7', fg:'#92400e' }
+                  : { label:'有効', bg:'#dcfce7', fg:'#15803d' };
+                return (
+                  <tr key={c.id} style={{borderBottom:'1px solid var(--line)'}}>
+                    <td style={{padding:'10px 12px',fontFamily:'var(--mono)',fontWeight:700,color:'#0a2960'}}>
+                      {c.code}
+                      {c.exclusive && (
+                        <span style={{
+                          display:'inline-block',marginLeft:6,padding:'1px 6px',
+                          background:'#fef3c7',color:'#92400e',
+                          border:'1px solid #fcd34d',borderRadius:3,
+                          fontSize:9,fontWeight:700,fontFamily:'var(--jp)',
+                          letterSpacing:'0.04em',
+                        }} title="他のクーポン使用履歴があるユーザーには適用不可">併用不可</span>
+                      )}
+                    </td>
+                    <td style={{padding:'10px 12px'}}>{c.name || '—'}</td>
+                    <td style={{padding:'10px 12px',fontFamily:'var(--mono)'}}>
+                      {c.discountType === 'percent'
+                        ? `-${c.discountValue}%${c.maxDiscount > 0 ? ` (最大 ¥${c.maxDiscount.toLocaleString()})` : ''}`
+                        : `-¥${c.discountValue.toLocaleString()}`}
+                    </td>
+                    <td style={{padding:'10px 12px',fontSize:12,color:'var(--ink2)'}}>
+                      {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString('ja-JP') : '無期限'}
+                    </td>
+                    <td style={{padding:'10px 12px',textAlign:'center',fontFamily:'var(--mono)',fontSize:12}}>
+                      {c.usedCount}{c.usageLimit > 0 ? ` / ${c.usageLimit}` : ' / ∞'}
+                    </td>
+                    <td style={{padding:'10px 12px',textAlign:'right',fontFamily:'var(--mono)',fontSize:12,color:c.totalDiscount > 0 ? '#92400e' : 'var(--ink4)'}}>
+                      {c.totalDiscount > 0 ? `-¥${c.totalDiscount.toLocaleString()}` : '—'}
+                      {c.avgDiscount > 0 && (
+                        <div style={{fontSize:10,color:'var(--ink4)',marginTop:2,fontWeight:400}}>
+                          平均 ¥{c.avgDiscount.toLocaleString()}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{padding:'10px 12px',textAlign:'center',fontSize:11,color:'var(--ink2)'}}>
+                      {c.applicableEvents === 'ALL' ? '全イベント' : `${c.applicableEvents.split(',').length} イベント`}
+                    </td>
+                    <td style={{padding:'10px 12px',textAlign:'center'}}>
+                      <span style={{
+                        display:'inline-block',padding:'2px 8px',
+                        background: statusBadge.bg, color: statusBadge.fg,
+                        fontSize:11,fontWeight:600,borderRadius:4,
+                      }}>{statusBadge.label}</span>
+                    </td>
+                    <td style={{padding:'10px 12px',textAlign:'right'}}>
+                      <div style={{display:'inline-flex',gap:6,flexWrap:'wrap'}}>
+                        <button onClick={() => setShareTarget(c)} className="btn-mini"
+                          style={{padding:'4px 10px',background:'#dcfce7',border:'1px solid #15803d',borderRadius:4,fontSize:11,cursor:'pointer',color:'#15803d',fontWeight:600}}
+                          title="取得 URL を表示してコピー">
+                          取得URL
+                        </button>
+                        <button onClick={() => openUsage(c)} className="btn-mini"
+                          style={{padding:'4px 10px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink2)'}}>
+                          履歴
+                        </button>
+                        <button onClick={() => setEditTarget(c)} className="btn-mini"
+                          style={{padding:'4px 10px',background:'#eef2ff',border:'1px solid #0a2960',borderRadius:4,fontSize:11,cursor:'pointer',color:'#0a2960',fontWeight:600}}>
+                          編集
+                        </button>
+                        <button onClick={() => handleDelete(c.id, c.code)} className="btn-mini"
+                          style={{padding:'4px 10px',background:'#fff',border:'1px solid #dc2626',borderRadius:4,fontSize:11,cursor:'pointer',color:'#dc2626'}}>
+                          削除
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* (Phase 15.S115) 取得 URL 共有モーダル */}
+      {shareTarget && (
+        <div onClick={() => setShareTarget(null)} style={{
+          position:'fixed',top:0,left:0,right:0,bottom:0,
+          background:'rgba(0,0,0,0.5)',zIndex:9000,
+          display:'flex',alignItems:'center',justifyContent:'center',padding:20,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background:'#fff',borderRadius:8,padding:24,maxWidth:560,width:'100%',
+            boxShadow:'0 20px 50px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <h2 style={{margin:0,fontSize:18,fontWeight:700,color:'var(--ink1)'}}>クーポン取得 URL</h2>
+              <button onClick={() => setShareTarget(null)}
+                style={{background:'none',border:'none',fontSize:24,color:'var(--ink3)',cursor:'pointer',padding:0,width:32,height:32}}>✕</button>
+            </div>
+
+            <div style={{padding:'10px 14px',background:'#eff6ff',border:'1px solid #93c5fd',borderRadius:6,marginBottom:14,fontSize:13}}>
+              <strong style={{color:'#0a2960',fontFamily:'var(--mono)'}}>{shareTarget.code}</strong>
+              <span style={{color:'var(--ink2)',marginLeft:10}}>{shareTarget.name || ''}</span>
+            </div>
+
+            <div className="field">
+              <label className="field-label">取得用 URL (SNS / メール等で共有)</label>
+              <div style={{display:'flex',gap:6}}>
+                <input className="input" type="text" readOnly value={buildClaimUrl(shareTarget.code)}
+                  style={{flex:1,fontSize:12,fontFamily:'var(--mono)'}}
+                  onClick={e => e.target.select()}/>
+                <button onClick={() => copyToClipboard(buildClaimUrl(shareTarget.code), '取得 URL をコピーしました')}
+                  style={{padding:'8px 14px',background:'#0a2960',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  コピー
+                </button>
+              </div>
+              <div className="field-hint">このリンクをクリックした参加者がログイン後にクーポンを獲得できます</div>
+            </div>
+
+            <div className="field" style={{marginTop:14}}>
+              <label className="field-label">コードのみ (手入力用)</label>
+              <div style={{display:'flex',gap:6}}>
+                <input className="input" type="text" readOnly value={shareTarget.code}
+                  style={{flex:1,fontSize:14,fontFamily:'var(--mono)',fontWeight:700,letterSpacing:'0.06em'}}
+                  onClick={e => e.target.select()}/>
+                <button onClick={() => copyToClipboard(shareTarget.code, 'コードをコピーしました')}
+                  style={{padding:'8px 14px',background:'#fff',color:'#0a2960',border:'1px solid #0a2960',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  コピー
+                </button>
+              </div>
+            </div>
+
+            <div style={{marginTop:18,padding:'10px 14px',background:'#fef3c7',border:'1px solid #fcd34d',borderRadius:6,fontSize:11,color:'#92400e'}}>
+              ※ ベース URL の設定は一覧ページ上部の「取得 URL のベース」 で変更できます
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* (Phase 15.S115) Toast 通知 */}
+      {toast && (
+        <div style={{
+          position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',
+          padding:'10px 24px',background:'#15803d',color:'#fff',
+          borderRadius:999,fontSize:13,fontWeight:600,
+          boxShadow:'0 8px 24px rgba(21, 128, 61, 0.3)',
+          zIndex:9999,
+        }}>
+          ✓ {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// (Phase 15.S114) CouponEditForm — クーポン新規作成 / 編集フォーム
+// =============================================================================
+function CouponEditForm({ target, events, onCancel, onSaved }) {
+  const isNew = !target.id;
+  const [code, setCode] = useState(target.code || '');
+  const [name, setName] = useState(target.name || '');
+  const [description, setDescription] = useState(target.description || '');
+  const [discountType, setDiscountType] = useState(target.discountType || 'percent');
+  const [discountValue, setDiscountValue] = useState(target.discountValue || 10);
+  const [maxDiscount, setMaxDiscount] = useState(target.maxDiscount || 0);
+  const [minAmount, setMinAmount] = useState(target.minAmount || 0);
+  const [expiresAt, setExpiresAt] = useState(target.expiresAt ? target.expiresAt.split('T')[0] : '');
+  const [usageLimit, setUsageLimit] = useState(target.usageLimit || 0);
+  const [oneTimePerUser, setOneTimePerUser] = useState(target.oneTimePerUser !== false);
+  // (Phase 15.S117) 併用不可フラグ
+  const [exclusive, setExclusive] = useState(target.exclusive === true);
+  const [applicableMode, setApplicableMode] = useState(
+    !target.applicableEvents || target.applicableEvents === 'ALL' ? 'ALL' : 'SPECIFIC'
+  );
+  const [selectedEventIds, setSelectedEventIds] = useState(() => {
+    if (target.applicableEvents && target.applicableEvents !== 'ALL') {
+      return target.applicableEvents.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  });
+  const [active, setActive] = useState(target.active !== false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async () => {
+    setError(null);
+    // バリデーション
+    if (!code.trim()) { setError('コードを入力してください'); return; }
+    if (!/^[A-Z0-9_-]{3,32}$/.test(code.trim().toUpperCase())) {
+      setError('コードは英数字 (大文字)、 ハイフン、 アンダースコアのみ、 3-32 文字');
+      return;
+    }
+    if (Number(discountValue) <= 0) { setError('割引値は 0 より大きい数値'); return; }
+    if (discountType === 'percent' && Number(discountValue) > 100) {
+      setError('% タイプの割引値は 100 以下'); return;
+    }
+    if (applicableMode === 'SPECIFIC' && selectedEventIds.length === 0) {
+      setError('適用イベントを 1 つ以上選択してください'); return;
+    }
+
+    setSaving(true);
+    try {
+      const fields = {
+        code: code.trim().toUpperCase(),
+        name: name.trim(),
+        description: description.trim(),
+        discountType,
+        discountValue: Number(discountValue),
+        maxDiscount: Number(maxDiscount),
+        minAmount: Number(minAmount),
+        expiresAt: expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : '',
+        usageLimit: Number(usageLimit),
+        oneTimePerUser,
+        applicableEvents: applicableMode === 'ALL' ? 'ALL' : selectedEventIds.join(','),
+        active,
+        // (Phase 15.S117) 併用不可
+        exclusive,
+      };
+      if (isNew) {
+        await window.postData('admin.createCoupon', fields);
+      } else {
+        await window.postData('admin.updateCoupon', { couponId: target.id, ...fields });
+      }
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="page" style={{padding:'24px',maxWidth:800}}>
+      <div style={{marginBottom:18,display:'flex',alignItems:'center',gap:12}}>
+        <button onClick={onCancel}
+          style={{padding:'6px 12px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+          ← 一覧へ戻る
+        </button>
+        <h1 style={{fontSize:20,fontWeight:700,margin:0,color:'var(--ink1)'}}>
+          {isNew ? '新規クーポン' : `クーポン編集: ${target.code}`}
+        </h1>
+      </div>
+
+      {error && (
+        <div style={{padding:14,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:6,color:'#991b1b',marginBottom:16,fontSize:13}}>
+          エラー: {error}
+        </div>
+      )}
+
+      <div style={{background:'#fff',border:'1px solid var(--line)',borderRadius:6,padding:24,display:'flex',flexDirection:'column',gap:18}}>
+        {/* コード */}
+        <div className="field">
+          <label className="field-label">クーポンコード <span className="field-req">*</span></label>
+          <input className="input" type="text" value={code} onChange={e=>setCode(e.target.value.toUpperCase())}
+            placeholder="例: SUMMER2026"
+            disabled={!isNew}
+            style={{fontFamily:'var(--mono)',fontWeight:700,letterSpacing:'0.04em',background: !isNew ? 'var(--bg2)' : '#fff'}}/>
+          <div className="field-hint">英数字 (大文字)、 ハイフン、 アンダースコア、 3-32 文字。 {!isNew && '※ 作成後は変更不可'}</div>
+        </div>
+
+        {/* 名称 + 説明 */}
+        <div className="grid-2">
+          <div className="field">
+            <label className="field-label">名称</label>
+            <input className="input" type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例: 夏のキャンペーン" />
+          </div>
+          <div className="field">
+            <label className="field-label">説明</label>
+            <input className="input" type="text" value={description} onChange={e=>setDescription(e.target.value)} placeholder="補足説明 (任意)" />
+          </div>
+        </div>
+
+        {/* 割引タイプ + 割引値 */}
+        <div className="field">
+          <label className="field-label">割引タイプ <span className="field-req">*</span></label>
+          <div style={{display:'flex',gap:8,marginBottom:10}}>
+            {[
+              {val:'percent', label:'% 割引', hint:'パーセンテージ'},
+              {val:'fixed', label:'円固定', hint:'金額割引'},
+            ].map(opt => (
+              <label key={opt.val} style={{
+                display:'flex',alignItems:'center',gap:6,
+                padding:'8px 14px',borderRadius:999,
+                border: discountType === opt.val ? '2px solid #0a2960' : '1px solid var(--line)',
+                background: discountType === opt.val ? '#eef2ff' : '#fff',
+                cursor:'pointer',fontSize:13,fontWeight: discountType === opt.val ? 600 : 400,
+              }}>
+                <input type="radio" name="discount-type" value={opt.val}
+                  checked={discountType === opt.val}
+                  onChange={e => setDiscountType(e.target.value)}/>
+                <span>{opt.label}</span>
+                <span style={{fontSize:10,color:'var(--ink3)'}}>({opt.hint})</span>
+              </label>
+            ))}
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label className="field-label" style={{fontSize:11,color:'var(--ink3)'}}>
+                {discountType === 'percent' ? '割引率 (%)' : '割引額 (円)'}
+              </label>
+              <input className="input" type="number" min="1" value={discountValue} onChange={e=>setDiscountValue(e.target.value)}
+                max={discountType === 'percent' ? '100' : undefined}/>
+            </div>
+            {discountType === 'percent' && (
+              <div className="field">
+                <label className="field-label" style={{fontSize:11,color:'var(--ink3)'}}>最大割引額 (円、 0=無制限)</label>
+                <input className="input" type="number" min="0" value={maxDiscount} onChange={e=>setMaxDiscount(e.target.value)} placeholder="例: 1000"/>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 最低申込額 + 有効期限 */}
+        <div className="grid-2">
+          <div className="field">
+            <label className="field-label">最低申込額 (円)</label>
+            <input className="input" type="number" min="0" value={minAmount} onChange={e=>setMinAmount(e.target.value)} placeholder="0 で制限なし"/>
+            <div className="field-hint">この金額以上の申込で適用可能</div>
+          </div>
+          <div className="field">
+            <label className="field-label">有効期限</label>
+            <input className="input" type="date" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/>
+            <div className="field-hint">空欄で無期限</div>
+          </div>
+        </div>
+
+        {/* 使用上限 + 1ユーザー1回 */}
+        <div className="grid-2">
+          <div className="field">
+            <label className="field-label">使用上限 (全体、 0=無制限)</label>
+            <input className="input" type="number" min="0" value={usageLimit} onChange={e=>setUsageLimit(e.target.value)} placeholder="例: 100"/>
+          </div>
+          <div className="field">
+            <label className="field-label">1 ユーザー 1 回制限</label>
+            <label style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:oneTimePerUser?'#eef2ff':'#fff',border:`1px solid ${oneTimePerUser?'#0a2960':'var(--line)'}`,borderRadius:6,cursor:'pointer',fontSize:13,marginTop:6}}>
+              <input type="checkbox" checked={oneTimePerUser} onChange={e=>setOneTimePerUser(e.target.checked)}/>
+              <span>同じユーザーは 1 回のみ使用可</span>
+            </label>
+          </div>
+        </div>
+
+        {/* (Phase 15.S117) 他クーポンとの併用不可 */}
+        <div className="field">
+          <label className="field-label">他クーポンとの併用</label>
+          <label style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:exclusive?'#fef3c7':'#fff',border:`1px solid ${exclusive?'#92400e':'var(--line)'}`,borderRadius:6,cursor:'pointer',fontSize:13,marginTop:6}}>
+            <input type="checkbox" checked={exclusive} onChange={e=>setExclusive(e.target.checked)}/>
+            <span>このクーポンは他のクーポンと併用不可 (他のクーポン使用履歴があるユーザーには適用不可)</span>
+          </label>
+          <div className="field-hint">例: 「初回限定クーポン」 等、 過去に何かしらのクーポンを使ったユーザーには適用したくない場合に有効</div>
+        </div>
+
+        {/* 適用イベント */}
+        <div className="field">
+          <label className="field-label">適用イベント <span className="field-req">*</span></label>
+          <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+            {[
+              {val:'ALL', label:'すべてのイベント'},
+              {val:'SPECIFIC', label:'特定のイベントのみ'},
+            ].map(opt => (
+              <label key={opt.val} style={{
+                display:'flex',alignItems:'center',gap:6,
+                padding:'8px 14px',borderRadius:999,
+                border: applicableMode === opt.val ? '2px solid #0a2960' : '1px solid var(--line)',
+                background: applicableMode === opt.val ? '#eef2ff' : '#fff',
+                cursor:'pointer',fontSize:13,fontWeight: applicableMode === opt.val ? 600 : 400,
+              }}>
+                <input type="radio" name="applicable-mode" value={opt.val}
+                  checked={applicableMode === opt.val}
+                  onChange={e => setApplicableMode(e.target.value)}/>
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </div>
+          {applicableMode === 'SPECIFIC' && (
+            <div style={{maxHeight:200,overflowY:'auto',border:'1px solid var(--line)',borderRadius:6,padding:8,background:'var(--bg2)'}}>
+              {events.length === 0 ? (
+                <div style={{fontSize:12,color:'var(--ink3)',padding:12,textAlign:'center'}}>イベント読み込み中...</div>
+              ) : events.map(ev => (
+                <label key={ev.id} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 8px',cursor:'pointer',fontSize:12}}>
+                  <input type="checkbox"
+                    checked={selectedEventIds.includes(ev.id)}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedEventIds([...selectedEventIds, ev.id]);
+                      else setSelectedEventIds(selectedEventIds.filter(id => id !== ev.id));
+                    }}/>
+                  <span style={{fontFamily:'var(--mono)',color:'var(--ink3)'}}>{ev.id}</span>
+                  <span style={{color:'var(--ink1)'}}>{ev.title}</span>
+                  {ev.date && <span style={{fontSize:10,color:'var(--ink3)'}}>({ev.date})</span>}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 有効化 */}
+        <div className="field">
+          <label style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:active?'#dcfce7':'#fef2f2',border:`1px solid ${active?'#15803d':'#dc2626'}`,borderRadius:6,cursor:'pointer',fontSize:13,fontWeight:600,color:active?'#15803d':'#991b1b'}}>
+            <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}/>
+            <span>{active ? '有効 (使用可能)' : '無効化 (使用不可)'}</span>
+          </label>
+        </div>
+
+        {/* ボタン */}
+        <div style={{display:'flex',gap:12,justifyContent:'flex-end',paddingTop:12,borderTop:'1px solid var(--line)'}}>
+          <button onClick={onCancel} disabled={saving}
+            style={{padding:'10px 20px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:13,cursor:saving?'not-allowed':'pointer',color:'var(--ink2)'}}>
+            キャンセル
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            style={{padding:'10px 24px',background:'#0a2960',color:'#fff',border:'none',borderRadius:6,fontSize:13,fontWeight:700,cursor:saving?'not-allowed':'pointer',opacity:saving?0.6:1}}>
+            {saving ? '保存中...' : (isNew ? 'クーポンを作成' : '変更を保存')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// (Phase 15.S114) CouponUsageView — クーポン使用履歴
+// =============================================================================
+function CouponUsageView({ coupon, usage, loading, onClose }) {
+  return (
+    <div className="page" style={{padding:'24px',maxWidth:900}}>
+      <div style={{marginBottom:18,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <button onClick={onClose}
+          style={{padding:'6px 12px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+          ← 一覧へ戻る
+        </button>
+        <h1 style={{fontSize:20,fontWeight:700,margin:0,color:'var(--ink1)'}}>
+          使用履歴: <span style={{fontFamily:'var(--mono)',color:'#0a2960'}}>{coupon.code}</span>
+        </h1>
+      </div>
+
+      <div style={{padding:14,background:'#eff6ff',border:'1px solid #93c5fd',borderRadius:6,marginBottom:16,fontSize:13,color:'#0a2960'}}>
+        <strong>{coupon.name || coupon.code}</strong> — 使用済 {coupon.usedCount}{coupon.usageLimit > 0 ? ` / ${coupon.usageLimit}` : ''} 回
+      </div>
+
+      {loading ? (
+        <div style={{padding:48,textAlign:'center',color:'var(--ink3)',fontSize:13}}>読み込み中...</div>
+      ) : usage.length === 0 ? (
+        <div style={{padding:48,textAlign:'center',background:'var(--bg2)',border:'1px dashed var(--line)',borderRadius:6,color:'var(--ink3)',fontSize:13}}>
+          まだ使用履歴がありません
+        </div>
+      ) : (
+        <table style={{width:'100%',borderCollapse:'collapse',background:'#fff',border:'1px solid var(--line)',fontSize:13}}>
+          <thead>
+            <tr style={{background:'var(--bg2)',borderBottom:'1px solid var(--line)'}}>
+              <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12}}>使用日時</th>
+              <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12}}>UserID</th>
+              <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12}}>RegID</th>
+              <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12}}>EventID</th>
+              <th style={{padding:'10px 12px',textAlign:'right',fontWeight:600,fontSize:12}}>割引額</th>
+            </tr>
+          </thead>
+          <tbody>
+            {usage.map(u => (
+              <tr key={u.id} style={{borderBottom:'1px solid var(--line)'}}>
+                <td style={{padding:'10px 12px',fontSize:12,fontFamily:'var(--mono)'}}>
+                  {u.usedAt ? new Date(u.usedAt).toLocaleString('ja-JP') : '—'}
+                </td>
+                <td style={{padding:'10px 12px',fontSize:12,fontFamily:'var(--mono)',color:'var(--ink2)'}}>{u.userId}</td>
+                <td style={{padding:'10px 12px',fontSize:12,fontFamily:'var(--mono)',color:'var(--ink2)'}}>{u.regId}</td>
+                <td style={{padding:'10px 12px',fontSize:12,fontFamily:'var(--mono)',color:'var(--ink2)'}}>{u.eventId}</td>
+                <td style={{padding:'10px 12px',textAlign:'right',fontFamily:'var(--mono)',fontWeight:700,color:'#15803d'}}>
+                  -¥{u.discount.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+window.PageCoupons = PageCoupons;
+window.CouponEditForm = CouponEditForm;
+window.CouponUsageView = CouponUsageView;
+
 function PagePayments(){
   const [payments, setPayments] = useState([]);
   const [events, setEvents] = useState([]);
@@ -7164,6 +7849,19 @@ function PagePayments(){
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
+  // (Phase 15.S117) イベント収益サマリー
+  const [revenueSummary, setRevenueSummary] = useState([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryFilter, setSummaryFilter] = useState('upcoming');
+  // (Phase 15.S118) イベント絞り込み (KPI + 支払い方法別を連動)
+  const [selectedEventId, setSelectedEventId] = useState('');
+  // (Phase 15.S119) タブ + 変更ログ + 操作モーダル
+  const [activeTab, setActiveTab] = useState('overview');  // 'overview' / 'records' / 'paypay' / 'log'
+  const [paymentLog, setPaymentLog] = useState([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [methodChangeTarget, setMethodChangeTarget] = useState(null);  // 方法変更モーダル対象
+  const [refundTarget, setRefundTarget] = useState(null);  // 返金モーダル対象
+  const [toast, setToast] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -7189,6 +7887,86 @@ function PagePayments(){
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // (Phase 15.S117) イベント収益サマリー fetch
+  const reloadSummary = React.useCallback(async () => {
+    setSummaryLoading(true);
+    try {
+      const res = await window.postData('admin.getEventRevenueSummary', {});
+      setRevenueSummary(res.events || []);
+    } catch (e) { /* silent */ }
+    finally { setSummaryLoading(false); }
+  }, []);
+
+  useEffect(() => { reloadSummary(); }, [reloadSummary]);
+
+  // (Phase 15.S119) 支払い方法変更ログ fetch
+  const reloadPaymentLog = React.useCallback(async (filters) => {
+    setLogLoading(true);
+    try {
+      const res = await window.postData('admin.listPaymentLog', filters || {});
+      setPaymentLog(res.logs || []);
+    } catch (e) { /* silent */ }
+    finally { setLogLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'log') reloadPaymentLog({});
+  }, [activeTab, reloadPaymentLog]);
+
+  // Toast ヘルパー
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2200);
+  };
+
+  // (Phase 15.S119) 支払い方法変更ハンドラ
+  const handleChangePaymentMethod = async (regId, newMethod, memo) => {
+    try {
+      await window.postData('admin.changePaymentMethod', { regId, newMethod, memo });
+      showToast(`支払い方法を「${newMethod}」 に変更しました`);
+      setMethodChangeTarget(null);
+      // payments + summary を再取得
+      const [pays, _] = await Promise.all([
+        window.fetchData('listPayments'),
+        reloadSummary(),
+      ]);
+      setPayments(Array.isArray(pays) ? pays : []);
+    } catch (e) {
+      alert('変更失敗: ' + e.message);
+    }
+  };
+
+  // (Phase 15.S119) 返金処理ハンドラ
+  const handleRefund = async (regId, refundAmount, reason) => {
+    try {
+      const res = await window.postData('admin.refundPayment', { regId, refundAmount, reason });
+      showToast(res.fullRefund ? '全額返金処理が完了しました' : `部分返金 ¥${refundAmount.toLocaleString()} を記録しました`);
+      setRefundTarget(null);
+      const [pays, _] = await Promise.all([
+        window.fetchData('listPayments'),
+        reloadSummary(),
+      ]);
+      setPayments(Array.isArray(pays) ? pays : []);
+    } catch (e) {
+      alert('返金失敗: ' + e.message);
+    }
+  };
+
+  // (Phase 15.S119) 決済済み / 未決済 トグル
+  const handleTogglePaid = async (regId, makePaid) => {
+    try {
+      await window.postData('admin.markPaid', { regId, paid: makePaid });
+      showToast(makePaid ? '決済済みにマークしました' : '未決済に戻しました');
+      const [pays, _] = await Promise.all([
+        window.fetchData('listPayments'),
+        reloadSummary(),
+      ]);
+      setPayments(Array.isArray(pays) ? pays : []);
+    } catch (e) {
+      alert('変更失敗: ' + e.message);
+    }
+  };
 
   async function handleSave(fields) {
     await window.postData('createPayment', fields);
@@ -7236,13 +8014,356 @@ function PagePayments(){
 
       {error && <div style={{padding:"10px 14px",marginBottom:14,background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:8,color:'var(--red)',fontSize:12}}><b>読み込みエラー:</b> {error}</div>}
 
-      <div className="kpi-grid">
-        <MiniStat label="累計入金額 (成功)" value={loading ? '…' : yen(totalRev)} sub="" icon="yen" color="green"/>
-        <MiniStat label="入金件数 (成功)" value={loading ? '…' : String(success.length)} sub="" icon="card" color="indigo"/>
-        <MiniStat label="入金待ち" value={loading ? '…' : String(pending)} sub="要対応" icon="clock" color="amber"/>
-        <MiniStat label="失敗・返金" value={loading ? '…' : String(failed)} sub="" icon="warn" color="red"/>
+      {/* (Phase 15.S119) タブ */}
+      <div style={{
+        display:'flex',gap:2,marginBottom:18,borderBottom:'2px solid var(--line)',
+        overflowX:'auto',
+      }}>
+        {[
+          {val:'overview', label:'概要', desc:'KPI + 収益予想'},
+          {val:'regs',     label:'申込決済', desc:'申込ごとの決済管理'},
+          {val:'records',  label:'手動記録', desc:'個別の決済記録'},
+          {val:'paypay',   label:'PayPay リンク', desc:'PayPay 決済リンク管理'},
+          {val:'log',      label:'変更ログ', desc:'操作履歴'},
+        ].map(tab => (
+          <button key={tab.val} onClick={() => setActiveTab(tab.val)}
+            style={{
+              padding:'10px 18px',
+              background: activeTab === tab.val ? '#fff' : 'transparent',
+              border:'none',
+              borderBottom: activeTab === tab.val ? '3px solid #0a2960' : '3px solid transparent',
+              marginBottom: -2,
+              fontSize: 13,
+              fontWeight: activeTab === tab.val ? 700 : 500,
+              color: activeTab === tab.val ? '#0a2960' : 'var(--ink3)',
+              cursor:'pointer',
+              fontFamily:'var(--jp)',
+              whiteSpace:'nowrap',
+            }}
+            title={tab.desc}>
+            {tab.label}
+          </button>
+        ))}
       </div>
 
+      {activeTab === 'overview' && (
+      <>
+      {/* (Phase 15.S118) イベント絞り込みドロップダウン */}
+      <div style={{
+        display:'flex',alignItems:'center',gap:10,marginBottom:14,flexWrap:'wrap',
+        padding:'10px 14px',background:'var(--bg2)',borderRadius:8,
+      }}>
+        <span style={{fontSize:12,fontWeight:700,color:'var(--ink2)'}}>イベント絞り込み:</span>
+        <select value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)}
+          style={{
+            padding:'6px 12px',border:'1px solid var(--line)',borderRadius:6,
+            fontSize:13,background:'#fff',minWidth:240,cursor:'pointer',
+          }}>
+          <option value="">すべてのイベント</option>
+          {revenueSummary.map(s => (
+            <option key={s.eventId} value={s.eventId}>
+              {s.title}{s.date ? ` (${s.date})` : ''}
+            </option>
+          ))}
+        </select>
+        {selectedEventId && (
+          <button onClick={() => setSelectedEventId('')}
+            style={{padding:'4px 10px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink3)'}}>
+            クリア
+          </button>
+        )}
+      </div>
+
+      {(() => {
+        // (Phase 15.S118) 選択イベントに応じた集計
+        const selectedSummary = selectedEventId
+          ? revenueSummary.find(s => s.eventId === selectedEventId)
+          : null;
+        // KPI 値: 選択イベントがあれば その値、 なければ Payments テーブル全体合計 (既存)
+        const kpiTotalRev = selectedSummary ? selectedSummary.paidRevenue : totalRev;
+        const kpiSuccess = selectedSummary ? selectedSummary.paidRegs : success.length;
+        // 入金待ち / 失敗・返金 は既存の payments テーブルから (イベント別 fetch なし時は全体値)
+        const kpiPending = pending;
+        const kpiFailed = failed;
+        // 予想収益 (選択イベントのみ)
+        const kpiExpected = selectedSummary ? selectedSummary.expectedRevenue : null;
+
+        return (
+          <>
+            <div className="kpi-grid">
+              <MiniStat label={selectedSummary ? "決済済み額" : "累計入金額 (成功)"} value={loading || summaryLoading ? '…' : yen(kpiTotalRev)} sub="" icon="yen" color="green"/>
+              <MiniStat label={selectedSummary ? "決済済み件数" : "入金件数 (成功)"} value={loading || summaryLoading ? '…' : String(kpiSuccess)} sub="" icon="card" color="indigo"/>
+              {kpiExpected !== null ? (
+                <MiniStat label="予想収益" value={summaryLoading ? '…' : yen(kpiExpected)} sub="割引後合計" icon="yen" color="amber"/>
+              ) : (
+                <MiniStat label="入金待ち" value={loading ? '…' : String(kpiPending)} sub="要対応" icon="clock" color="amber"/>
+              )}
+              <MiniStat label="失敗・返金" value={loading ? '…' : String(kpiFailed)} sub="" icon="warn" color="red"/>
+            </div>
+
+            {/* (Phase 15.S118) 支払い方法別内訳 — 選択イベントがあれば そのイベント、 なければ全イベント合算 */}
+            {(() => {
+              const breakdownMap = {};
+              const sources = selectedSummary ? [selectedSummary] : revenueSummary;
+              sources.forEach(s => {
+                (s.paymentBreakdown || []).forEach(pb => {
+                  if (!breakdownMap[pb.method]) {
+                    breakdownMap[pb.method] = { method: pb.method, count: 0, amount: 0, paidCount: 0, paidAmount: 0 };
+                  }
+                  const b = breakdownMap[pb.method];
+                  b.count += pb.count;
+                  b.amount += pb.amount;
+                  b.paidCount += pb.paidCount;
+                  b.paidAmount += pb.paidAmount;
+                });
+              });
+              const breakdown = Object.values(breakdownMap).sort((a, b) => b.count - a.count);
+              if (breakdown.length === 0) return null;
+              const totalCount = breakdown.reduce((s, b) => s + b.count, 0);
+              const totalAmount = breakdown.reduce((s, b) => s + b.amount, 0);
+
+              // 支払い方法ごとの色マッピング
+              const methodColor = (m) => {
+                if (/paypay|ペイペイ/i.test(m)) return { bg: '#fee2e2', fg: '#b91c1c', accent: '#dc2626' };
+                if (/現金|cash/i.test(m)) return { bg: '#fef3c7', fg: '#92400e', accent: '#f59e0b' };
+                if (/銀行|振込/i.test(m)) return { bg: '#dbeafe', fg: '#1e40af', accent: '#3b82f6' };
+                if (/クレジット|credit/i.test(m)) return { bg: '#e0e7ff', fg: '#4338ca', accent: '#6366f1' };
+                return { bg: '#f3f4f6', fg: '#374151', accent: '#9ca3af' };
+              };
+
+              return (
+                <div style={{marginBottom:20}}>
+                  <h3 style={{margin:'0 0 10px',fontSize:14,fontWeight:700,color:'var(--ink1)',display:'flex',alignItems:'center',gap:8}}>
+                    支払い方法別 内訳
+                    {selectedSummary && (
+                      <span style={{fontSize:11,fontWeight:400,color:'var(--ink4)'}}>
+                        ({selectedSummary.title})
+                      </span>
+                    )}
+                  </h3>
+                  <div style={{
+                    display:'grid',
+                    gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap:10,
+                  }}>
+                    {breakdown.map(b => {
+                      const colors = methodColor(b.method);
+                      const pct = totalCount > 0 ? Math.round((b.count / totalCount) * 1000) / 10 : 0;
+                      return (
+                        <div key={b.method} style={{
+                          padding:'12px 14px',
+                          background:'#fff',border:`1px solid ${colors.accent}`,
+                          borderLeft:`4px solid ${colors.accent}`,
+                          borderRadius:6,
+                        }}>
+                          <div style={{
+                            display:'flex',justifyContent:'space-between',alignItems:'center',
+                            marginBottom:6,
+                          }}>
+                            <span style={{fontSize:12,fontWeight:700,color:colors.fg}}>{b.method}</span>
+                            <span style={{
+                              fontSize:10,padding:'1px 6px',
+                              background:colors.bg,color:colors.fg,
+                              borderRadius:999,fontFamily:'var(--mono)',fontWeight:700,
+                            }}>{pct}%</span>
+                          </div>
+                          <div style={{fontSize:18,fontWeight:800,fontFamily:'var(--mono)',color:'var(--ink1)',marginBottom:4}}>
+                            {yen(b.amount)}
+                          </div>
+                          <div style={{fontSize:10,color:'var(--ink3)',display:'flex',justifyContent:'space-between'}}>
+                            <span>申込 {b.count} 件</span>
+                            <span style={{color:b.paidCount > 0 ? '#15803d' : 'var(--ink4)'}}>
+                              決済済 {b.paidCount}
+                            </span>
+                          </div>
+                          {b.methodChanged > 0 && (
+                            <div style={{fontSize:9,color:'#6366f1',marginTop:4,padding:'2px 6px',background:'#eef2ff',borderRadius:3,display:'inline-block'}}>
+                              実方法変更 {b.methodChanged} 件
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </>
+        );
+      })()}
+
+      {/* (Phase 15.S117) イベントごとの収益サマリー */}
+      <div style={{marginBottom: 24}}>
+        <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:12,flexWrap:'wrap'}}>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--ink1)'}}>
+            イベントごとの収益予想
+          </h2>
+          <div style={{display:'flex',gap:6}}>
+            {[
+              {val:'upcoming', label:'予定'},
+              {val:'past', label:'終了'},
+              {val:'all', label:'すべて'},
+            ].map(opt => (
+              <span key={opt.val} className={clsx("chip", summaryFilter === opt.val && "on")}
+                onClick={() => setSummaryFilter(opt.val)}>{opt.label}</span>
+            ))}
+          </div>
+          <div style={{flex:1}}/>
+          <span style={{fontSize:11,color:'var(--ink4)'}}>
+            {summaryLoading ? '集計中...' : `${revenueSummary.length} イベント`}
+          </span>
+        </div>
+
+        {(() => {
+          // フィルタ適用
+          const today = new Date(); today.setHours(0,0,0,0);
+          let filtered = revenueSummary.filter(s => {
+            if (summaryFilter === 'all') return true;
+            if (!s.date) return summaryFilter === 'upcoming';
+            const d = new Date(s.date + 'T00:00:00');
+            if (isNaN(d.getTime())) return summaryFilter === 'upcoming';
+            return summaryFilter === 'past' ? d < today : d >= today;
+          });
+          // (Phase 15.S118) 選択イベントがあれば そのイベントのみ
+          if (selectedEventId) {
+            filtered = filtered.filter(s => s.eventId === selectedEventId);
+            // 選択イベントが現在のフィルタ (予定/終了) に該当しない場合は強制表示
+            if (filtered.length === 0) {
+              const target = revenueSummary.find(s => s.eventId === selectedEventId);
+              if (target) filtered = [target];
+            }
+          }
+
+          if (summaryLoading) {
+            return <div style={{padding:32,textAlign:'center',color:'var(--ink4)',fontSize:13}}>集計中...</div>;
+          }
+          if (filtered.length === 0) {
+            return (
+              <div style={{padding:'40px 24px',textAlign:'center',background:'var(--bg2)',border:'1px dashed var(--line)',borderRadius:8,color:'var(--ink4)',fontSize:13}}>
+                該当するイベントの収益データがありません
+              </div>
+            );
+          }
+
+          // 全体合計
+          const grandSubTotal = filtered.reduce((s, e) => s + e.subTotal, 0);
+          const grandDiscount = filtered.reduce((s, e) => s + e.totalDiscount, 0);
+          const grandExpected = filtered.reduce((s, e) => s + e.expectedRevenue, 0);
+          const grandPaid = filtered.reduce((s, e) => s + e.paidRevenue, 0);
+          // (Phase 15.S117) 人数ベースで集計
+          const totalUsers = filtered.reduce((s, e) => s + (e.uniqueParticipants || e.totalRegs || 0), 0);
+          const totalCouponed = filtered.reduce((s, e) => s + (e.couponUsedUsers || 0), 0);
+          const overallCouponRate = totalUsers > 0 ? (totalCouponed / totalUsers * 100).toFixed(1) : '0.0';
+
+          return (
+            <>
+              {/* 集計サマリー */}
+              <div style={{
+                padding:'14px 18px',
+                background:'linear-gradient(135deg, #eef2ff 0%, #f0f7ff 100%)',
+                border:'1px solid #c7d2fe',
+                borderRadius:8,
+                marginBottom:14,
+                display:'grid',
+                gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',
+                gap:18,
+              }}>
+                <div>
+                  <div style={{fontSize:10,color:'#0a2960',letterSpacing:'0.15em',fontWeight:700,marginBottom:4}}>割引前合計</div>
+                  <div style={{fontSize:18,fontWeight:800,fontFamily:'var(--mono)',color:'var(--ink1)'}}>{yen(grandSubTotal)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:'#92400e',letterSpacing:'0.15em',fontWeight:700,marginBottom:4}}>クーポン割引</div>
+                  <div style={{fontSize:18,fontWeight:800,fontFamily:'var(--mono)',color:'#92400e'}}>-{yen(grandDiscount)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:'#15803d',letterSpacing:'0.15em',fontWeight:700,marginBottom:4}}>予想収益</div>
+                  <div style={{fontSize:20,fontWeight:900,fontFamily:'var(--mono)',color:'#15803d'}}>{yen(grandExpected)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:'#0a2960',letterSpacing:'0.15em',fontWeight:700,marginBottom:4}}>既決済</div>
+                  <div style={{fontSize:18,fontWeight:800,fontFamily:'var(--mono)',color:'#0a2960'}}>{yen(grandPaid)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:'#6b7280',letterSpacing:'0.15em',fontWeight:700,marginBottom:4}}>クーポン使用率</div>
+                  <div style={{fontSize:18,fontWeight:800,fontFamily:'var(--mono)',color:'var(--ink1)'}}>
+                    {overallCouponRate}%
+                    <span style={{fontSize:11,color:'var(--ink4)',marginLeft:6,fontWeight:400}}>({totalCouponed}/{totalUsers})</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* イベントごとテーブル */}
+              <div className="card" style={{padding:0,overflow:'hidden'}}>
+                <table className="tbl">
+                  <thead><tr>
+                    <th>イベント</th>
+                    <th>日付</th>
+                    <th className="right">参加</th>
+                    <th className="right">クーポン</th>
+                    <th className="right">割引前</th>
+                    <th className="right">割引</th>
+                    <th className="right">予想収益</th>
+                    <th className="right">既決済</th>
+                  </tr></thead>
+                  <tbody>
+                    {filtered.map(s => (
+                      <tr key={s.eventId}>
+                        <td style={{fontWeight:600,maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          <span style={{fontSize:13}}>{s.title}</span>
+                          {s.couponBreakdown && s.couponBreakdown.length > 0 && (
+                            <div style={{display:'flex',gap:4,marginTop:4,flexWrap:'wrap'}}>
+                              {s.couponBreakdown.map(cb => (
+                                <span key={cb.couponId} style={{
+                                  padding:'1px 6px',fontSize:10,fontFamily:'var(--mono)',
+                                  background:'#fef3c7',color:'#92400e',
+                                  border:'1px solid #fcd34d',borderRadius:3,fontWeight:600,
+                                }} title={`${cb.name || cb.code} - ${cb.count} 件 / -${yen(cb.totalDiscount)}`}>
+                                  {cb.code} ×{cb.count}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="mono" style={{fontSize:11,color:'var(--ink3)',whiteSpace:'nowrap'}}>{s.date || '—'}</td>
+                        <td className="right num" title={s.regCount && s.regCount !== s.totalRegs ? `申込件数: ${s.regCount} 件 (複数日参加含む)` : undefined}>
+                          {s.totalRegs}
+                          {s.regCount && s.regCount !== s.totalRegs && (
+                            <span style={{fontSize:9,color:'var(--ink4)',marginLeft:3}}>({s.regCount}件)</span>
+                          )}
+                        </td>
+                        <td className="right num">
+                          <span style={{fontWeight:600,color: s.couponUsedUsers > 0 ? '#92400e' : 'var(--ink4)'}}>
+                            {s.couponUsedUsers}
+                          </span>
+                          {s.totalRegs > 0 && (
+                            <span style={{fontSize:10,color:'var(--ink4)',marginLeft:4}}>
+                              ({s.couponUsageRate}%)
+                            </span>
+                          )}
+                        </td>
+                        <td className="right num" style={{fontFamily:'var(--mono)'}}>{yen(s.subTotal)}</td>
+                        <td className="right num" style={{fontFamily:'var(--mono)',color: s.totalDiscount > 0 ? '#92400e' : 'var(--ink4)'}}>
+                          {s.totalDiscount > 0 ? `-${yen(s.totalDiscount)}` : '—'}
+                        </td>
+                        <td className="right num" style={{fontFamily:'var(--mono)',fontWeight:700,color:'#15803d'}}>{yen(s.expectedRevenue)}</td>
+                        <td className="right num" style={{fontFamily:'var(--mono)',color: s.paidRevenue === s.expectedRevenue && s.expectedRevenue > 0 ? '#15803d' : 'var(--ink3)'}}>
+                          {yen(s.paidRevenue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+      </>
+      )}
+
+      {activeTab === 'records' && (
+      <>
       <div className="row mb16" style={{gap:6}}>
         {[["all","すべて"],["成功","成功"],["入金待ち","入金待ち"],["失敗","失敗"],["返金","返金"]].map(([k,l]) => (
           <span key={k} className={clsx("chip", filter===k && "on")} onClick={()=>setFilter(k)}>{l}</span>
@@ -7290,12 +8411,14 @@ function PagePayments(){
                     <td className="right num" style={{fontWeight:700}}>{yen(p.amount)}</td>
                     <td><span className={clsx("badge", st)}><span className="badge-dot"></span>{p.status}</span></td>
                     <td className="mono" style={{fontSize:11,color:'var(--ink4)'}}>{p.paidAt || '—'}</td>
-                    <td>
-                      {window.canDo('payments.delete') && (
-                        <button className="btn btn-soft btn-sm btn-icon" title="削除" onClick={()=>handleDelete(p.id)}>
-                          <Icon n="trash" s={11}/>
-                        </button>
-                      )}
+                    <td style={{whiteSpace:'nowrap'}}>
+                      <div style={{display:'inline-flex',gap:4,justifyContent:'flex-end'}}>
+                        {window.canDo('payments.delete') && (
+                          <button className="btn btn-soft btn-sm btn-icon" title="削除" onClick={()=>handleDelete(p.id)}>
+                            <Icon n="trash" s={11}/>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -7303,6 +8426,137 @@ function PagePayments(){
             </tbody>
           </table>
         </div>
+      )}
+      </>
+      )}
+
+      {activeTab === 'regs' && (
+        <RegistrationsPaymentTable
+          revenueSummary={revenueSummary}
+          selectedEventId={selectedEventId}
+          onSelectEvent={setSelectedEventId}
+          onMethodChange={(reg) => setMethodChangeTarget(reg)}
+          onRefund={(reg) => setRefundTarget(reg)}
+          onTogglePaid={handleTogglePaid}
+        />
+      )}
+
+      {activeTab === 'paypay' && (
+        <div style={{marginTop:8}}>
+          {/* (Phase 15.S119) 既存 PagePayPay コンポーネントを統合 */}
+          {window.PagePayPay ? <window.PagePayPay /> : (
+            <div style={{padding:40,textAlign:'center',color:'var(--ink4)'}}>PayPay 機能 読み込み中...</div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'log' && (
+        <div style={{marginTop:8}}>
+          <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:14,flexWrap:'wrap'}}>
+            <h3 style={{margin:0,fontSize:14,fontWeight:700,color:'var(--ink1)'}}>支払い操作ログ</h3>
+            <span style={{fontSize:11,color:'var(--ink4)'}}>{logLoading ? '読み込み中...' : `${paymentLog.length} 件`}</span>
+            <div style={{flex:1}}/>
+            <button onClick={() => reloadPaymentLog({})}
+              style={{padding:'4px 10px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink2)'}}>
+              再読込
+            </button>
+          </div>
+          {logLoading ? (
+            <div style={{padding:40,textAlign:'center',color:'var(--ink4)',fontSize:13}}>読み込み中...</div>
+          ) : paymentLog.length === 0 ? (
+            <div style={{padding:40,textAlign:'center',background:'var(--bg2)',border:'1px dashed var(--line)',borderRadius:6,color:'var(--ink4)',fontSize:13}}>
+              まだ操作ログがありません
+            </div>
+          ) : (
+            <div className="card" style={{padding:0,overflow:'auto'}}>
+              <table className="tbl">
+                <thead><tr>
+                  <th>日時</th>
+                  <th>操作</th>
+                  <th>RegID</th>
+                  <th>イベント</th>
+                  <th>参加者</th>
+                  <th>変更内容</th>
+                  <th className="right">金額</th>
+                  <th>操作者</th>
+                  <th>メモ</th>
+                </tr></thead>
+                <tbody>
+                  {paymentLog.map(l => {
+                    const opMeta = {
+                      'method_change': { label: '方法変更', bg: '#dbeafe', fg: '#1e40af' },
+                      'refund':        { label: '返金',     bg: '#fee2e2', fg: '#991b1b' },
+                      'paid_mark':     { label: '決済済化', bg: '#dcfce7', fg: '#15803d' },
+                      'unpaid_mark':   { label: '未決済化', bg: '#f3f4f6', fg: '#6b7280' },
+                    }[l.operation] || { label: l.operation, bg: '#f3f4f6', fg: '#6b7280' };
+                    return (
+                      <tr key={l.logId}>
+                        <td className="mono" style={{fontSize:10,color:'var(--ink3)',whiteSpace:'nowrap'}}>
+                          {l.timestamp ? new Date(l.timestamp).toLocaleString('ja-JP') : '—'}
+                        </td>
+                        <td>
+                          <span style={{padding:'2px 8px',background:opMeta.bg,color:opMeta.fg,borderRadius:4,fontSize:11,fontWeight:700}}>
+                            {opMeta.label}
+                          </span>
+                        </td>
+                        <td className="mono" style={{fontSize:10}}>{l.regId}</td>
+                        <td style={{fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.eventTitle}</td>
+                        <td style={{fontSize:12}}>{l.userName || l.userId}</td>
+                        <td style={{fontSize:11,color:'var(--ink2)'}}>
+                          {l.operation === 'method_change' && (
+                            <span><s style={{color:'var(--ink4)'}}>{l.oldMethod}</s> → <b>{l.newMethod}</b></span>
+                          )}
+                          {l.operation === 'refund' && (
+                            <span style={{color:'#991b1b',fontWeight:600}}>-¥{l.amount.toLocaleString()} 返金</span>
+                          )}
+                          {(l.operation === 'paid_mark' || l.operation === 'unpaid_mark') && (
+                            <span><s style={{color:'var(--ink4)'}}>{l.oldStatus}</s> → <b>{l.newStatus}</b></span>
+                          )}
+                        </td>
+                        <td className="right num" style={{fontFamily:'var(--mono)',fontSize:11}}>
+                          {l.amount > 0 ? yen(l.amount) : '—'}
+                        </td>
+                        <td style={{fontSize:11,color:'var(--ink3)'}}>{l.operatorName || l.operator || '—'}</td>
+                        <td style={{fontSize:11,color:'var(--ink3)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {l.memo || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* (Phase 15.S119) 支払い方法変更モーダル */}
+      {methodChangeTarget && (
+        <PaymentMethodChangeModal
+          target={methodChangeTarget}
+          onCancel={() => setMethodChangeTarget(null)}
+          onSubmit={(newMethod, memo) => handleChangePaymentMethod(methodChangeTarget.regId, newMethod, memo)}
+        />
+      )}
+
+      {/* (Phase 15.S119) 返金モーダル */}
+      {refundTarget && (
+        <PaymentRefundModal
+          target={refundTarget}
+          onCancel={() => setRefundTarget(null)}
+          onSubmit={(amount, reason) => handleRefund(refundTarget.regId, amount, reason)}
+        />
+      )}
+
+      {/* (Phase 15.S119) Toast */}
+      {toast && (
+        <div style={{
+          position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',
+          padding:'10px 24px',background:'#15803d',color:'#fff',
+          borderRadius:999,fontSize:13,fontWeight:600,
+          boxShadow:'0 8px 24px rgba(21, 128, 61, 0.3)',
+          zIndex:9999,
+        }}>✓ {toast}</div>
       )}
 
       {showModal && (
@@ -8450,6 +9704,439 @@ function PageMobile(){
 window.PageParticipants = PageParticipants;
 window.PageTodo = PageTodo;
 window.PagePayments = PagePayments;
+
+// =============================================================================
+// (Phase 15.S119) PaymentMethodChangeModal — 支払い方法変更モーダル
+// =============================================================================
+function PaymentMethodChangeModal({ target, onCancel, onSubmit }) {
+  const [newMethod, setNewMethod] = useState('');
+  const [customMethod, setCustomMethod] = useState('');
+  const [memo, setMemo] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const presetMethods = [
+    'PayPay', '現金', '当日 PayPay', '当日 現金', '銀行振込', 'クレジットカード',
+  ];
+
+  const handleSubmit = async () => {
+    const finalMethod = newMethod === '__custom__' ? customMethod.trim() : newMethod;
+    if (!finalMethod) {
+      alert('支払い方法を選択してください');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit(finalMethod, memo.trim());
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div onClick={onCancel} style={{
+      position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:9000,
+      display:'flex',alignItems:'center',justifyContent:'center',padding:20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:'#fff',borderRadius:8,padding:24,maxWidth:480,width:'100%',
+        boxShadow:'0 20px 50px rgba(0,0,0,0.3)',
+      }}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--ink1)'}}>支払い方法を変更</h2>
+          <button onClick={onCancel} style={{background:'none',border:'none',fontSize:24,color:'var(--ink3)',cursor:'pointer'}}>✕</button>
+        </div>
+
+        <div style={{padding:'10px 14px',background:'var(--bg2)',borderRadius:6,marginBottom:14,fontSize:12}}>
+          <div style={{color:'var(--ink3)',marginBottom:4}}>対象</div>
+          <div style={{fontWeight:600,color:'var(--ink1)'}}>{target.name} / {target.eventTitle}</div>
+          <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--ink4)',marginTop:2}}>
+            {target.regId} · 申込時: {target.method} · ¥{(target.amount || 0).toLocaleString()}
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="field-label">新しい支払い方法 <span className="field-req">*</span></label>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:6,marginBottom:8}}>
+            {presetMethods.map(m => (
+              <button key={m} type="button" onClick={() => setNewMethod(m)}
+                style={{
+                  padding:'8px 12px',
+                  background: newMethod === m ? '#eef2ff' : '#fff',
+                  border: newMethod === m ? '2px solid #0a2960' : '1px solid var(--line)',
+                  borderRadius:6,fontSize:12,fontWeight: newMethod === m ? 700 : 500,
+                  cursor:'pointer',color:newMethod === m ? '#0a2960' : 'var(--ink2)',
+                  textAlign:'left',
+                }}>
+                {m}
+              </button>
+            ))}
+            <button type="button" onClick={() => setNewMethod('__custom__')}
+              style={{
+                padding:'8px 12px',gridColumn:'span 2',
+                background: newMethod === '__custom__' ? '#eef2ff' : '#fff',
+                border: newMethod === '__custom__' ? '2px solid #0a2960' : '1px solid var(--line)',
+                borderRadius:6,fontSize:12,fontWeight: newMethod === '__custom__' ? 700 : 500,
+                cursor:'pointer',color:newMethod === '__custom__' ? '#0a2960' : 'var(--ink2)',
+              }}>
+              その他 (自由入力)
+            </button>
+          </div>
+          {newMethod === '__custom__' && (
+            <input className="input" type="text" value={customMethod} onChange={e=>setCustomMethod(e.target.value)} placeholder="例: 商品券" />
+          )}
+        </div>
+
+        <div className="field">
+          <label className="field-label">メモ (任意)</label>
+          <input className="input" type="text" value={memo} onChange={e=>setMemo(e.target.value)} placeholder="変更理由など" />
+        </div>
+
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18,paddingTop:14,borderTop:'1px solid var(--line)'}}>
+          <button onClick={onCancel} disabled={submitting}
+            style={{padding:'8px 16px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+            キャンセル
+          </button>
+          <button onClick={handleSubmit} disabled={submitting}
+            style={{padding:'8px 20px',background:'#0a2960',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor: submitting ? 'not-allowed' : 'pointer',opacity:submitting?0.6:1}}>
+            {submitting ? '変更中...' : '変更を保存'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.PaymentMethodChangeModal = PaymentMethodChangeModal;
+
+// =============================================================================
+// (Phase 15.S119) PaymentRefundModal — 返金処理モーダル
+// =============================================================================
+function PaymentRefundModal({ target, onCancel, onSubmit }) {
+  const maxAmount = Number(target.amount) || 0;
+  const [refundAmount, setRefundAmount] = useState(maxAmount);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const isFullRefund = Number(refundAmount) === maxAmount;
+
+  const handleSubmit = async () => {
+    const amt = Number(refundAmount);
+    if (!amt || amt <= 0) {
+      alert('返金額を入力してください');
+      return;
+    }
+    if (amt > maxAmount) {
+      alert('返金額が申込金額を超えています');
+      return;
+    }
+    if (!reason.trim()) {
+      if (!confirm('返金理由が未入力です。 続行しますか?')) return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit(amt, reason.trim());
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div onClick={onCancel} style={{
+      position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:9000,
+      display:'flex',alignItems:'center',justifyContent:'center',padding:20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:'#fff',borderRadius:8,padding:24,maxWidth:480,width:'100%',
+        boxShadow:'0 20px 50px rgba(0,0,0,0.3)',
+        borderTop: '4px solid #dc2626',
+      }}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:'#991b1b'}}>返金処理</h2>
+          <button onClick={onCancel} style={{background:'none',border:'none',fontSize:24,color:'var(--ink3)',cursor:'pointer'}}>✕</button>
+        </div>
+
+        <div style={{padding:'10px 14px',background:'var(--bg2)',borderRadius:6,marginBottom:14,fontSize:12}}>
+          <div style={{color:'var(--ink3)',marginBottom:4}}>対象</div>
+          <div style={{fontWeight:600,color:'var(--ink1)'}}>{target.name} / {target.eventTitle}</div>
+          <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--ink4)',marginTop:2}}>
+            {target.regId} · 申込時: {target.method} · ¥{maxAmount.toLocaleString()}
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="field-label">返金額 <span className="field-req">*</span></label>
+          <div style={{display:'flex',gap:6,marginBottom:6}}>
+            <input className="input" type="number" min="1" max={maxAmount} value={refundAmount}
+              onChange={e=>setRefundAmount(e.target.value)}
+              style={{flex:1,fontFamily:'var(--mono)',fontWeight:700}}/>
+            <button type="button" onClick={() => setRefundAmount(maxAmount)}
+              style={{padding:'8px 14px',background:'#fee2e2',border:'1px solid #dc2626',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',color:'#991b1b'}}>
+              全額
+            </button>
+          </div>
+          <div className="field-hint">
+            申込金額: ¥{maxAmount.toLocaleString()} (最大)
+            {isFullRefund && <span style={{color:'#dc2626',marginLeft:8,fontWeight:600}}>※ 全額返金 — ステータスが「返金」 に変わります</span>}
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="field-label">返金理由</label>
+          <input className="input" type="text" value={reason} onChange={e=>setReason(e.target.value)} placeholder="例: 体調不良によりキャンセル" />
+        </div>
+
+        <div style={{padding:'10px 14px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:6,fontSize:11,color:'#991b1b',marginTop:14}}>
+          ※ この操作はログに記録されます。 PayPay で決済済みの場合は、 PayPay の管理画面で別途返金処理が必要です。
+        </div>
+
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18,paddingTop:14,borderTop:'1px solid var(--line)'}}>
+          <button onClick={onCancel} disabled={submitting}
+            style={{padding:'8px 16px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+            キャンセル
+          </button>
+          <button onClick={handleSubmit} disabled={submitting}
+            style={{padding:'8px 20px',background:'#dc2626',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:submitting ? 'not-allowed' : 'pointer',opacity:submitting?0.6:1}}>
+            {submitting ? '処理中...' : `¥${Number(refundAmount).toLocaleString()} を返金`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.PaymentRefundModal = PaymentRefundModal;
+
+// =============================================================================
+// (Phase 15.S119) RegistrationsPaymentTable — 申込ごとの決済管理
+// =============================================================================
+function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEvent, onMethodChange, onRefund, onTogglePaid }) {
+  const [registrations, setRegistrations] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');  // all / paid / unpaid / refunded / cancelled
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [regs, parts, evs] = await Promise.all([
+          window.fetchData('listRegistrations'),
+          window.fetchData('listParticipants'),
+          window.fetchData('listEvents'),
+        ]);
+        if (cancelled) return;
+        setRegistrations(Array.isArray(regs) ? regs : []);
+        setParticipants(Array.isArray(parts) ? parts : []);
+        setEvents(Array.isArray(evs) ? evs : []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Map で名前解決
+  const partMap = React.useMemo(() => {
+    const m = {};
+    participants.forEach(p => { m[p.id || p.UserID] = p.name || p['名前漢字'] || p['名前カタカナ'] || p.UserID; });
+    return m;
+  }, [participants]);
+
+  const evMap = React.useMemo(() => {
+    const m = {};
+    events.forEach(e => { m[e.id || e.EventID] = e.title || e['タイトル'] || ''; });
+    return m;
+  }, [events]);
+
+  // フィルタ + 検索
+  const visible = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return registrations.filter(r => {
+      const status = r['ステータス'] || r.status || '';
+      const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
+      const eventId = r['EventID'] || r.eventId || '';
+      const refundAmount = Number(r['返金額']) || 0;
+
+      // ステータスフィルタ
+      if (statusFilter === 'paid' && !paid) return false;
+      if (statusFilter === 'unpaid' && (paid || status === 'キャンセル' || refundAmount > 0)) return false;
+      if (statusFilter === 'refunded' && refundAmount === 0) return false;
+      if (statusFilter === 'cancelled' && status !== 'キャンセル') return false;
+
+      // イベントフィルタ
+      if (selectedEventId && eventId !== selectedEventId) return false;
+
+      // 検索
+      if (q) {
+        const regId = (r['RegID'] || r.regId || '').toLowerCase();
+        const userId = (r['UserID'] || r.userId || '').toLowerCase();
+        const userName = (partMap[r['UserID'] || r.userId] || '').toLowerCase();
+        const evTitle = (evMap[eventId] || '').toLowerCase();
+        const memo = (r['備考'] || r.memo || '').toLowerCase();
+        const actualMethod = (r['実支払い方法'] || '').toLowerCase();
+        if (!regId.includes(q) && !userId.includes(q) && !userName.includes(q)
+            && !evTitle.includes(q) && !memo.includes(q) && !actualMethod.includes(q)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      const ta = a['申込日時'] || a.createdAt || '';
+      const tb = b['申込日時'] || b.createdAt || '';
+      return String(tb).localeCompare(String(ta));
+    });
+  }, [registrations, statusFilter, selectedEventId, search, partMap, evMap]);
+
+  return (
+    <div>
+      {/* フィルタバー */}
+      <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:14,flexWrap:'wrap',padding:'10px 14px',background:'var(--bg2)',borderRadius:8}}>
+        <select value={selectedEventId} onChange={e => onSelectEvent(e.target.value)}
+          style={{padding:'6px 10px',border:'1px solid var(--line)',borderRadius:4,fontSize:12,background:'#fff',minWidth:200}}>
+          <option value="">すべてのイベント</option>
+          {revenueSummary.map(s => (
+            <option key={s.eventId} value={s.eventId}>{s.title}{s.date ? ` (${s.date})` : ''}</option>
+          ))}
+        </select>
+        <div style={{display:'flex',gap:4}}>
+          {[
+            {val:'all', label:'すべて'},
+            {val:'paid', label:'決済済'},
+            {val:'unpaid', label:'未決済'},
+            {val:'refunded', label:'返金済'},
+            {val:'cancelled', label:'キャンセル'},
+          ].map(opt => (
+            <span key={opt.val} className={clsx('chip', statusFilter === opt.val && 'on')}
+              onClick={() => setStatusFilter(opt.val)}>{opt.label}</span>
+          ))}
+        </div>
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="RegID / 参加者 / イベント で検索"
+          style={{flex:1,minWidth:200,padding:'6px 12px',border:'1px solid var(--line)',borderRadius:4,fontSize:12,background:'#fff'}}/>
+        <span style={{fontSize:11,color:'var(--ink4)'}}>{loading ? '...' : `${visible.length} 件`}</span>
+      </div>
+
+      {loading ? (
+        <div style={{padding:40,textAlign:'center',color:'var(--ink4)',fontSize:13}}>読み込み中...</div>
+      ) : visible.length === 0 ? (
+        <div style={{padding:40,textAlign:'center',background:'var(--bg2)',border:'1px dashed var(--line)',borderRadius:6,color:'var(--ink4)',fontSize:13}}>
+          該当する申込がありません
+        </div>
+      ) : (
+        <div className="card" style={{padding:0,overflow:'auto'}}>
+          <table className="tbl">
+            <thead><tr>
+              <th>RegID</th>
+              <th>申込者</th>
+              <th>イベント</th>
+              <th>申込時方法</th>
+              <th>実方法</th>
+              <th className="right">金額</th>
+              <th>状態</th>
+              <th>申込日</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              {visible.map(r => {
+                const regId = r['RegID'] || r.regId || '';
+                const userId = r['UserID'] || r.userId || '';
+                const userName = partMap[userId] || userId;
+                const eventId = r['EventID'] || r.eventId || '';
+                const evTitle = evMap[eventId] || '(不明)';
+                const status = r['ステータス'] || r.status || '';
+                const paid = r['決済済み'] === true || r['決済済み'] === 'TRUE' || r.paid === true;
+                const amount = Number(r['金額']) || 0;
+                const memo = r['備考'] || r.memo || '';
+                const actualMethod = r['実支払い方法'] || '';
+                const refundAmount = Number(r['返金額']) || 0;
+                const isCancelled = status === 'キャンセル';
+                const isRefunded = status === '返金' || refundAmount > 0;
+
+                // 申込時方法を memo or 既知パターンから抽出
+                const originalMethod = (() => {
+                  if (!memo) return '—';
+                  const m = String(memo).match(/^([^(\(\/]+)\s*[(\(]/);
+                  if (m) return m[1].trim();
+                  if (memo.indexOf('当日') >= 0) return '当日払い';
+                  return memo;
+                })();
+
+                const statusBadge = isCancelled
+                  ? { label:'キャンセル', bg:'#f3f4f6', fg:'#6b7280' }
+                  : isRefunded
+                  ? { label:'返金', bg:'#fef2f2', fg:'#991b1b' }
+                  : paid
+                  ? { label:'決済済', bg:'#dcfce7', fg:'#15803d' }
+                  : { label:'未決済', bg:'#fef3c7', fg:'#92400e' };
+
+                // モーダル用データ
+                const modalTarget = {
+                  regId, name: userName, eventTitle: evTitle,
+                  method: actualMethod || originalMethod,
+                  amount: amount - refundAmount,
+                };
+
+                return (
+                  <tr key={regId}>
+                    <td className="mono" style={{fontSize:10,color:'var(--ink3)'}}>{regId}</td>
+                    <td style={{fontWeight:600,fontSize:12}}>{userName}</td>
+                    <td style={{fontSize:11,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{evTitle}</td>
+                    <td style={{fontSize:11,color:'var(--ink2)'}}>{originalMethod}</td>
+                    <td style={{fontSize:11,fontWeight:actualMethod ? 700 : 400, color: actualMethod ? '#0a2960' : 'var(--ink4)'}}>
+                      {actualMethod || '(変更なし)'}
+                    </td>
+                    <td className="right num" style={{fontFamily:'var(--mono)',fontWeight:600}}>
+                      {yen(amount)}
+                      {refundAmount > 0 && (
+                        <div style={{fontSize:10,color:'#dc2626',marginTop:2,fontWeight:500}}>
+                          -¥{refundAmount.toLocaleString()} 返金
+                        </div>
+                      )}
+                    </td>
+                    <td><span style={{padding:'2px 8px',background:statusBadge.bg,color:statusBadge.fg,borderRadius:4,fontSize:11,fontWeight:600}}>{statusBadge.label}</span></td>
+                    <td className="mono" style={{fontSize:10,color:'var(--ink4)',whiteSpace:'nowrap'}}>
+                      {r['申込日時'] ? new Date(r['申込日時']).toLocaleDateString('ja-JP') : '—'}
+                    </td>
+                    <td style={{whiteSpace:'nowrap'}}>
+                      {!isCancelled && (
+                        <div style={{display:'inline-flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
+                          <button onClick={() => onMethodChange(modalTarget)}
+                            style={{padding:'3px 8px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink2)'}}>
+                            方法変更
+                          </button>
+                          {!isRefunded && amount > 0 && (
+                            <button onClick={() => onRefund(modalTarget)}
+                              style={{padding:'3px 8px',background:'#fff',border:'1px solid #dc2626',borderRadius:4,fontSize:10,cursor:'pointer',color:'#dc2626'}}>
+                              返金
+                            </button>
+                          )}
+                          {!paid && !isRefunded && (
+                            <button onClick={() => onTogglePaid(regId, true)}
+                              style={{padding:'3px 8px',background:'#dcfce7',border:'1px solid #15803d',borderRadius:4,fontSize:10,cursor:'pointer',color:'#15803d',fontWeight:600}}>
+                              ✓ 決済済
+                            </button>
+                          )}
+                          {paid && !isRefunded && (
+                            <button onClick={() => onTogglePaid(regId, false)}
+                              style={{padding:'3px 8px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink3)'}}>
+                              未決済に戻す
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+window.RegistrationsPaymentTable = RegistrationsPaymentTable;
 window.PageDepartments = PageDepartments;
 window.PageMobile = PageMobile;
 
@@ -8670,7 +10357,7 @@ function PageNotifications(){
 // =================================================================
 // EventCreate Step2 で複数セッション形式を選んだ時に使うエディタ。
 // セッション1つ分のフォーム。
-function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
+function SessionEditor({session, index, onChange, onDelete, zoomHistory, feeMode, eventFee}) {
   function update(key, value) {
     onChange({...session, [key]: value});
   }
@@ -8701,7 +10388,7 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
 
         {/* (Phase 15.S43) セッション名 多言語 — 折りたたみ */}
         <details style={{padding:'4px 8px',background:'var(--bg2)',borderRadius:4,fontSize:11}}>
-          <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>🌐 セッション名 多言語 (任意)</summary>
+          <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>セッション名 多言語 (任意)</summary>
           <div className="grid-2" style={{gap:6,marginTop:6}}>
             <div className="field">
               <label className="field-label" style={{fontSize:10}}>やさしい日本語</label>
@@ -8755,7 +10442,7 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
 
             {/* (Phase 15.S43) 会場名 多言語 */}
             <details style={{padding:'4px 8px',background:'var(--bg2)',borderRadius:4,fontSize:11}}>
-              <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>🌐 会場名 多言語 (任意)</summary>
+              <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>会場名 多言語 (任意)</summary>
               <div className="grid-2" style={{gap:6,marginTop:6}}>
                 <div className="field">
                   <label className="field-label" style={{fontSize:10}}>やさしい日本語</label>
@@ -8800,8 +10487,25 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
             <input className="input" type="number" min="0" value={session.capacity || ''} onChange={e=>update('capacity', e.target.value)} placeholder="0=無制限"/>
           </div>
           <div className="field">
-            <label className="field-label" style={{fontSize:11}}>個別参加費 (円)</label>
-            <input className="input" type="number" min="0" value={session.fee || ''} onChange={e=>update('fee', e.target.value)} placeholder="0=無料"/>
+            <label className="field-label" style={{fontSize:11}}>
+              個別参加費 (円)
+              {feeMode === 'uniform' && (
+                <span style={{fontSize:9,fontWeight:400,color:'var(--ink4)',marginLeft:6}}>
+                  ※ 一律料金モードのため非適用
+                </span>
+              )}
+            </label>
+            {feeMode === 'uniform' ? (
+              <div style={{
+                padding:'8px 12px',background:'var(--bg2)',
+                border:'1px dashed var(--line)',borderRadius:4,
+                fontSize:12,color:'var(--ink3)',fontFamily:'var(--mono)',
+              }}>
+                一律 ¥{(Number(eventFee) || 0).toLocaleString()} が全セッションに適用されます
+              </div>
+            ) : (
+              <input className="input" type="number" min="0" value={session.fee || ''} onChange={e=>update('fee', e.target.value)} placeholder="0=無料"/>
+            )}
           </div>
         </div>
 
@@ -8810,9 +10514,32 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory}) {
           <IMEInput className="input" value={session.notes || ''} onChange={e=>update('notes', e.target.value)} placeholder="任意 / 持ち物、注意事項など"/>
         </div>
 
+        {/* (Phase 15.S122) 地域 — 関東/関西/オンライン/自由入力 */}
+        <div className="field">
+          <label className="field-label" style={{fontSize:11}}>地域 (申込画面でのフィルタ用)</label>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+            {['関東', '関西', 'オンライン'].map(r => (
+              <button key={r} type="button"
+                onClick={() => update('region', session.region === r ? '' : r)}
+                style={{
+                  padding:'5px 12px',
+                  background: session.region === r ? '#eef2ff' : '#fff',
+                  border: session.region === r ? '2px solid #0a2960' : '1px solid var(--line)',
+                  borderRadius:999, fontSize:11, fontWeight: session.region === r ? 700 : 500,
+                  cursor:'pointer', color: session.region === r ? '#0a2960' : 'var(--ink3)',
+                }}>{r}</button>
+            ))}
+          </div>
+          <input className="input" type="text" value={session.region || ''}
+            onChange={e => update('region', e.target.value)}
+            placeholder="または自由入力 (例: 中部、 九州、 海外、 ハイブリッド)"
+            style={{fontSize:12}}/>
+          <div className="field-hint" style={{fontSize:10}}>未設定の場合、 申込画面の地域フィルタには表示されません</div>
+        </div>
+
         {/* (Phase 15.S43) 備考 多言語 */}
         <details style={{padding:'4px 8px',background:'var(--bg2)',borderRadius:4,fontSize:11}}>
-          <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>🌐 備考 多言語 (任意)</summary>
+          <summary style={{cursor:'pointer',color:'var(--ink3)',fontWeight:500,userSelect:'none'}}>備考 多言語 (任意)</summary>
           <div className="grid-2" style={{gap:6,marginTop:6}}>
             <div className="field">
               <label className="field-label" style={{fontSize:10}}>やさしい日本語</label>
@@ -8897,6 +10624,8 @@ function PageEventCreate(){
   // (Phase 7.4) イベントタグ — エリア・料金タイプ (参加者サイトのフィルタ用)
   const [area, setArea] = useState('');         // '関東' | '関西' | 'web' | ''
   const [feeType, setFeeType] = useState('');   // 'paid' | 'free' | ''
+  // (Phase 15.S112) 料金モード: 一律 / 個別 (multi イベントの場合)
+  const [feeMode, setFeeMode] = useState('uniform');  // 'uniform' | 'per_session'
   // 部署マスタ (Phase 6.4: イベントカテゴリは部署から動的生成)
   const [departments, setDepartments] = useState([]);
 
@@ -9013,6 +10742,7 @@ function PageEventCreate(){
         // (Phase 7.4) イベントタグ
         setArea(ev.area || '');
         setFeeType(ev.feeType || '');
+        setFeeMode(ev.feeMode || 'uniform');
         setOnline(ev.online === true || ev.online === 'true');
         setZoomURL(ev.zoomURL || "");
         setFormat(ev.format || 'single');
@@ -9129,6 +10859,7 @@ function PageEventCreate(){
       // (Phase 7.4) イベントタグ
       area: area || '',
       feeType: feeType || '',
+      feeMode: feeMode || 'uniform',  // (Phase 15.S112)
       online: online,
       zoomURL: online ? (zoomURL || '') : '',
       format: format,
@@ -9199,6 +10930,8 @@ function PageEventCreate(){
             venue_en:   sess.venue_en   || '',
             notes_easy: sess.notes_easy || '',
             notes_en:   sess.notes_en   || '',
+            // (Phase 15.S122) 地域
+            region:     sess.region     || '',
           };
           if (isNew) {
             await window.postData('createEventSession', sessPayload);
@@ -9529,6 +11262,8 @@ function PageEventCreate(){
                           session={sess}
                           index={i}
                           zoomHistory={zoomHistory}
+                          feeMode={feeMode}
+                          eventFee={Number(fee) || 0}
                           onChange={(updated) => {
                             const next = [...sessions];
                             next[i] = updated;
@@ -9658,6 +11393,41 @@ function PageEventCreate(){
                     <div className="field-hint">参加者サイトの料金フィルタで使用されます (複数セッションの場合は各セッションの参加費から自動判定)</div>
                   </div>
                 )}
+
+                {/* (Phase 15.S112) 複数日イベント時のみ料金モード選択 */}
+                {format === 'multi' && (
+                  <div className="field">
+                    <label className="field-label">料金モード <span className="field-req">*</span></label>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {[
+                        {val:'uniform', label:'一律', hint:'全セッション同じ料金'},
+                        {val:'per_session', label:'個別', hint:'セッションごとに料金設定'},
+                      ].map(opt => (
+                        <label key={opt.val} style={{
+                          display:'flex',alignItems:'center',gap:6,
+                          padding:'8px 14px',borderRadius:999,
+                          border: feeMode === opt.val ? '2px solid #0a2960' : '1px solid var(--line)',
+                          background: feeMode === opt.val ? '#eef2ff' : '#fff',
+                          cursor:'pointer',fontSize:13,fontWeight: feeMode === opt.val ? 600 : 400,
+                          color: feeMode === opt.val ? '#0a2960' : 'var(--ink2)',
+                          transition:'all 0.15s ease',
+                        }}>
+                          <input type="radio" name="event-feemode" value={opt.val}
+                            checked={feeMode === opt.val}
+                            onChange={e => setFeeMode(e.target.value)}
+                            style={{margin:0}}/>
+                          <span>{opt.label}</span>
+                          <span style={{fontSize:10,color:'var(--ink3)',fontWeight:400}}>({opt.hint})</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="field-hint">
+                      {feeMode === 'uniform'
+                        ? '下記「参加費」が全セッションに適用されます。'
+                        : '各セッションの「個別参加費」を入力してください。 0 の場合は下記「参加費」が適用されます。'}
+                    </div>
+                  </div>
+                )}
                 <div className="grid-2">
                   <div className="field">
                     <label className="field-label">参加費 (円)</label>
@@ -9729,7 +11499,7 @@ function PageEventCreate(){
                               onChange={e => setPaymentUrl_paypay(e.target.value)}
                               placeholder="https://pay.paypay.ne.jp/..."/>
                             <div className="field-hint" style={{marginTop:4}}>
-                              💡 ここに入力した URL は <strong>PayPay 決済管理</strong> に自動で初期登録されます。 以降の変更は決済管理画面で行ってください。
+                              ここに入力した URL は <strong>PayPay 決済管理</strong> に自動で初期登録されます。 以降の変更は決済管理画面で行ってください。
                             </div>
                             {paymentUrl_paypay && /^https?:\/\//i.test(paymentUrl_paypay) && (
                               <div style={{marginTop:6,fontSize:11,color:'var(--ink4)'}}>
@@ -9947,13 +11717,13 @@ function PageEventCreate(){
                         const now = new Date();
                         if (isNaN(dt.getTime())) return '日時の形式が不正です';
                         if (dt <= now) {
-                          return `📅 設定日時を既に過ぎています (${dt.toLocaleString('ja-JP')}) → 既に公開扱いです`;
+                          return `設定日時を既に過ぎています (${dt.toLocaleString('ja-JP')}) → 既に公開扱いです`;
                         }
                         const diffMs = dt - now;
                         const diffH = Math.floor(diffMs / (1000 * 60 * 60));
                         const diffD = Math.floor(diffH / 24);
                         const remain = diffD > 0 ? `${diffD}日${diffH % 24}時間後` : `${diffH}時間後`;
-                        return `📅 ${dt.toLocaleString('ja-JP')} (${remain}) に自動公開`;
+                        return `${dt.toLocaleString('ja-JP')} (${remain}) に自動公開`;
                       })()
                     ) : (
                       'ステータスが「下書き」でも、この日時を過ぎれば参加者サイトで公開されます。空欄ならステータス通りに動作します。'
@@ -10442,7 +12212,7 @@ function PageEventCreate(){
                 {format === 'multi' ? (
                   <React.Fragment>
                     <span style={{background:'var(--violet-50)',color:'var(--violet)',padding:'2px 8px',borderRadius:4,fontWeight:700}}>
-                      📅 {sessions.length}日間開催
+                      {sessions.length}日間開催
                     </span>
                     {sessions.length > 0 && sessions[0].date && (
                       <span><Icon n="cal" s={11}/> {sessions[0].date}〜{sessions[sessions.length-1].date || ''}</span>
@@ -10725,7 +12495,7 @@ function PageQR(){
           {/* multi イベント選択時: セッションサブセレクター */}
           {isMultiEvent && (
             <div className="field" style={{flex:1,minWidth:240,marginBottom:0}}>
-              <label className="field-label" style={{color:'var(--violet)'}}>📅 セッション (Day) を選択</label>
+              <label className="field-label" style={{color:'var(--violet)'}}>セッション (Day) を選択</label>
               <div className="select-wrap">
                 <select className="input select" value={selectedSessionId} onChange={e=>{stopScan(); setSelectedSessionId(e.target.value);}}>
                   <option value="">全セッション (フィルタなし)</option>
@@ -13699,6 +15469,20 @@ function PageHomepageSettings(){
   const [error, setError] = useState(null);
 
   const SETTING_DEFS = [
+    // (Phase 15.S37 / S38) ヘッダータグライン + オープニング演出 — Phase 15.S59 で PC 用にも追加
+    { section: 'Header', label: 'ヘッダー (常時表示)', help: 'ロゴの下に小さく出る常時表示テキスト' },
+    { key: 'home_header_tagline_ja',   label: 'タグライン (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_en',   label: 'タグライン (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_easy', label: 'タグライン (やさしい日本語)', ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+
+    { section: 'Opening (起動演出)', label: 'オープニング画面', help: 'サイトを開いた瞬間の演出画面 (1.9秒間表示)' },
+    { key: 'opening_main_ja',          label: 'メインコピー (日)',   ph: 'WELCOME TO TOKYO', type: 'text' },
+    { key: 'opening_main_en',          label: 'メインコピー (英)',   ph: 'WELCOME TO TOKYO', type: 'text' },
+    { key: 'opening_main_easy',        label: 'メインコピー (やさしい日本語)', ph: 'ようこそ とうきょうへ', type: 'text' },
+    { key: 'opening_subtitle_ja',      label: 'サブタイトル (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: '画面下に小さく表示される装飾テキスト' },
+    { key: 'opening_subtitle_en',      label: 'サブタイトル (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'opening_subtitle_easy',    label: 'サブタイトル (やさしい日本語)', ph: '2018 ねん から · とうきょう', type: 'text' },
+
     { section: 'Hero', label: 'ヒーロー (トップ画面)' },
     { key: 'hero_catch_en',   label: 'キャッチコピー (英)',  ph: "Let's walk Tokyo together.", type: 'text' },
     { key: 'hero_catch_ja',   label: 'キャッチコピー (日)',  ph: '一緒に、東京を歩こう', type: 'text' },
@@ -13713,6 +15497,30 @@ function PageHomepageSettings(){
     { key: 'concept_body_easy', label: '本文 (やさしい日本語)', ph: 'イベントだけ じゃなくて、 であい。\nひとよ だけ じゃなくて、 まいにちの なかで。', type: 'textarea' },
     { key: 'concept_image_url', label: '右側の写真',           type: 'image' },
     { key: 'concept_button_link', label: '「もっと知る」リンク', ph: '#/about', type: 'text' },
+
+    // (Phase 15.S61) 3 ステップ案内 セクション (登録 → イベントを選ぶ → 参加)
+    { section: 'Steps (3ステップ案内)', label: '使い方 3 ステップ', help: 'Concept セクションの下にある「登録 → イベント選択 → 参加」のガイド' },
+    { key: 'steps_tagline_ja',   label: 'タイトル (日)',   ph: '出会いと、対話と、文化の交差点。', type: 'text' },
+    { key: 'steps_tagline_en',   label: 'タイトル (英)',   ph: 'Where conversations meet cultures.', type: 'text' },
+    { key: 'steps_tagline_easy', label: 'タイトル (やさしい日本語)', ph: 'であいと、 たいわと、 ぶんかの まじわり。', type: 'text' },
+    { key: 'steps_1_title_ja',   label: 'Step 1: タイトル (日)',   ph: '登録', type: 'text' },
+    { key: 'steps_1_title_en',   label: 'Step 1: タイトル (英)',   ph: 'Sign up', type: 'text' },
+    { key: 'steps_1_title_easy', label: 'Step 1: タイトル (やさしい日本語)', ph: 'とうろく', type: 'text' },
+    { key: 'steps_1_body_ja',    label: 'Step 1: 本文 (日)',       ph: '無料で会員登録', type: 'text' },
+    { key: 'steps_1_body_en',    label: 'Step 1: 本文 (英)',       ph: 'Free membership', type: 'text' },
+    { key: 'steps_1_body_easy',  label: 'Step 1: 本文 (やさしい日本語)', ph: 'むりょう', type: 'text' },
+    { key: 'steps_2_title_ja',   label: 'Step 2: タイトル (日)',   ph: 'イベントを選ぶ', type: 'text' },
+    { key: 'steps_2_title_en',   label: 'Step 2: タイトル (英)',   ph: 'Browse events', type: 'text' },
+    { key: 'steps_2_title_easy', label: 'Step 2: タイトル (やさしい日本語)', ph: 'イベントを みる', type: 'text' },
+    { key: 'steps_2_body_ja',    label: 'Step 2: 本文 (日)',       ph: 'カテゴリから選択', type: 'text' },
+    { key: 'steps_2_body_en',    label: 'Step 2: 本文 (英)',       ph: 'Find what you like', type: 'text' },
+    { key: 'steps_2_body_easy',  label: 'Step 2: 本文 (やさしい日本語)', ph: 'すきなのを えらぶ', type: 'text' },
+    { key: 'steps_3_title_ja',   label: 'Step 3: タイトル (日)',   ph: '参加', type: 'text' },
+    { key: 'steps_3_title_en',   label: 'Step 3: タイトル (英)',   ph: 'Join & meet', type: 'text' },
+    { key: 'steps_3_title_easy', label: 'Step 3: タイトル (やさしい日本語)', ph: 'いって あう', type: 'text' },
+    { key: 'steps_3_body_ja',    label: 'Step 3: 本文 (日)',       ph: '仲間と文化に出会う', type: 'text' },
+    { key: 'steps_3_body_en',    label: 'Step 3: 本文 (英)',       ph: 'New friends, new culture', type: 'text' },
+    { key: 'steps_3_body_easy',  label: 'Step 3: 本文 (やさしい日本語)', ph: 'あたらしい ともだち', type: 'text' },
 
     { section: 'Events', label: 'Events 入口セクション' },
     { key: 'events_section_bg_image',  label: '背景画像',     type: 'image' },
@@ -13739,10 +15547,11 @@ function PageHomepageSettings(){
     { key: 'news_section_label_ja',      label: 'ラベル (日)',     ph: '最新のお知らせ', type: 'text' },
     { key: 'news_section_label_easy',    label: 'ラベル (やさしい日本語)', ph: 'おしらせ', type: 'text' },
 
-    { section: 'Footer', label: 'フッター' },
-    { key: 'footer_tagline_en',  label: 'キャッチコピー (英)', ph: 'Make Tokyo home.', type: 'text' },
-    { key: 'footer_tagline_ja',  label: 'キャッチコピー (日)', ph: '東京を、もうひとつのふるさとに。', type: 'text' },
-    { key: 'footer_tagline_easy',label: 'キャッチコピー (やさしい日本語)', ph: 'とうきょうを、もうひとつの ふるさとに。', type: 'text' },
+    { section: 'Footer', label: 'フッター', help: 'ページの一番下に表示されるフッター。 ブランドステートメントは複数行入力可 (改行で 3 行になる)' },
+    { key: 'footer_tagline_ja',  label: 'ブランドステートメント (日)',  ph: '出会いから、はじまる東京。\n在日外国人留学生と日本人を\nつなぐコミュニティです。', type: 'textarea', help: '改行 (Enter) で 3 行表示できます' },
+    { key: 'footer_tagline_en',  label: 'ブランドステートメント (英)',  ph: 'Where strangers become friends.\nA community for international students and locals in Tokyo.', type: 'textarea' },
+    { key: 'footer_tagline_easy',label: 'ブランドステートメント (やさしい日本語)', ph: 'であいから、はじまる とうきょう。\nりゅうがくせいと とうきょうのひとが\nつながる ばしょ。', type: 'textarea' },
+    { key: 'footer_est_line',    label: 'EST. 行 (フッター装飾)', ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: 'フッターのブランドステートメント上に表示される小さな装飾テキスト。 言語共通 (日本語/英語版を分けない)' },
     { key: 'footer_est_year',    label: '設立年 (EST.)', ph: '2018', type: 'text' },
     // (Phase 15.S40) 法人情報 + 著作権を Admin 編集可能に
     { key: 'footer_legal_name_ja',     label: '法人名 (日)', ph: '一般社団法人 connec+a', type: 'text' },
@@ -13796,14 +15605,15 @@ function PageHomepageSettings(){
     { key: 'event_policy_default_updated_at', label: '最終更新日', ph: '2026-05-01', type: 'text' },
 
     // (Phase 15.S20 Step 5) 決済完了メールテンプレ
-    { section: 'Payment Complete Email', label: '決済完了メール テンプレ', help: 'Admin が 「決済済み」 にマークした時に参加者に自動送信されるメール。 placeholder: {eventTitle} {userName} {eventDate} {amount}' },
+    // (Phase 15.S53) {myPageUrl} {eventDetailUrl} 追加
+    { section: 'Payment Complete Email', label: '決済完了メール テンプレ', help: 'Admin が 「決済済み」 にマークした時に参加者に自動送信されるメール。 placeholder: {eventTitle} {userName} {eventDate} {amount} {myPageUrl} {eventDetailUrl}' },
     { key: 'admin_notification_email', label: 'システム通知先メアド (失敗時)', ph: 'admin@connecta.example.com', type: 'text' },
     { key: 'payment_complete_email_subject_ja',   label: '件名 (日)',     ph: '【connec+a】{eventTitle} 決済を確認しました', type: 'text' },
-    { key: 'payment_complete_email_body_ja',      label: '本文 (日)',     ph: '{userName} 様\n\nご参加申込ありがとうございます。\n{eventTitle} の決済を確認いたしました。\n\nイベント詳細:\n日時: {eventDate}\n金額: ¥{amount}\n\n当日お会いできるのを楽しみにしております。\n\nconnec+a 運営', type: 'textarea' },
+    { key: 'payment_complete_email_body_ja',      label: '本文 (日)',     ph: '{userName} 様\n\nご参加申込ありがとうございます。\n{eventTitle} の決済を確認いたしました。\n\nイベント詳細:\n日時: {eventDate}\n金額: ¥{amount}\n\n──────────────────\n申込状況の確認はこちらから:\n{myPageUrl}\n\nイベント詳細ページ:\n{eventDetailUrl}\n──────────────────\n\n当日お会いできるのを楽しみにしております。\n\nconnec+a 運営', type: 'textarea' },
     { key: 'payment_complete_email_subject_en',   label: '件名 (英)',     ph: '[connec+a] Payment confirmed for {eventTitle}', type: 'text' },
-    { key: 'payment_complete_email_body_en',      label: '本文 (英)',     ph: 'Dear {userName},\n\nThank you for registering...', type: 'textarea' },
+    { key: 'payment_complete_email_body_en',      label: '本文 (英)',     ph: 'Dear {userName},\n\nThank you for registering. We have confirmed your payment for {eventTitle}.\n\nEvent details:\nDate: {eventDate}\nAmount: ¥{amount}\n\n──────────────────\nCheck your registration status:\n{myPageUrl}\n\nEvent details page:\n{eventDetailUrl}\n──────────────────\n\nWe look forward to seeing you on the day.\n\nconnec+a Team', type: 'textarea' },
     { key: 'payment_complete_email_subject_easy', label: '件名 (やさしい日本語)', ph: '【connec+a】{eventTitle} の しはらいを かくにん しました', type: 'text' },
-    { key: 'payment_complete_email_body_easy',    label: '本文 (やさしい日本語)', ph: '{userName} さま\n\nさんか ありがとうございます...', type: 'textarea' },
+    { key: 'payment_complete_email_body_easy',    label: '本文 (やさしい日本語)', ph: '{userName} さま\n\nさんか ありがとうございます。\n{eventTitle} の おかねを かくにん しました。\n\nイベントの じょうほう:\n日にち: {eventDate}\nきんがく: ¥{amount}\n\n──────────────────\nじぶんの もうしこみ かくにん:\n{myPageUrl}\n\nイベントの しょうさい:\n{eventDetailUrl}\n──────────────────\n\nとうじつ あえるのを たのしみに しています。\n\nconnec+a スタッフ', type: 'textarea' },
 
     // (Phase 15.S41) 中止/延期 通知メール テンプレ
     { section: 'Cancel / Postpone Mail', label: '中止/延期 通知メール テンプレ', help: 'イベント中止または延期時に申込者全員に送られるメール。 空欄の場合はデフォルト文言が使われます。' },
@@ -14038,22 +15848,8 @@ function PageHomepageMobileSettings(){
   const [error, setError] = useState(null);
 
   // モバイル専用 SETTING_DEFS — キーは原則 base 名 (保存時に _mobile を付ける)
+  // (Phase 15.S60) Header/Opening セクションは PC/モバイル共通のため PC 用ページに統一、 ここから削除
   const SETTING_DEFS = [
-    // === Header ===
-    { section: 'Header', label: 'ヘッダー (上部)' },
-    { key: 'home_header_tagline_ja',   label: 'タグライン (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: 'ロゴの下に小さく出る常時表示テキスト (例: connec+a hub)' },
-    { key: 'home_header_tagline_en',   label: 'タグライン (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
-    { key: 'home_header_tagline_easy', label: 'タグライン (やさしい日本語)', ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
-
-    // === Opening Curtain (Phase 15.S38) ===
-    { section: 'Opening (起動演出)', label: 'オープニング画面', help: 'サイトを開いた瞬間の演出画面 (1.9秒間表示)' },
-    { key: 'opening_main_ja',          label: 'メインコピー (日)',   ph: 'WELCOME TO TOKYO', type: 'text' },
-    { key: 'opening_main_en',          label: 'メインコピー (英)',   ph: 'WELCOME TO TOKYO', type: 'text' },
-    { key: 'opening_main_easy',        label: 'メインコピー (やさしい日本語)', ph: 'ようこそ とうきょうへ', type: 'text' },
-    { key: 'opening_subtitle_ja',      label: 'サブタイトル (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: '画面下に小さく表示される装飾テキスト' },
-    { key: 'opening_subtitle_en',      label: 'サブタイトル (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
-    { key: 'opening_subtitle_easy',    label: 'サブタイトル (やさしい日本語)', ph: '2018 ねん から · とうきょう', type: 'text' },
-
     // === Hero ===
     { section: 'Hero', label: 'メインヒーロー' },
     { key: 'home_hero_eyebrow_ja',     label: 'Eyebrow (日)',      ph: 'WELCOME TO TOKYO', type: 'text' },
@@ -14768,7 +16564,7 @@ function PageNewsFront(){
       {/* ヘルプテキスト */}
       {sorted.filter(n => n.showOnFront).length >= 2 && (
         <div style={{marginTop:12, padding:'10px 14px', background:'#f9fafb', border:'1px solid var(--line)', borderRadius:8, fontSize:12, color:'var(--ink3)', maxWidth:1120}}>
-          💡 参加者表示中の項目は、行をドラッグして並び替えできます。ステータスバッジをクリックすると公開状態を循環できます。
+          参加者表示中の項目は、行をドラッグして並び替えできます。ステータスバッジをクリックすると公開状態を循環できます。
         </div>
       )}
 
@@ -15794,6 +17590,7 @@ const PAGES = {
   photos:         () => renderPage('PagePhotos'),
   payments:       () => renderPage('PagePayments'),
   paypay:         () => renderPage('PagePayPay'),
+  coupons:        () => renderPage('PageCoupons'),
   departments:    () => renderPage('PageDepartments'),
   org:            () => renderPage('PageOrg'),
   ads:            () => renderPage('PageAds'),
