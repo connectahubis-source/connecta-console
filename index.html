@@ -493,6 +493,19 @@ svg{display:block}
   .ph-right{flex-wrap:wrap}
   .grid-3{grid-template-columns:1fr 1fr}
   .grid-ab{grid-template-columns:1fr}    /* 横並びを縦に */
+
+  /* (Phase 15.S145) 新ページ (KPI / 参加者分析) の固定グリッドを 2 列に */
+  .kpi-grid{grid-template-columns:1fr 1fr !important}
+  /* インラインで grid-template-columns が指定された .card 親 div は media では上書きしにくいので、
+     特定のラッパーに data 属性をつける運用 (後述) */
+}
+
+/* (Phase 15.S145) iPad portrait (768-1024) 特化: コンテンツに余裕 */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .page{padding:20px 22px 40px}
+  /* テーブルが詰まりすぎないように水平スクロール */
+  .tbl{font-size:12px}
+  .tbl th, .tbl td{padding:8px 10px !important}
 }
 
 /* スマホ (〜767px): サイドバー隠す + ハンバーガー + 下部タブ */
@@ -628,6 +641,35 @@ svg{display:block}
   /* 統計カード */
   .stat-card{padding:12px}
   .stat-num{font-size:24px}
+
+  /* (Phase 15.S145) 新ページ (KPI / 参加者分析 / Payments) の固定グリッドを 1 列に */
+  .kpi-grid{grid-template-columns:1fr !important; gap:10px !important}
+  /* 全ての grid を 1 列に強制 (インライン style.gridTemplateColumns には CSS で上書きできないので、
+     React 側で window.innerWidth を見る別アプローチが必要だが、 ここでは Cascade で適用可能なクラスのみ強制) */
+  .grid-2,.grid-3,.grid-ab,.grid-12{grid-template-columns:1fr !important}
+
+  /* (S145) 数値カードの padding を確保 */
+  .card{padding-left:14px !important; padding-right:14px !important}
+
+  /* (S145) ph-right のボタン折り返し */
+  .ph-right{justify-content:flex-start}
+  .ph-right .btn{margin-bottom:6px}
+
+  /* (S145) フォーム要素を縦並びに */
+  .row{flex-wrap:wrap}
+
+  /* (S145) タブを横スクロール可能に */
+  .tab-bar,[role="tablist"]{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+}
+
+/* (Phase 15.S145) iPad sized クラス (タブレットでの強制 1-2 列) */
+@media (max-width: 1023px) {
+  /* 新ページの インライン grid を CSS class で上書きするためのヘルパー */
+  .resp-grid-4{grid-template-columns:1fr 1fr !important}
+  .resp-grid-3{grid-template-columns:1fr 1fr !important}
+}
+@media (max-width: 767px) {
+  .resp-grid-4,.resp-grid-3,.resp-grid-2{grid-template-columns:1fr !important; gap:10px !important}
 }
 
 /* 超小画面 (〜380px) */
@@ -708,6 +750,10 @@ svg{display:block}
         <svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
         KPIレポート
         <span class="badge badge-coral" style="margin-left:auto">SOON</span>
+      </a>
+      <a href="#participant-analytics" class="nav-item" data-nav="participant-analytics">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        参加者分析
       </a>
       <a href="#notifications" class="nav-item" data-nav="notifications">
         <svg class="ic" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
@@ -1067,6 +1113,112 @@ svg{display:block}
     }
     return errMsg;
   }
+
+  /**
+   * (Phase 15.S146) Registrations を「申込 (Application)」 単位にグループ化
+   *
+   * 1 つの「申込」 = ユーザーが 1 回「申し込む」 ボタンを押した単位
+   * = userId + eventId + 申込日時(秒) で識別
+   *
+   * multi イベント 11 セッション 同時申込 → 11 reg が 1 申込に集約
+   * 別タイミングの再申込 → 別申込として扱う
+   *
+   * 戻り値: Application オブジェクトの配列
+   *   - applicationId: 一意キー
+   *   - userId, eventId, userName, eventTitle, appliedAt
+   *   - regs: 内部の Registration 配列
+   *   - regIds: RegID 配列
+   *   - representativeRegId: 代表 RegID (一覧表示等で使う)
+   *   - sessionIds: 含まれる SessionID 配列
+   *   - totalAmount: 全 reg の amount 合計
+   *   - totalRefundAmount: 全 reg の returnAmount 合計
+   *   - status: 集約ステータス (キャンセル / 返金待ち / 返金 / 決済済み / 申込済み)
+   *   - paid: 全 reg が paid なら true
+   *   - actualPaymentMethod: 実支払い方法 (代表 reg から)
+   *   - note: 備考 (代表 reg から)
+   */
+  window.groupRegistrationsByApplication = function(registrations) {
+    if (!Array.isArray(registrations)) return [];
+    const map = new Map();
+    registrations.forEach(r => {
+      if (!r) return;
+      const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+      const key = (r.userId || '') + '::' + (r.eventId || '') + '::' + dateKey;
+      if (!map.has(key)) {
+        map.set(key, {
+          applicationId: key,
+          userId: r.userId,
+          eventId: r.eventId,
+          userName: r.userName || '',
+          userEmail: r.userEmail || '',
+          eventTitle: r.eventTitle || '',
+          appliedAt: r.appliedAt,
+          regs: [],
+          regIds: [],
+          sessionIds: [],
+          representativeRegId: r.id,
+          totalAmount: 0,
+          totalRefundAmount: 0,
+          _allPaid: true,
+          _anyPaid: false,
+          _anyRefundPending: false,
+          _anyRefunded: false,
+          _allCancelled: true,
+          _actualMethods: new Set(),
+          _notes: new Set(),
+        });
+      }
+      const app = map.get(key);
+      app.regs.push(r);
+      app.regIds.push(r.id);
+      if (r.sessionId) app.sessionIds.push(r.sessionId);
+      app.totalAmount += Number(r.amount) || 0;
+      app.totalRefundAmount += Number(r.refundAmount) || 0;
+      if (r.paid) app._anyPaid = true;
+      else app._allPaid = false;
+      if ((r.refundAmount || 0) > 0 || r.status === '返金') app._anyRefunded = true;
+      if (r.status === '返金待ち') app._anyRefundPending = true;
+      if (r.status !== 'キャンセル') app._allCancelled = false;
+      if (r.actualPaymentMethod) app._actualMethods.add(r.actualPaymentMethod);
+      if (r.note) app._notes.add(r.note);
+    });
+    return Array.from(map.values()).map(app => ({
+      applicationId: app.applicationId,
+      userId: app.userId,
+      eventId: app.eventId,
+      userName: app.userName,
+      userEmail: app.userEmail,
+      eventTitle: app.eventTitle,
+      appliedAt: app.appliedAt,
+      regs: app.regs,
+      regIds: app.regIds,
+      sessionIds: app.sessionIds,
+      representativeRegId: app.representativeRegId,
+      totalAmount: app.totalAmount,
+      totalRefundAmount: app.totalRefundAmount,
+      status: app._allCancelled ? 'キャンセル'
+            : app._anyRefundPending ? '返金待ち'
+            : app._anyRefunded ? '返金'
+            : app._allPaid ? '決済済み'
+            : app._anyPaid ? '決済済み'  // (S134) 一部決済済は廃止、 1 つでも paid → 決済済 扱い
+            : '申込済み',
+      paid: app._allPaid,
+      anyPaid: app._anyPaid,
+      actualPaymentMethod: Array.from(app._actualMethods).join(' / '),
+      note: Array.from(app._notes)[0] || '',
+    }));
+  };
+
+  /**
+   * (Phase 15.S146) RegID または UserID から Application を見つける
+   * QR スキャン処理で使用
+   */
+  window.findApplicationByRegId = function(applications, regIdOrUserId) {
+    return applications.find(app =>
+      app.regIds.indexOf(regIdOrUserId) >= 0 ||
+      app.userId === regIdOrUserId
+    );
+  };
 
   window.fetchData = async function fetchData(action, params = {}) {
     if (window.CONFIG.USE_MOCK) {
@@ -7921,48 +8073,80 @@ function PagePayments(){
   };
 
   // (Phase 15.S119) 支払い方法変更ハンドラ
-  const handleChangePaymentMethod = async (regId, newMethod, memo) => {
+  // (Phase 15.S147) Application 単位対応: 全 RegID に同じ支払い方法を設定
+  const handleChangePaymentMethod = async (regIdOrIds, newMethod, memo) => {
+    const regIds = Array.isArray(regIdOrIds) ? regIdOrIds : [regIdOrIds];
     try {
-      await window.postData('admin.changePaymentMethod', { regId, newMethod, memo });
-      showToast(`支払い方法を「${newMethod}」 に変更しました`);
+      // 順次実行 (PaymentLog 順序を保つため)
+      let changedCount = 0;
+      for (const regId of regIds) {
+        try {
+          await window.postData('admin.changePaymentMethod', { regId, newMethod, memo });
+          changedCount++;
+        } catch (e) {
+          Logger.log && Logger.log(`changePaymentMethod ${regId} failed: ${e.message}`);
+        }
+      }
+      const totalLabel = regIds.length > 1 ? ` (${changedCount}/${regIds.length})` : '';
+      showToast(`支払い方法を「${newMethod}」 に変更${totalLabel}`);
       setMethodChangeTarget(null);
-      // payments + summary を再取得
-      const [pays, _] = await Promise.all([
+      const [pays] = await Promise.all([
         window.fetchData('listPayments'),
         reloadSummary(),
       ]);
       setPayments(Array.isArray(pays) ? pays : []);
+      window.dispatchEvent(new Event('cca:reload-registrations'));
     } catch (e) {
       alert('変更失敗: ' + e.message);
     }
   };
 
-  // (Phase 15.S119) 返金処理ハンドラ
-  const handleRefund = async (regId, refundAmount, reason) => {
+  // (Phase 15.S119 / S147) 返金処理ハンドラ — Application 全 reg を「返金」 ステータスに同期
+  const handleRefund = async (regIdOrIds, refundAmount, reason) => {
+    const regIds = Array.isArray(regIdOrIds) ? regIdOrIds : [regIdOrIds];
+    const primaryRegId = regIds[0];
     try {
-      const res = await window.postData('admin.refundPayment', { regId, refundAmount, reason });
-      showToast(res.fullRefund ? '全額返金処理が完了しました' : `部分返金 ¥${refundAmount.toLocaleString()} を記録しました`);
+      // 1. 代表 regId に返金処理 (返金額は代表のみに記録)
+      const res = await window.postData('admin.refundPayment', { regId: primaryRegId, refundAmount, reason });
+      // 2. Application 内の他の reg のステータスも「返金」 に同期 (= 全部キャンセル扱いに)
+      const otherRegIds = regIds.slice(1);
+      if (otherRegIds.length > 0) {
+        await Promise.all(
+          otherRegIds.map(rid =>
+            window.postData('updateRegistration', { regId: rid, fields: { status: '返金' } })
+              .catch(e => Logger.log && Logger.log(`update ${rid} failed: ${e.message}`))
+          )
+        );
+      }
+      const otherLabel = otherRegIds.length > 0 ? ` + 関連 ${otherRegIds.length} reg を同期` : '';
+      showToast((res.fullRefund ? '全額返金処理が完了' : `部分返金 ¥${refundAmount.toLocaleString()}`) + otherLabel);
       setRefundTarget(null);
-      const [pays, _] = await Promise.all([
+      const [pays] = await Promise.all([
         window.fetchData('listPayments'),
         reloadSummary(),
       ]);
       setPayments(Array.isArray(pays) ? pays : []);
+      window.dispatchEvent(new Event('cca:reload-registrations'));
     } catch (e) {
       alert('返金失敗: ' + e.message);
     }
   };
 
   // (Phase 15.S119) 決済済み / 未決済 トグル
-  const handleTogglePaid = async (regId, makePaid) => {
+  const handleTogglePaid = async (regIdOrIds, makePaid) => {
+    // (Phase 15.S129/S130) 配列対応 — multi イベントの場合は 1 API で一括処理 (メール 1 通)
+    const regIds = Array.isArray(regIdOrIds) ? regIdOrIds : [regIdOrIds];
     try {
-      await window.postData('admin.markPaid', { regId, paid: makePaid });
-      showToast(makePaid ? '決済済みにマークしました' : '未決済に戻しました');
-      const [pays, _] = await Promise.all([
+      const res = await window.postData('admin.markPaidBulk', { regIds, paid: makePaid });
+      const changedCount = res && typeof res.changedCount === 'number' ? res.changedCount : regIds.length;
+      const totalLabel = regIds.length > 1 ? ` (${changedCount}/${regIds.length})` : '';
+      showToast(makePaid ? `決済済みにしました${totalLabel}` : `未決済に戻しました${totalLabel}`);
+      const [pays] = await Promise.all([
         window.fetchData('listPayments'),
         reloadSummary(),
       ]);
       setPayments(Array.isArray(pays) ? pays : []);
+      window.dispatchEvent(new Event('cca:reload-registrations'));
     } catch (e) {
       alert('変更失敗: ' + e.message);
     }
@@ -8075,30 +8259,38 @@ function PagePayments(){
       </div>
 
       {(() => {
-        // (Phase 15.S118) 選択イベントに応じた集計
+        // (Phase 15.S118 / S128 / S130) 選択イベント or 全イベント合計の集計
         const selectedSummary = selectedEventId
           ? revenueSummary.find(s => s.eventId === selectedEventId)
           : null;
-        // KPI 値: 選択イベントがあれば その値、 なければ Payments テーブル全体合計 (既存)
-        const kpiTotalRev = selectedSummary ? selectedSummary.paidRevenue : totalRev;
-        const kpiSuccess = selectedSummary ? selectedSummary.paidRegs : success.length;
-        // 入金待ち / 失敗・返金 は既存の payments テーブルから (イベント別 fetch なし時は全体値)
-        const kpiPending = pending;
-        const kpiFailed = failed;
-        // 予想収益 (選択イベントのみ)
-        const kpiExpected = selectedSummary ? selectedSummary.expectedRevenue : null;
+
+        // (Phase 15.S128) 「すべてのイベント」 選択時は revenueSummary を集計
+        const allSummary = !selectedSummary ? revenueSummary.reduce((acc, s) => {
+          acc.paidRevenue += Number(s.paidRevenue) || 0;
+          acc.paidRegs += Number(s.paidRegs) || 0;
+          acc.paidUsers += Number(s.paidUsers) || 0;
+          acc.expectedRevenue += Number(s.expectedRevenue) || 0;
+          acc.uniqueParticipants += Number(s.uniqueParticipants) || 0;
+          acc.regCount += Number(s.regCount) || 0;
+          acc.cancelledRegs += Number(s.cancelledRegs) || 0;
+          return acc;
+        }, { paidRevenue: 0, paidRegs: 0, paidUsers: 0, expectedRevenue: 0, uniqueParticipants: 0, regCount: 0, cancelledRegs: 0 }) : null;
+
+        // KPI 値: 単一選択 / 全イベント合計 — (Phase 15.S130) 件数 → 人数ベース
+        const kpiTotalRev = selectedSummary ? selectedSummary.paidRevenue : (allSummary ? allSummary.paidRevenue : 0);
+        const kpiPaidUsers = selectedSummary ? selectedSummary.paidUsers : (allSummary ? allSummary.paidUsers : 0);
+        const kpiPaidRegs = selectedSummary ? selectedSummary.paidRegs : (allSummary ? allSummary.paidRegs : 0);
+        const kpiExpected = selectedSummary ? selectedSummary.expectedRevenue : (allSummary ? allSummary.expectedRevenue : 0);
+        const kpiPending = Math.max(0, kpiExpected - kpiTotalRev);
+        const kpiCancelledOrRefunded = selectedSummary ? selectedSummary.cancelledRegs : (allSummary ? allSummary.cancelledRegs : 0);
 
         return (
           <>
             <div className="kpi-grid">
-              <MiniStat label={selectedSummary ? "決済済み額" : "累計入金額 (成功)"} value={loading || summaryLoading ? '…' : yen(kpiTotalRev)} sub="" icon="yen" color="green"/>
-              <MiniStat label={selectedSummary ? "決済済み件数" : "入金件数 (成功)"} value={loading || summaryLoading ? '…' : String(kpiSuccess)} sub="" icon="card" color="indigo"/>
-              {kpiExpected !== null ? (
-                <MiniStat label="予想収益" value={summaryLoading ? '…' : yen(kpiExpected)} sub="割引後合計" icon="yen" color="amber"/>
-              ) : (
-                <MiniStat label="入金待ち" value={loading ? '…' : String(kpiPending)} sub="要対応" icon="clock" color="amber"/>
-              )}
-              <MiniStat label="失敗・返金" value={loading ? '…' : String(kpiFailed)} sub="" icon="warn" color="red"/>
+              <MiniStat label="決済済み額" value={loading || summaryLoading ? '…' : yen(kpiTotalRev)} sub="" icon="yen" color="green"/>
+              <MiniStat label="決済済み人数" value={loading || summaryLoading ? '…' : String(kpiPaidUsers)} sub={kpiPaidRegs !== kpiPaidUsers ? `申込件数 ${kpiPaidRegs}` : ''} icon="card" color="indigo"/>
+              <MiniStat label="予想収益" value={summaryLoading ? '…' : yen(kpiExpected)} sub={kpiPending > 0 ? `入金待ち ${yen(kpiPending)}` : '割引後合計'} icon="yen" color="amber"/>
+              <MiniStat label="キャンセル・返金" value={loading ? '…' : String(kpiCancelledOrRefunded)} sub="集計から除外" icon="warn" color="red"/>
             </div>
 
             {/* (Phase 15.S118) 支払い方法別内訳 — 選択イベントがあれば そのイベント、 なければ全イベント合算 */}
@@ -8530,21 +8722,31 @@ function PagePayments(){
         </div>
       )}
 
-      {/* (Phase 15.S119) 支払い方法変更モーダル */}
+      {/* (Phase 15.S119 / S147) 支払い方法変更モーダル — Application 全 reg に伝播 */}
       {methodChangeTarget && (
         <PaymentMethodChangeModal
           target={methodChangeTarget}
           onCancel={() => setMethodChangeTarget(null)}
-          onSubmit={(newMethod, memo) => handleChangePaymentMethod(methodChangeTarget.regId, newMethod, memo)}
+          onSubmit={(newMethod, memo) => handleChangePaymentMethod(
+            methodChangeTarget.allRegIds && methodChangeTarget.allRegIds.length > 0
+              ? methodChangeTarget.allRegIds
+              : [methodChangeTarget.regId],
+            newMethod, memo
+          )}
         />
       )}
 
-      {/* (Phase 15.S119) 返金モーダル */}
+      {/* (Phase 15.S119 / S147) 返金モーダル — Application 全 reg を「返金」 に同期 */}
       {refundTarget && (
         <PaymentRefundModal
           target={refundTarget}
           onCancel={() => setRefundTarget(null)}
-          onSubmit={(amount, reason) => handleRefund(refundTarget.regId, amount, reason)}
+          onSubmit={(amount, reason) => handleRefund(
+            refundTarget.allRegIds && refundTarget.allRegIds.length > 0
+              ? refundTarget.allRegIds
+              : [refundTarget.regId],
+            amount, reason
+          )}
         />
       )}
 
@@ -9917,7 +10119,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const fetchData = async () => {
       try {
         const [regs, parts, evs] = await Promise.all([
           window.fetchData('listRegistrations'),
@@ -9931,8 +10133,15 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    fetchData();
+    // (Phase 15.S129) 親 (PagePayments) からの reload イベントをハンドリング
+    const handler = () => fetchData();
+    window.addEventListener('cca:reload-registrations', handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('cca:reload-registrations', handler);
+    };
   }, []);
 
   // Map で名前解決
@@ -9944,7 +10153,15 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
 
   const evMap = React.useMemo(() => {
     const m = {};
-    events.forEach(e => { m[e.id || e.EventID] = e.title || e['タイトル'] || ''; });
+    events.forEach(e => {
+      const id = e.id || e.EventID;
+      if (!id) return;
+      m[id] = {
+        title: e.title || e['タイトル'] || '',
+        feeMode: e.feeMode || 'uniform',
+        format: e.format || 'single',
+      };
+    });
     return m;
   }, [events]);
 
@@ -9956,11 +10173,13 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
       const paid = r.paid === true;
       const eventId = r.eventId || '';
       const refundAmount = Number(r.refundAmount) || 0;
+      const amount = Number(r.amount) || 0;
 
       // ステータスフィルタ
-      if (statusFilter === 'paid' && !paid) return false;
-      if (statusFilter === 'unpaid' && (paid || status === 'キャンセル' || refundAmount > 0)) return false;
+      if (statusFilter === 'paid' && (!paid || status === 'キャンセル' || status === '返金待ち' || refundAmount > 0)) return false;
+      if (statusFilter === 'unpaid' && (paid || status === 'キャンセル' || status === '返金待ち' || refundAmount > 0)) return false;
       if (statusFilter === 'refunded' && refundAmount === 0) return false;
+      if (statusFilter === 'refundPending' && status !== '返金待ち') return false;
       if (statusFilter === 'cancelled' && status !== 'キャンセル') return false;
 
       // イベントフィルタ
@@ -9971,7 +10190,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
         const regId = (r.id || '').toLowerCase();
         const userId = (r.userId || '').toLowerCase();
         const userName = (partMap[r.userId] || '').toLowerCase();
-        const evTitle = (evMap[eventId] || '').toLowerCase();
+        const evTitle = ((evMap[eventId] && evMap[eventId].title) || '').toLowerCase();
         const memo = (r.note || '').toLowerCase();
         const actualMethod = (r.actualPaymentMethod || '').toLowerCase();
         if (!regId.includes(q) && !userId.includes(q) && !userName.includes(q)
@@ -9987,6 +10206,80 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
       return String(tb).localeCompare(String(ta));
     });
   }, [registrations, statusFilter, selectedEventId, search, partMap, evMap]);
+
+  // (Phase 15.S129 / S132) userId × eventId × 申込日 × active/closed でグループ化
+  // - 複数日 (multi) の Reg を 1 行に集約しつつ
+  // - 別日の再申込やキャンセル分は別行として扱う (合計に混ざらないように)
+  const groupedVisible = React.useMemo(() => {
+    const map = new Map();
+    visible.forEach(r => {
+      // (Phase 15.S132/S135) 申込日時 (YYYY-MM-DDTHH:MM:SS) 秒単位で区切る
+      // multi 申込は backend が同じ Date を共有するため、 同一申込操作は 1 グループに、
+      // 別タイミングの申込/再申込は別グループになる
+      const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+      // アクティブ (申込中/決済済/返金待ち) と クローズ (キャンセル/返金) を分離
+      const isClosed = r.status === 'キャンセル' || r.status === '返金' || (Number(r.refundAmount) || 0) > 0;
+      const bucket = isClosed ? 'closed' : 'active';
+      const key = (r.userId || '') + '::' + (r.eventId || '') + '::' + dateKey + '::' + bucket;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          userId: r.userId,
+          eventId: r.eventId,
+          regs: [],
+          // 代表 RegID = 最初の reg.id
+          representativeRegId: r.id,
+          totalAmount: 0,
+          totalRefundAmount: 0,
+          regIds: [],
+          sessionIds: [],
+          // 集約フラグ
+          anyPaid: false,
+          allPaid: true,
+          anyRefunded: false,
+          anyRefundPending: false,
+          anyCancelled: false,
+          allCancelled: true,
+          // 代表 status (集約後の最終)
+          appliedAt: r.appliedAt,
+          actualPaymentMethods: new Set(),
+          notes: new Set(),
+        });
+      }
+      const g = map.get(key);
+      g.regs.push(r);
+      g.regIds.push(r.id);
+      if (r.sessionId) g.sessionIds.push(r.sessionId);
+      g.totalAmount += Number(r.amount) || 0;
+      g.totalRefundAmount += Number(r.refundAmount) || 0;
+      if (r.paid) g.anyPaid = true;
+      if (!r.paid) g.allPaid = false;
+      if ((r.refundAmount || 0) > 0 || r.status === '返金') g.anyRefunded = true;
+      if (r.status === '返金待ち') g.anyRefundPending = true;
+      if (r.status === 'キャンセル') g.anyCancelled = true;
+      if (r.status !== 'キャンセル') g.allCancelled = false;
+      if (r.actualPaymentMethod) g.actualPaymentMethods.add(r.actualPaymentMethod);
+      if (r.note) g.notes.add(r.note);
+    });
+    // status 確定 (優先順): キャンセル(全て) > 返金待ち > 返金 > 決済済 > 未決済
+    return Array.from(map.values()).map(g => ({
+      ...g,
+      status: g.allCancelled ? 'キャンセル'
+            : g.anyRefundPending ? '返金待ち'
+            : g.anyRefunded ? '返金'
+            : g.allPaid ? '決済済み'
+            : '申込済み',
+      paid: g.allPaid,
+      actualPaymentMethod: Array.from(g.actualPaymentMethods).join(' / '),
+      note: Array.from(g.notes)[0] || '',
+      sessionCount: g.regs.length,
+    })).sort((a, b) => {
+      // (Phase 15.S132) 申込日時 降順 (新しい順)
+      const ta = a.appliedAt || '';
+      const tb = b.appliedAt || '';
+      return String(tb).localeCompare(String(ta));
+    });
+  }, [visible]);
 
   return (
     <div>
@@ -10004,6 +10297,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
             {val:'all', label:'すべて'},
             {val:'paid', label:'決済済'},
             {val:'unpaid', label:'未決済'},
+            {val:'refundPending', label:'返金待ち'},
             {val:'refunded', label:'返金済'},
             {val:'cancelled', label:'キャンセル'},
           ].map(opt => (
@@ -10014,12 +10308,12 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="RegID / 参加者 / イベント で検索"
           style={{flex:1,minWidth:200,padding:'6px 12px',border:'1px solid var(--line)',borderRadius:4,fontSize:12,background:'#fff'}}/>
-        <span style={{fontSize:11,color:'var(--ink4)'}}>{loading ? '...' : `${visible.length} 件`}</span>
+        <span style={{fontSize:11,color:'var(--ink4)'}}>{loading ? '...' : `${groupedVisible.length} 件 (申込数: ${visible.length})`}</span>
       </div>
 
       {loading ? (
         <div style={{padding:40,textAlign:'center',color:'var(--ink4)',fontSize:13}}>読み込み中...</div>
-      ) : visible.length === 0 ? (
+      ) : groupedVisible.length === 0 ? (
         <div style={{padding:40,textAlign:'center',background:'var(--bg2)',border:'1px dashed var(--line)',borderRadius:6,color:'var(--ink4)',fontSize:13}}>
           該当する申込がありません
         </div>
@@ -10038,20 +10332,23 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
               <th></th>
             </tr></thead>
             <tbody>
-              {visible.map(r => {
-                const regId = r.id || '';
-                const userId = r.userId || '';
+              {groupedVisible.map(g => {
+                const regId = g.representativeRegId || '';
+                const userId = g.userId || '';
                 const userName = partMap[userId] || userId;
-                const eventId = r.eventId || '';
-                const evTitle = evMap[eventId] || '(不明)';
-                const status = r.status || '';
-                const paid = r.paid === true;
-                const amount = Number(r.amount) || 0;
-                const memo = r.note || '';
-                const actualMethod = r.actualPaymentMethod || '';
-                const refundAmount = Number(r.refundAmount) || 0;
+                const eventId = g.eventId || '';
+                const evMeta = evMap[eventId] || { title: '(不明)', feeMode: 'uniform', format: 'single' };
+                const evTitle = evMeta.title;
+                const status = g.status || '';
+                const paid = g.paid === true;
+                const amount = Number(g.totalAmount) || 0;
+                const memo = g.note || '';
+                const actualMethod = g.actualPaymentMethod || '';
+                const refundAmount = Number(g.totalRefundAmount) || 0;
                 const isCancelled = status === 'キャンセル';
+                const isRefundPending = status === '返金待ち';
                 const isRefunded = status === '返金' || refundAmount > 0;
+                const allRegIds = g.regIds || [regId];
 
                 // 申込時方法を memo or 既知パターンから抽出
                 const originalMethod = (() => {
@@ -10064,6 +10361,8 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
 
                 const statusBadge = isCancelled
                   ? { label:'キャンセル', bg:'#f3f4f6', fg:'#6b7280' }
+                  : isRefundPending
+                  ? { label:'返金待ち', bg:'#ffedd5', fg:'#c2410c' }
                   : isRefunded
                   ? { label:'返金', bg:'#fef2f2', fg:'#991b1b' }
                   : paid
@@ -10075,13 +10374,18 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
                   regId, name: userName, eventTitle: evTitle,
                   method: actualMethod || originalMethod,
                   amount: amount - refundAmount,
+                  allRegIds: allRegIds,  // 全 RegID (multi 対応)
                 };
 
                 return (
-                  <tr key={regId}>
-                    <td className="mono" style={{fontSize:10,color:'var(--ink3)'}}>{regId}</td>
+                  <tr key={g.key}>
+                    <td className="mono" style={{fontSize:10,color:'var(--ink3)'}}>
+                      {regId}
+                    </td>
                     <td style={{fontWeight:600,fontSize:12}}>{userName}</td>
-                    <td style={{fontSize:11,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{evTitle}</td>
+                    <td style={{fontSize:11,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {evTitle}
+                    </td>
                     <td style={{fontSize:11,color:'var(--ink2)'}}>{originalMethod}</td>
                     <td style={{fontSize:11,fontWeight:actualMethod ? 700 : 400, color: actualMethod ? '#0a2960' : 'var(--ink4)'}}>
                       {actualMethod || '(変更なし)'}
@@ -10096,7 +10400,16 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
                     </td>
                     <td><span style={{padding:'2px 8px',background:statusBadge.bg,color:statusBadge.fg,borderRadius:4,fontSize:11,fontWeight:600}}>{statusBadge.label}</span></td>
                     <td className="mono" style={{fontSize:10,color:'var(--ink4)',whiteSpace:'nowrap'}}>
-                      {r.appliedAt ? new Date(r.appliedAt).toLocaleDateString('ja-JP') : '—'}
+                      {g.appliedAt ? (() => {
+                        const d = new Date(g.appliedAt);
+                        if (isNaN(d.getTime())) return g.appliedAt;
+                        return (
+                          <>
+                            <div>{d.toLocaleDateString('ja-JP')}</div>
+                            <div style={{fontSize:9,color:'var(--ink5)',marginTop:1}}>{d.toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'})}</div>
+                          </>
+                        );
+                      })() : '—'}
                     </td>
                     <td style={{whiteSpace:'nowrap'}}>
                       {!isCancelled && (
@@ -10105,20 +10418,37 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
                             style={{padding:'3px 8px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink2)'}}>
                             方法変更
                           </button>
-                          {!isRefunded && amount > 0 && (
+                          {/* (Phase 15.S126/S127) 返金ボタン: 「決済済み」 または「返金待ち」 の場合のみ */}
+                          {(paid || isRefundPending) && !isRefunded && amount > 0 && (
                             <button onClick={() => onRefund(modalTarget)}
-                              style={{padding:'3px 8px',background:'#fff',border:'1px solid #dc2626',borderRadius:4,fontSize:10,cursor:'pointer',color:'#dc2626'}}>
-                              返金
+                              style={{
+                                padding:'3px 8px',
+                                background: isRefundPending ? '#dc2626' : '#fff',
+                                border:'1px solid #dc2626',
+                                borderRadius:4,fontSize:10,cursor:'pointer',
+                                color: isRefundPending ? '#fff' : '#dc2626',
+                                fontWeight: isRefundPending ? 700 : 500,
+                              }}>
+                              {isRefundPending ? '★ 返金実行' : '返金'}
                             </button>
                           )}
-                          {!paid && !isRefunded && (
-                            <button onClick={() => onTogglePaid(regId, true)}
+                          {!paid && !isRefunded && !isRefundPending && (
+                            <button onClick={() => {
+                              const confirmMsg = `この申込を「決済済み」 にしますか?\n\n参加者: ${userName}\n金額: ¥${amount.toLocaleString()}\n\n決済済みにすると、 参加者に決済完了メールが自動送信されます。`;
+                              if (window.confirm(confirmMsg)) {
+                                onTogglePaid(allRegIds, true);
+                              }
+                            }}
                               style={{padding:'3px 8px',background:'#dcfce7',border:'1px solid #15803d',borderRadius:4,fontSize:10,cursor:'pointer',color:'#15803d',fontWeight:600}}>
                               ✓ 決済済
                             </button>
                           )}
-                          {paid && !isRefunded && (
-                            <button onClick={() => onTogglePaid(regId, false)}
+                          {paid && !isRefunded && !isRefundPending && (
+                            <button onClick={() => {
+                              if (window.confirm(`この申込を「未決済」 に戻しますか?\n\n参加者: ${userName}\n金額: ¥${amount.toLocaleString()}\n\n※ 既に支払いを受け取っている場合は注意してください。`)) {
+                                onTogglePaid(allRegIds, false);
+                              }
+                            }}
                               style={{padding:'3px 8px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink3)'}}>
                               未決済に戻す
                             </button>
@@ -11039,7 +11369,8 @@ function PageEventCreate(){
                       }
                     }}>
                       {departments.length > 0 ? (
-                        departments.map(d => {
+                        // (Phase 15.S142) archived 部署は除外
+                        departments.filter(d => d.status !== 'archived' && d.status !== 'アーカイブ').map(d => {
                           const key = d.abbr || d.name;
                           const label = d.abbr ? `${d.abbr}${d.name && d.name !== d.abbr ? ` (${d.name})` : ''}` : d.name;
                           return <option key={d.id} value={key}>{label}</option>;
@@ -11937,19 +12268,20 @@ function PageEventCreate(){
                       }}>+ テキスト</button>
                       <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                         const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                        const newItem = {id, type:'circle', x:35, y:35, w:20, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0};
+                        // (Phase 15.S148) 塗り色は単色 hex + 透明度を別プロパティに
+                        const newItem = {id, type:'circle', x:35, y:35, w:20, h:30, color:'#ffffff', opacity:0.3, borderColor:'#ffffff', borderWidth:2, rotation:0};
                         setHeroOverlay([...(heroOverlay||[]), newItem]);
                         setSelectedOverlayId(id);
                       }}>+ ●丸</button>
                       <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                         const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                        const newItem = {id, type:'rect', x:30, y:40, w:40, h:20, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0};
+                        const newItem = {id, type:'rect', x:30, y:40, w:40, h:20, color:'#ffffff', opacity:0.3, borderColor:'#ffffff', borderWidth:2, rotation:0};
                         setHeroOverlay([...(heroOverlay||[]), newItem]);
                         setSelectedOverlayId(id);
                       }}>+ ■四角</button>
                       <button type="button" className="btn btn-soft btn-sm" onClick={() => {
                         const id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-                        const newItem = {id, type:'triangle', x:35, y:35, w:30, h:30, color:'rgba(255,255,255,0.3)', borderColor:'#ffffff', borderWidth:2, rotation:0};
+                        const newItem = {id, type:'triangle', x:35, y:35, w:30, h:30, color:'#ffffff', opacity:0.3, borderColor:'#ffffff', borderWidth:2, rotation:0};
                         setHeroOverlay([...(heroOverlay||[]), newItem]);
                         setSelectedOverlayId(id);
                       }}>+ ▲三角</button>
@@ -12032,26 +12364,32 @@ function PageEventCreate(){
                             }}>{item.text || ''}</div>
                           );
                         } else if (item.type === 'circle') {
+                          // (Phase 15.S148) opacity プロパティを反映 (デフォルト 1)
+                          const op = (item.opacity !== undefined && item.opacity !== null) ? Number(item.opacity) : 1;
                           return (
                             <div key={item.id} onMouseDown={onMouseDown} style={{
                               ...baseStyle,
                               borderRadius: '50%',
                               background: item.color,
                               border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                              opacity: op,
                             }}/>
                           );
                         } else if (item.type === 'rect') {
+                          const op = (item.opacity !== undefined && item.opacity !== null) ? Number(item.opacity) : 1;
                           return (
                             <div key={item.id} onMouseDown={onMouseDown} style={{
                               ...baseStyle,
                               background: item.color,
                               border: `${item.borderWidth || 0}px solid ${item.borderColor || 'transparent'}`,
+                              opacity: op,
                             }}/>
                           );
                         } else if (item.type === 'triangle') {
                           // SVGで三角形 (回転は親のtransform)
+                          const op = (item.opacity !== undefined && item.opacity !== null) ? Number(item.opacity) : 1;
                           return (
-                            <div key={item.id} onMouseDown={onMouseDown} style={baseStyle}>
+                            <div key={item.id} onMouseDown={onMouseDown} style={{...baseStyle, opacity: op}}>
                               <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
                                 <polygon points="50,5 95,95 5,95" fill={item.color} stroke={item.borderColor || 'transparent'} strokeWidth={item.borderWidth || 0}/>
                               </svg>
@@ -12144,20 +12482,36 @@ function PageEventCreate(){
 
                           {/* 図形固有 */}
                           {(sel.type === 'circle' || sel.type === 'rect' || sel.type === 'triangle') && (
-                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-                              <div>
-                                <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>塗り色</label>
-                                <input type="color" className="input" value={(sel.color||'').startsWith('rgba')?'#ffffff':sel.color} onChange={e => update({color: e.target.value})} style={{padding:2,height:36}}/>
+                            <React.Fragment>
+                              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>塗り色</label>
+                                  <input type="color" className="input" value={(sel.color||'').startsWith('rgba')?'#ffffff':sel.color} onChange={e => update({color: e.target.value})} style={{padding:2,height:36}}/>
+                                </div>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>枠色</label>
+                                  <input type="color" className="input" value={sel.borderColor || '#ffffff'} onChange={e => update({borderColor: e.target.value})} style={{padding:2,height:36}}/>
+                                </div>
+                                <div>
+                                  <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>枠太さ</label>
+                                  <input type="number" className="input" value={sel.borderWidth || 0} onChange={e => update({borderWidth: parseInt(e.target.value) || 0})} min="0" max="20"/>
+                                </div>
                               </div>
-                              <div>
-                                <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>枠色</label>
-                                <input type="color" className="input" value={sel.borderColor || '#ffffff'} onChange={e => update({borderColor: e.target.value})} style={{padding:2,height:36}}/>
+                              {/* (Phase 15.S148) 透明度スライダー */}
+                              <div style={{marginBottom:8}}>
+                                <label style={{fontSize:11,color:'var(--ink2)',display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                                  <span>透明度</span>
+                                  <span className="mono" style={{color:'var(--ink3)'}}>{Math.round((sel.opacity !== undefined ? sel.opacity : 1) * 100)}%</span>
+                                </label>
+                                <input
+                                  type="range"
+                                  min="0" max="1" step="0.05"
+                                  value={sel.opacity !== undefined ? sel.opacity : 1}
+                                  onChange={e => update({opacity: parseFloat(e.target.value)})}
+                                  style={{width:'100%'}}
+                                />
                               </div>
-                              <div>
-                                <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>枠太さ</label>
-                                <input type="number" className="input" value={sel.borderWidth || 0} onChange={e => update({borderWidth: parseInt(e.target.value) || 0})} min="0" max="20"/>
-                              </div>
-                            </div>
+                            </React.Fragment>
                           )}
 
                           {/* 共通: 位置・サイズ・回転 */}
@@ -12260,12 +12614,57 @@ function PageQR(){
   const [selectedSessionId, setSelectedSessionId] = useState("");   // multi イベント時のサブセレクター (Phase 6)
   const [sessions, setSessions] = useState([]);                     // 選択中イベントのセッション一覧
   const [scanning, setScanning] = useState(false);
-  const [lastResult, setLastResult] = useState(null);   // {type: 'success'|'error'|'duplicate', message, regId, name}
+  const [lastResult, setLastResult] = useState(null);   // {type: 'success'|'error'|'duplicate', message, regId, name, ...}
   const [manualQuery, setManualQuery] = useState("");
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const scanIntervalRef = useRef(null);
+  // (Phase 15.S144) 音再生用 AudioContext (ラグゼロ、 外部ファイル不要)
+  const audioCtxRef = useRef(null);
+  // (S144) 直近スキャン記録 (重複ガード強化版)
+  const lastScannedRef = useRef({ data: null, time: 0 });
+
+  // 音生成 — Web Audio API
+  function ensureAudioCtx() {
+    if (!audioCtxRef.current) {
+      try {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {}
+    }
+    return audioCtxRef.current;
+  }
+  function playTone(freq, duration, type = 'sine', volume = 0.25) {
+    const ctx = ensureAudioCtx();
+    if (!ctx) return;
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = type;
+      osc.frequency.value = freq;
+      const now = ctx.currentTime;
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(volume, now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      osc.start(now); osc.stop(now + duration + 0.02);
+    } catch (e) {}
+  }
+  function playSuccess() {
+    // 2 音上昇: C5 → E5 → G5 (爽やかなチャイム)
+    playTone(523.25, 0.10, 'sine', 0.30);              // C5
+    setTimeout(() => playTone(659.25, 0.10, 'sine', 0.30), 90);  // E5
+    setTimeout(() => playTone(783.99, 0.18, 'sine', 0.30), 180); // G5
+  }
+  function playError() {
+    // 低音 2 連 (ブザー、 short)
+    playTone(220, 0.15, 'sawtooth', 0.20);
+    setTimeout(() => playTone(180, 0.20, 'sawtooth', 0.20), 160);
+  }
+  function playDuplicate() {
+    // 中音 1 音 (注意喚起、 short)
+    playTone(440, 0.18, 'triangle', 0.20);
+  }
 
   // 選択中イベントが multi なら、セッション一覧を取得
   const selectedEventForSessions = events.find(e => e.id === selectedEventId);
@@ -12368,51 +12767,95 @@ function PageQR(){
     }
   }
 
-  // QR コードがスキャンされたら処理
+  // QR コードがスキャンされたら処理 (Phase 15.S146: Application 単位で処理)
   async function handleScannedCode(data) {
-    // 同じ QR を 2 秒以内に再処理しない (どの結果でも)
-    if (lastResult && lastResult.scanned === data && lastResult.scannedAt && Date.now() - lastResult.scannedAt < 2000) return;
+    // (S144) 同一 QR を 2 秒以内に再処理しない
+    const nowTs = Date.now();
+    if (lastScannedRef.current.data === data && nowTs - lastScannedRef.current.time < 2000) return;
+    lastScannedRef.current = { data, time: nowTs };
 
-    // QR データ形式: 「R-00001」(RegID) または「U-0001」(UserID) を想定
-    // どちらも対応する
-    const reg = registrations.find(r => r.id === data || r.userId === data);
-    const now = Date.now();
-    if (!reg) {
-      setLastResult({type:'error', scanned:data, scannedAt:now, message:'申込が見つかりません', detail:`コード: ${data}`});
-      window.toast.error('申込が見つかりません');
+    // (S146) Application (= 申込) 単位でグループ化してから処理
+    const applications = window.groupRegistrationsByApplication(registrations);
+    const app = window.findApplicationByRegId(applications, data);
+    const participant = app ? participants.find(p => p.id === app.userId) : null;
+    const evMatch = app ? events.find(e => e.id === app.eventId) : null;
+
+    // 共通: 結果オブジェクトを構築
+    const buildResult = (type, message, detail) => ({
+      type, message, detail,
+      scanned: data, scannedAt: nowTs,
+      regId: app ? app.representativeRegId : null,
+      applicationId: app ? app.applicationId : null,
+      regIds: app ? app.regIds : [],
+      name: app ? (app.userName || participant?.name || '') : '',
+      nickname: participant?.nickname || '',
+      email: app ? (app.userEmail || participant?.email || '') : '',
+      eventTitle: evMatch ? evMatch.title : (app ? app.eventTitle : ''),
+      eventDate: evMatch ? (evMatch.date || '') : '',
+      amount: app ? app.totalAmount : 0,
+      refundAmount: app ? app.totalRefundAmount : 0,
+      paid: app ? app.anyPaid : false,
+      actualPaymentMethod: app ? app.actualPaymentMethod : '',
+      note: app ? app.note : '',
+      dept: participant?.dept || '',
+      avatar: participant?.name ? participant.name.charAt(0) : '?',
+      sessionCount: app ? app.regs.length : 0,
+    });
+
+    if (!app) {
+      setLastResult(buildResult('error', '申込が見つかりません', `コード: ${data}`));
+      playError();
       return;
     }
-    if (reg.eventId !== selectedEventId) {
-      setLastResult({type:'error', scanned:data, scannedAt:now, message:'別イベントの申込です', detail:`${reg.eventTitle} の申込です`});
-      window.toast.warn('別イベントの申込です');
+    if (app.eventId !== selectedEventId) {
+      setLastResult(buildResult('error', '別イベントの申込です', `${app.eventTitle || ''} の申込です`));
+      playError();
       return;
     }
-    // multi イベントでセッション指定中なら、申込のセッションIDも一致するかチェック
-    if (isMultiEvent && selectedSessionId && reg.sessionId && reg.sessionId !== selectedSessionId) {
-      const regSession = sessions.find(s => s.id === reg.sessionId);
+    // multi イベントでセッション指定中なら、 application のセッションに含まれるかチェック
+    if (isMultiEvent && selectedSessionId && app.sessionIds.length > 0 && app.sessionIds.indexOf(selectedSessionId) < 0) {
+      const regSession = sessions.find(s => s.id === selectedSessionId);
       const sessionLabel = regSession ? `Day ${regSession.order}` : 'このセッション';
-      setLastResult({type:'error', scanned:data, scannedAt:now, message:'別セッションの申込です', detail:`${sessionLabel} の申込です`});
-      window.toast.warn(`別セッションの申込です: ${sessionLabel}`);
+      setLastResult(buildResult('error', '別セッションの申込です', `${sessionLabel} の申込ではありません`));
+      playError();
       return;
     }
-    if (reg.status === 'チェックイン済') {
-      setLastResult({type:'duplicate', scanned:data, scannedAt:now, message:'すでにチェックイン済', regId:reg.id, name:reg.userName});
-      window.toast.warn(`${reg.userName} さんは既にチェックイン済`);
+    // 集約ステータス確認
+    if (app.status === 'キャンセル') {
+      setLastResult(buildResult('error', 'キャンセル済の申込です', '受付できません'));
+      playError();
       return;
     }
-    if (reg.status === 'キャンセル') {
-      setLastResult({type:'error', scanned:data, scannedAt:now, message:'キャンセル済の申込です', regId:reg.id, name:reg.userName});
-      window.toast.error('キャンセル済みの申込');
+    // 既に全 reg チェックイン済かチェック
+    const allCheckedIn = app.regs.every(r => r.status === 'チェックイン済');
+    if (allCheckedIn) {
+      setLastResult(buildResult('duplicate', 'すでにチェックイン済', `${app.userName} さんは すでに受付完了しています`));
+      playDuplicate();
       return;
     }
-    // チェックイン処理
+    // チェックイン処理 — Application 内の全 Reg を一括更新
     try {
-      await window.postData('updateRegistration', {regId: reg.id, fields: {status: 'チェックイン済'}});
-      setRegistrations(prev => prev.map(r => r.id === reg.id ? {...r, status: 'チェックイン済'} : r));
-      setLastResult({type:'success', scanned:data, scannedAt:now, message:'チェックイン完了', regId:reg.id, name:reg.userName});
-      window.toast.success(`${reg.userName} さんをチェックインしました`);
+      const checkInTargets = app.regs.filter(r =>
+        r.status !== 'チェックイン済' && r.status !== 'キャンセル' && r.status !== '返金'
+      );
+      // 並列で全 Reg を チェックイン (multi 11 セッションでも 1 API ずつ × 並列)
+      await Promise.all(
+        checkInTargets.map(r =>
+          window.postData('updateRegistration', { regId: r.id, fields: { status: 'チェックイン済' } })
+            .catch(err => { throw err; })
+        )
+      );
+      // ローカル state も更新
+      const updatedRegIds = new Set(checkInTargets.map(r => r.id));
+      setRegistrations(prev => prev.map(r =>
+        updatedRegIds.has(r.id) ? { ...r, status: 'チェックイン済' } : r
+      ));
+      const sessionInfo = app.regs.length > 1 ? ` (${checkInTargets.length}セッション一括)` : '';
+      setLastResult(buildResult('success', '入場完了', `チェックインしました${sessionInfo}`));
+      playSuccess();
     } catch (err) {
-      window.toast.error('チェックインに失敗: ' + err.message);
+      setLastResult(buildResult('error', 'チェックイン失敗', err.message || String(err)));
+      playError();
     }
   }
 
@@ -12444,15 +12887,18 @@ function PageQR(){
     return () => stopScan();
   }, []);
 
-  // 選択イベントの統計 (セッション指定があれば、そのセッションの参加者のみ集計)
+  // (Phase 15.S146) 選択イベントの統計 — Application 単位で集計
   const eventRegs = registrations.filter(r => {
     if (r.eventId !== selectedEventId) return false;
     if (r.status === 'キャンセル') return false;
     if (isMultiEvent && selectedSessionId && r.sessionId !== selectedSessionId) return false;
     return true;
   });
-  const checkedInCount = eventRegs.filter(r => r.status === 'チェックイン済').length;
-  const totalRegCount = eventRegs.length;
+  // 申込 (Application) 単位にグループ化
+  const eventApplications = window.groupRegistrationsByApplication(eventRegs);
+  // 「全 reg がチェックイン済」 を Application 単位の「受付済」 とみなす
+  const checkedInCount = eventApplications.filter(app => app.regs.every(r => r.status === 'チェックイン済')).length;
+  const totalRegCount = eventApplications.length;
   const selectedEvent = events.find(e => e.id === selectedEventId);
   const visibleEvents = events.filter(e => e.status !== "アーカイブ");
   const selectedSession = sessions.find(s => s.id === selectedSessionId);
@@ -12606,34 +13052,52 @@ function PageQR(){
         </div>
       </div>
 
+      {/* (Phase 15.S144) PayPay 風 大型結果モーダル */}
+      {lastResult && <QRResultOverlay result={lastResult} onClose={() => setLastResult(null)} /> }
+
       {selectedEventId && (
         <div className="card mt16">
           <div className="card-head">
             <div className="card-title"><Icon n="users" s={16}/> 受付状況一覧</div>
-            <span style={{fontSize:11,color:'var(--ink4)'}}>{eventRegs.length}件</span>
+            <span style={{fontSize:11,color:'var(--ink4)'}}>
+              {eventApplications.length} 件 {eventRegs.length !== eventApplications.length && `(内部 ${eventRegs.length} reg)`}
+            </span>
           </div>
           <div className="card-body" style={{padding:0,maxHeight:320,overflowY:'auto'}}>
-            {eventRegs.length === 0 ? (
+            {eventApplications.length === 0 ? (
               <div className="empty" style={{padding:'30px 14px'}}>
                 <div style={{fontSize:12}}>このイベントの申込がありません</div>
               </div>
             ) : (
               <table className="tbl">
                 <thead><tr>
-                  <th>ID</th><th>申込者</th><th>状態</th>
+                  <th>申込</th><th>申込者</th><th>状態</th>
                 </tr></thead>
                 <tbody>
-                  {eventRegs.map(r => (
-                    <tr key={r.id}>
-                      <td className="mono" style={{fontSize:11}}>{r.id}</td>
-                      <td style={{fontWeight:600}}>{r.userName}<span style={{fontSize:11,color:'var(--ink4)',fontWeight:400,marginLeft:6}}>{r.userEmail}</span></td>
-                      <td>
-                        <span className={clsx("badge", r.status==="チェックイン済"?"badge-green":r.status==="確定"?"badge-indigo":"badge-amber")}>
-                          <span className="badge-dot"></span>{r.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {eventApplications.map(app => {
+                    // Application の集約状態: 全 reg checked-in → チェックイン済 / それ以外 → 申込済み
+                    const allCheckedIn = app.regs.every(r => r.status === 'チェックイン済');
+                    const aStatus = allCheckedIn ? 'チェックイン済' : '申込済み';
+                    return (
+                      <tr key={app.applicationId}>
+                        <td className="mono" style={{fontSize:11}}>
+                          {app.representativeRegId}
+                          {app.regs.length > 1 && (
+                            <div style={{fontSize:9,color:'var(--ink4)',marginTop:2}}>{app.regs.length} セッション</div>
+                          )}
+                        </td>
+                        <td style={{fontWeight:600}}>
+                          {app.userName}
+                          <span style={{fontSize:11,color:'var(--ink4)',fontWeight:400,marginLeft:6}}>{app.userEmail}</span>
+                        </td>
+                        <td>
+                          <span className={clsx("badge", aStatus === 'チェックイン済' ? "badge-green" : "badge-amber")}>
+                            <span className="badge-dot"></span>{aStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -12914,6 +13378,221 @@ function PageSchedule(){
 window.PageNotifications = PageNotifications;
 window.PageEventCreate = PageEventCreate;
 window.PageQR = PageQR;
+
+// =============================================================================
+// (Phase 15.S144) QRResultOverlay — QR スキャン結果の大型モーダル (PayPay 風)
+// =============================================================================
+function QRResultOverlay({ result, onClose }) {
+  // 成功は 3 秒 / 重複は 4 秒 / エラーは 5 秒 で自動クローズ
+  useEffect(() => {
+    if (!result) return;
+    const dur = result.type === 'success' ? 3000 : result.type === 'duplicate' ? 4000 : 5000;
+    const timer = setTimeout(() => onClose && onClose(), dur);
+    return () => clearTimeout(timer);
+  }, [result, onClose]);
+
+  if (!result) return null;
+
+  // 配色: success=ネイビー / duplicate=アンバー / error=コーラル
+  const palette = result.type === 'success'
+    ? { accent: '#0a2960', bg: '#f0f5ff', icon: 'check2', label: '入場完了', sub: '受付しました' }
+    : result.type === 'duplicate'
+    ? { accent: '#b45309', bg: '#fffbeb', icon: 'warn', label: '受付済', sub: 'すでにチェックインされています' }
+    : { accent: '#dc2626', bg: '#fef2f2', icon: 'x', label: 'エラー', sub: '受付できません' };
+
+  const initial = (result.name || '?').trim().charAt(0).toUpperCase();
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(15, 23, 42, 0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+        backdropFilter: 'blur(8px)',
+        animation: 'ccaOverlayFade 0.18s ease-out',
+      }}
+    >
+      <style>{`
+        @keyframes ccaOverlayFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes ccaCardPop {
+          from { opacity: 0; transform: translateY(20px) scale(0.96); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff',
+          borderRadius: 18,
+          maxWidth: 460, width: '100%',
+          overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          animation: 'ccaCardPop 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
+        }}
+      >
+        {/* ヘッダー (色付き) */}
+        <div style={{
+          padding: '32px 28px 26px',
+          background: palette.bg,
+          textAlign: 'center',
+          borderBottom: `1px solid ${palette.accent}20`,
+        }}>
+          <div style={{
+            width: 64, height: 64,
+            margin: '0 auto 14px',
+            background: '#fff',
+            borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: palette.accent,
+            boxShadow: `0 4px 16px ${palette.accent}30`,
+          }}>
+            <Icon n={palette.icon} s={32}/>
+          </div>
+          <div style={{
+            fontSize: 11, letterSpacing: '0.18em', fontWeight: 700,
+            color: palette.accent, marginBottom: 8, textTransform: 'uppercase',
+          }}>{palette.label}</div>
+          <div style={{
+            fontSize: 22, fontWeight: 800, color: 'var(--ink1)',
+            letterSpacing: '-0.02em', lineHeight: 1.3,
+          }}>
+            {result.message}
+          </div>
+          {result.detail && (
+            <div style={{
+              fontSize: 12, color: 'var(--ink3)', marginTop: 8, lineHeight: 1.5,
+            }}>{result.detail}</div>
+          )}
+        </div>
+
+        {/* 参加者情報 */}
+        {result.name && (
+          <div style={{padding: '26px 28px 20px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:18}}>
+              <div style={{
+                width: 56, height: 56,
+                background: palette.accent, color: '#fff',
+                borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 22, fontWeight: 800,
+                flexShrink: 0,
+                fontFamily: 'var(--serif)',
+              }}>{initial}</div>
+              <div style={{flex: 1, minWidth: 0}}>
+                <div style={{
+                  fontSize: 18, fontWeight: 700, color: 'var(--ink1)',
+                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                  lineHeight: 1.3,
+                }}>
+                  {result.name}
+                  {result.nickname && result.nickname !== result.name && (
+                    <span style={{fontSize: 12, color: 'var(--ink4)', marginLeft: 8, fontWeight: 400}}>
+                      @{result.nickname}
+                    </span>
+                  )}
+                </div>
+                {result.dept && (
+                  <div style={{fontSize: 12, color: 'var(--ink3)', marginTop: 4}}>
+                    {result.dept}
+                  </div>
+                )}
+                {result.regId && (
+                  <div style={{fontSize: 11, color: 'var(--ink4)', marginTop: 4, fontFamily: 'var(--mono)'}}>
+                    {result.regId}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* イベント情報 */}
+            {result.eventTitle && (
+              <div style={{
+                padding: '12px 14px',
+                background: 'var(--bg2)',
+                borderRadius: 8,
+                marginBottom: 12,
+              }}>
+                <div style={{fontSize: 10, color: 'var(--ink4)', letterSpacing: '0.12em', marginBottom: 4, fontWeight: 600}}>
+                  EVENT
+                </div>
+                <div style={{fontSize: 13, fontWeight: 600, color: 'var(--ink1)'}}>
+                  {result.eventTitle}
+                </div>
+                {result.eventDate && (
+                  <div style={{fontSize: 11, color: 'var(--ink3)', marginTop: 4}}>
+                    {result.eventDate}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 金額 + 決済状態 */}
+            {result.amount > 0 && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '12px 14px',
+                background: 'var(--bg2)',
+                borderRadius: 8,
+              }}>
+                <div>
+                  <div style={{fontSize: 10, color: 'var(--ink4)', letterSpacing: '0.12em', marginBottom: 4, fontWeight: 600}}>
+                    PAYMENT
+                  </div>
+                  <div style={{
+                    fontSize: 16, fontWeight: 700,
+                    fontFamily: 'var(--mono)', color: 'var(--ink1)',
+                  }}>
+                    ¥{result.amount.toLocaleString()}
+                  </div>
+                </div>
+                <div style={{
+                  padding: '4px 10px',
+                  background: result.paid ? '#dcfce7' : '#fef3c7',
+                  color: result.paid ? '#15803d' : '#92400e',
+                  borderRadius: 999,
+                  fontSize: 11, fontWeight: 700,
+                  fontFamily: 'var(--mono)',
+                }}>
+                  {result.paid ? '決済済' : '未決済'}
+                </div>
+              </div>
+            )}
+            {result.actualPaymentMethod && (
+              <div style={{
+                fontSize: 11, color: 'var(--ink3)', marginTop: 8,
+                textAlign: 'right',
+              }}>
+                支払い方法: <span style={{fontWeight: 600, color: 'var(--ink2)'}}>{result.actualPaymentMethod}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* フッター (閉じるボタン) */}
+        <div style={{padding: '14px 20px', borderTop: '1px solid var(--line)', textAlign: 'center'}}>
+          <button onClick={onClose} style={{
+            padding: '8px 24px',
+            background: '#fff',
+            border: '1px solid var(--line)',
+            borderRadius: 6,
+            fontSize: 12, fontWeight: 600,
+            color: 'var(--ink2)', cursor: 'pointer',
+          }}>閉じる</button>
+          <div style={{
+            fontSize: 10, color: 'var(--ink5)', marginTop: 10, letterSpacing: '0.08em',
+          }}>
+            {result.type === 'success' ? '3 秒で自動的に閉じます' :
+             result.type === 'duplicate' ? '4 秒で自動的に閉じます' :
+             '5 秒で自動的に閉じます'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.QRResultOverlay = QRResultOverlay;
 window.PageSchedule = PageSchedule;
 
 })();
@@ -12948,9 +13627,12 @@ function PageAnalytics(){
   const [participants, setParticipants] = useState([]);
   const [registrations, setRegistrations] = useState([]);
   const [payments, setPayments] = useState([]);
+  // (Phase 15.S142) 部署マスタを取得して、 archived された部署をカテゴリ表示から除外
+  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [period, setPeriod] = useState("month");
+  // (Phase 15.S140) デフォルトを「全期間」 にして 初期表示で必ずデータが見える
+  const [period, setPeriod] = useState("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -12958,17 +13640,19 @@ function PageAnalytics(){
       setLoading(true);
       setError(null);
       try {
-        const [evs, parts, regs, pays] = await Promise.all([
+        const [evs, parts, regs, pays, depts] = await Promise.all([
           window.fetchData('listEvents'),
           window.fetchData('listParticipants'),
           window.fetchData('listRegistrations'),
           window.fetchData('listPayments'),
+          window.fetchData('listDepartments', { includeArchived: true }),  // (S142) 部署マスタ (archived 込みで取得して 除外判定に使う)
         ]);
         if (cancelled) return;
         setEvents(Array.isArray(evs) ? evs : []);
         setParticipants(Array.isArray(parts) ? parts : []);
         setRegistrations(Array.isArray(regs) ? regs : []);
         setPayments(Array.isArray(pays) ? pays : []);
+        setDepartments(Array.isArray(depts) ? depts : []);
       } catch (err) {
         if (!cancelled) setError(err.message || String(err));
       } finally {
@@ -13000,49 +13684,109 @@ function PageAnalytics(){
     return true;
   }
 
-  // ========== 集計 ==========
-  const activeRegs = registrations.filter(r => r.status !== "キャンセル");
+  // ========== 集計 (Phase 15.S140 Registrations ベース + S143 申込操作単位) ==========
+  const activeRegs = registrations.filter(r => r.status !== "キャンセル" && r.status !== "返金");
   const periodRegs = activeRegs.filter(r => inPeriod(r.appliedAt));
   const periodEvents = events.filter(e => inPeriod(e.date) && e.status !== "アーカイブ");
-  const periodPayments = payments.filter(p => p.status === "成功" && inPeriod(p.paidAt));
+  // (S140) 期間内の決済済み Registrations
+  const periodPaidRegs = periodRegs.filter(r => r.paid === true);
 
-  const totalReg = periodRegs.length;
-  const totalRev = periodPayments.reduce((s, p) => s + (p.amount || 0), 0);
-  const checkedIn = periodRegs.filter(r => r.status === "チェックイン済").length;
-  const confirmed = periodRegs.filter(r => r.status === "確定").length;
-  const attendBase = checkedIn + confirmed;
+  // (S143) 申込操作単位の集計: 同一 userId + eventId + 申込日時(秒) は 1 申込
+  const uniqueOps = new Set();
+  periodRegs.forEach(r => {
+    const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+    uniqueOps.add((r.userId || '') + '::' + (r.eventId || '') + '::' + dateKey);
+  });
+  const uniquePaidOps = new Set();
+  periodPaidRegs.forEach(r => {
+    const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+    uniquePaidOps.add((r.userId || '') + '::' + (r.eventId || '') + '::' + dateKey);
+  });
+  // 「申込数」 は 申込操作の数 (multi 1 申込 = 1)
+  const totalReg = uniqueOps.size;
+  const paidCount = uniquePaidOps.size;
+  // 収益は paid reg の amount 合計 (multi 親 reg だけ amount > 0 なので問題なし)
+  const totalRev = periodPaidRegs.reduce((s, r) => s + Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0)), 0);
+  // 出席率も 申込操作単位 (申込済みユーザーの中で誰がチェックインしたか)
+  const checkedInOps = new Set();
+  periodRegs.forEach(r => {
+    if (r.status !== 'チェックイン済') return;
+    const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+    checkedInOps.add((r.userId || '') + '::' + (r.eventId || '') + '::' + dateKey);
+  });
+  const checkedIn = checkedInOps.size;
+  const attendBase = uniqueOps.size;
   const attendRate = attendBase > 0 ? Math.round(checkedIn / attendBase * 100) : null;
   const npsValues = participants.filter(p => p.nps && p.status !== "アーカイブ").map(p => p.nps);
   const avgNps = npsValues.length > 0 ? Math.round(npsValues.reduce((s, v) => s + v, 0) / npsValues.length) : null;
 
-  // ========== カテゴリ別 ==========
-  const categoryStats = {IFT: {regs:0, rev:0, ev:0}, community: {regs:0, rev:0, ev:0}, hub: {regs:0, rev:0, ev:0}, "order made": {regs:0, rev:0, ev:0}};
-  periodEvents.forEach(e => { if (categoryStats[e.category]) categoryStats[e.category].ev++; });
-  periodRegs.forEach(r => {
-    const ev = events.find(e => e.id === r.eventId);
-    if (ev && categoryStats[ev.category]) categoryStats[ev.category].regs++;
-  });
-  periodPayments.forEach(p => {
-    const ev = events.find(e => e.id === p.eventId);
-    if (ev && categoryStats[ev.category]) categoryStats[ev.category].rev += (p.amount || 0);
+  // ========== カテゴリ別 (Phase 15.S141 + S142 + S143: アクティブ部署マスタのみ) ==========
+  // 部署マスタからアクティブ / アーカイブを分離
+  const activeDeptNames = new Set();
+  const archivedDeptNames = new Set();
+  departments.forEach(d => {
+    const isArchived = d.status === 'archived' || d.status === 'アーカイブ';
+    if (d.abbr) (isArchived ? archivedDeptNames : activeDeptNames).add(d.abbr);
+    if (d.name) (isArchived ? archivedDeptNames : activeDeptNames).add(d.name);
   });
 
-  // ========== イベント別パフォーマンス ==========
+  const categoryStats = {};
+  // (S143) アクティブ部署のみカテゴリとして表示 (動的に events から拾うのを撤回)
+  if (activeDeptNames.size > 0) {
+    activeDeptNames.forEach(name => { categoryStats[name] = { regs: 0, rev: 0, ev: 0 }; });
+  } else {
+    // フォールバック (部署マスタが空の環境): 既知 4 つ
+    ['IFT', 'community', 'hub', 'order made'].forEach(c => { categoryStats[c] = { regs: 0, rev: 0, ev: 0 }; });
+  }
+
+  periodEvents.forEach(e => {
+    const cat = (e.category || '').trim();
+    if (cat && categoryStats[cat]) categoryStats[cat].ev++;
+  });
+  // (S143) 申込数も 申込操作単位
+  const categoryOpSeen = {};  // cat → Set<opKey>
+  periodRegs.forEach(r => {
+    const ev = events.find(e => e.id === r.eventId);
+    const cat = ev ? (ev.category || '').trim() : '';
+    if (!cat || !categoryStats[cat]) return;
+    const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+    const opKey = (r.userId || '') + '::' + (r.eventId || '') + '::' + dateKey;
+    if (!categoryOpSeen[cat]) categoryOpSeen[cat] = new Set();
+    categoryOpSeen[cat].add(opKey);
+  });
+  Object.entries(categoryOpSeen).forEach(([cat, set]) => { categoryStats[cat].regs = set.size; });
+  periodPaidRegs.forEach(r => {
+    const ev = events.find(e => e.id === r.eventId);
+    const cat = ev ? (ev.category || '').trim() : '';
+    const eff = Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0));
+    if (cat && categoryStats[cat]) categoryStats[cat].rev += eff;
+  });
+
+  // ========== イベント別パフォーマンス (S140 Registrations ベース + S143 申込操作単位) ==========
   const eventPerf = periodEvents.map(e => {
     const evRegs = activeRegs.filter(r => r.eventId === e.id);
-    const evCheckedIn = evRegs.filter(r => r.status === "チェックイン済").length;
-    const evRev = payments.filter(p => p.eventId === e.id && p.status === "成功").reduce((s, p) => s + (p.amount || 0), 0);
+    // (S143) 申込操作単位で集計
+    const evOps = new Set();
+    const evCheckedInOps = new Set();
+    evRegs.forEach(r => {
+      const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+      const opKey = (r.userId || '') + '::' + dateKey;
+      evOps.add(opKey);
+      if (r.status === 'チェックイン済') evCheckedInOps.add(opKey);
+    });
+    const evPaidRegs = evRegs.filter(r => r.paid === true);
+    const evRev = evPaidRegs.reduce((s, r) => s + Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0)), 0);
     return {
       ...e,
-      regCount: evRegs.length,
-      attendRate: (evCheckedIn + evRegs.filter(r => r.status === "確定").length) > 0
-        ? Math.round(evCheckedIn / (evCheckedIn + evRegs.filter(r => r.status === "確定").length) * 100)
+      regCount: evOps.size,
+      attendRate: evOps.size > 0
+        ? Math.round(evCheckedInOps.size / evOps.size * 100)
         : null,
       revenue: evRev,
     };
   }).sort((a, b) => b.regCount - a.regCount);
 
-  const periodLabel = {month:'今月', quarter:'今四半期', year:'今年', all:'全期間'}[period] || '今月';
+  const periodLabel = {month:'今月', quarter:'今四半期', year:'今年', all:'全期間'}[period] || '全期間';
 
   return (
     <div className="page" data-page="analytics">
@@ -13066,7 +13810,7 @@ function PageAnalytics(){
 
       <div className="kpi-grid">
         <MiniStat label={`${periodLabel}の申込数`} value={loading ? '…' : String(totalReg)} sub={`${periodEvents.length}イベント対象`} icon="users" color="indigo"/>
-        <MiniStat label={`${periodLabel}の収益`} value={loading ? '…' : (totalRev > 0 ? yen(totalRev) : '0')} sub={`${periodPayments.length}件 成功`} icon="yen" color="coral"/>
+        <MiniStat label={`${periodLabel}の収益`} value={loading ? '…' : (totalRev > 0 ? yen(totalRev) : '¥0')} sub={`決済済み ${paidCount}件`} icon="yen" color="coral"/>
         <MiniStat label="出席率" value={loading ? '…' : (attendRate !== null ? `${attendRate}%` : '—')} sub={`${checkedIn}/${attendBase}`} icon="check2" color="green"/>
         <MiniStat label="平均 NPS" value={loading ? '…' : (avgNps !== null ? String(avgNps) : '—')} sub={`${npsValues.length}件`} icon="star" color="violet"/>
       </div>
@@ -13119,17 +13863,20 @@ function PageAnalytics(){
           <div className="card">
             <div className="card-head"><div className="card-title"><Icon n="tag" s={16}/> イニシアチブ別</div></div>
             <div className="card-body stack" style={{gap:12}}>
-              {Object.entries(categoryStats).map(([cat, s]) => {
+              {Object.entries(categoryStats)
+                .sort(([, a], [, b]) => (b.regs - a.regs) || (b.ev - a.ev) || (b.rev - a.rev))
+                .map(([cat, s]) => {
                 const accentMap = {"IFT":"indigo","community":"teal","hub":"violet","order made":"amber"};
                 const c = accentMap[cat] || 'ink';
+                const isEmpty = s.ev === 0 && s.regs === 0 && s.rev === 0;
                 return (
-                  <div key={cat}>
+                  <div key={cat} style={{opacity: isEmpty ? 0.45 : 1}}>
                     <div className="row between" style={{fontSize:12,marginBottom:4}}>
                       <div style={{display:'flex',alignItems:'center',gap:6}}>
                         <span style={{width:8,height:8,borderRadius:2,background:`var(--${c})`}}></span>
                         <span style={{fontWeight:600}}>{cat}</span>
                       </div>
-                      <span className="mono" style={{fontSize:11}}>{s.ev}件</span>
+                      <span className="mono" style={{fontSize:11,color:isEmpty?'var(--ink4)':'var(--ink2)'}}>{s.ev} イベント</span>
                     </div>
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:11,color:'var(--ink3)'}}>
                       <div>申込: <b style={{color:'var(--ink)'}}>{s.regs}</b></div>
@@ -13141,12 +13888,695 @@ function PageAnalytics(){
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
 }
 
-// -------------------- PagePhotos --------------------
+// =============================================================================
+// (Phase 15.S139) PageParticipantAnalytics — 参加者分析 専用ページ (落ち着いたデザイン)
+// =============================================================================
+function PageParticipantAnalytics() {
+  const [events, setEvents] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [registrations, setRegistrations] = useState([]);
+  const [departments, setDepartments] = useState([]);  // (Phase 15.S142) archived 除外用
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [period, setPeriod] = useState("year");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [evs, parts, regs, depts] = await Promise.all([
+          window.fetchData('listEvents'),
+          window.fetchData('listParticipants'),
+          window.fetchData('listRegistrations'),
+          window.fetchData('listDepartments'),
+        ]);
+        if (cancelled) return;
+        setEvents(Array.isArray(evs) ? evs : []);
+        setParticipants(Array.isArray(parts) ? parts : []);
+        setRegistrations(Array.isArray(regs) ? regs : []);
+        setDepartments(Array.isArray(depts) ? depts : []);
+      } catch (e) {
+        if (!cancelled) setError(e.message || String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // 期間判定
+  const today = new Date();
+  function inPeriod(dateStr) {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    if (period === "all") return true;
+    if (period === "month") return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+    if (period === "quarter") {
+      const q = Math.floor(today.getMonth() / 3);
+      const dq = Math.floor(d.getMonth() / 3);
+      return d.getFullYear() === today.getFullYear() && dq === q;
+    }
+    if (period === "year") return d.getFullYear() === today.getFullYear();
+    return true;
+  }
+  const periodLabel = {month:'今月', quarter:'今四半期', year:'今年', all:'全期間'}[period] || '今年';
+
+  return (
+    <div className="page" data-page="participant-analytics">
+      <div className="page-head">
+        <div className="ph-left">
+          <div className="ph-crumbs"><span>分析</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>参加者分析</span></div>
+          <h1>参加者 <i>分析</i></h1>
+          <div className="ph-sub">{loading ? 'データ読み込み中...' : `登録 ${participants.length} 名 / 申込 ${registrations.length} 件 を分析`}</div>
+        </div>
+      </div>
+
+      {error && <div style={{padding:"10px 14px",marginBottom:14,background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:8,color:'var(--red)',fontSize:12}}><b>読み込みエラー:</b> {error}</div>}
+
+      <div className="row mb16" style={{gap:6}}>
+        {[["month","今月"],["quarter","今四半期"],["year","今年"],["all","全期間"]].map(([k, l]) => (
+          <span key={k} className={clsx("chip", period===k && "on")} onClick={()=>setPeriod(k)}>{l}</span>
+        ))}
+      </div>
+
+      <ParticipantAnalyticsSection
+        participants={participants}
+        registrations={registrations}
+        events={events}
+        departments={departments}
+        period={period}
+        periodLabel={periodLabel}
+        inPeriod={inPeriod}
+      />
+    </div>
+  );
+}
+window.PageParticipantAnalytics = PageParticipantAnalytics;
+
+// =============================================================================
+// (Phase 15.S137 / S138 / S139) ParticipantAnalyticsSection — 落ち着いたデザイン
+// =============================================================================
+function ParticipantAnalyticsSection({ participants, registrations, events, departments, period, periodLabel, inPeriod }) {
+  // ========== 集計 (S138 と同じロジック) ==========
+  const analytics = React.useMemo(() => {
+    // (Phase 15.S142) archived された部署名のセット
+    const archivedDeptNames = new Set();
+    (departments || []).forEach(d => {
+      if (d.status === 'archived' || d.status === 'アーカイブ') {
+        if (d.name) archivedDeptNames.add(d.name);
+        if (d.abbr) archivedDeptNames.add(d.abbr);
+      }
+    });
+
+    // (Phase 15.S143) 参加回数は「申込操作」 単位で数える
+    // multi イベントで 1 ユーザーが 11 セッション選択 = 11 reg だが、 申込操作は 1 回
+    // userId + eventId + 申込日時(秒) で重複排除
+    const userUniqueRegs = {};  // uid → Set<key>
+    const userRevenue = {};
+    const userEventIds = {};
+    registrations.forEach(r => {
+      if (r.status === 'キャンセル' || r.status === '返金') return;
+      const uid = r.userId;
+      if (!uid) return;
+      // 同一申込操作キー: eventId + 秒精度の申込日時
+      const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
+      const opKey = (r.eventId || '') + '::' + dateKey;
+      if (!userUniqueRegs[uid]) userUniqueRegs[uid] = new Set();
+      userUniqueRegs[uid].add(opKey);
+      const eff = Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0));
+      userRevenue[uid] = (userRevenue[uid] || 0) + eff;
+      if (!userEventIds[uid]) userEventIds[uid] = new Set();
+      if (r.eventId) userEventIds[uid].add(r.eventId);
+    });
+    // userRegCount: 申込操作回数
+    const userRegCount = {};
+    Object.entries(userUniqueRegs).forEach(([uid, set]) => { userRegCount[uid] = set.size; });
+
+    const periodUserIds = new Set();
+    registrations.forEach(r => {
+      if (r.status === 'キャンセル' || r.status === '返金') return;
+      if (inPeriod && inPeriod(r.appliedAt)) {
+        if (r.userId) periodUserIds.add(r.userId);
+      }
+    });
+    let newUsers = 0, repeatUsers = 0;
+    periodUserIds.forEach(uid => {
+      const count = userRegCount[uid] || 0;
+      if (count >= 2) repeatUsers += 1;
+      else newUsers += 1;
+    });
+
+    const repeatBuckets = { '1回': 0, '2回': 0, '3回': 0, '4-5回': 0, '6-10回': 0, '11回+': 0 };
+    Object.values(userRegCount).forEach(n => {
+      if (n === 1) repeatBuckets['1回']++;
+      else if (n === 2) repeatBuckets['2回']++;
+      else if (n === 3) repeatBuckets['3回']++;
+      else if (n <= 5) repeatBuckets['4-5回']++;
+      else if (n <= 10) repeatBuckets['6-10回']++;
+      else repeatBuckets['11回+']++;
+    });
+
+    const deptMap = {};
+    participants.forEach(p => {
+      const dept = (p.dept || '—').trim() || '—';
+      // (Phase 15.S142) archived 部署 (削除済み) は集計から除外
+      if (archivedDeptNames.has(dept)) return;
+      if (!deptMap[dept]) deptMap[dept] = { dept, total: 0, active: 0 };
+      deptMap[dept].total += 1;
+      if (userRegCount[p.id] && userRegCount[p.id] > 0) deptMap[dept].active += 1;
+    });
+    const topDepts = Object.values(deptMap).filter(d => d.dept !== '—').sort((a, b) => b.active - a.active).slice(0, 8);
+
+    const ageBuckets = { '10代': 0, '20代前半': 0, '20代後半': 0, '30代': 0, '40代+': 0, '不明': 0 };
+    participants.forEach(p => {
+      const age = Number(p.age) || 0;
+      if (age === 0) ageBuckets['不明']++;
+      else if (age < 20) ageBuckets['10代']++;
+      else if (age < 25) ageBuckets['20代前半']++;
+      else if (age < 30) ageBuckets['20代後半']++;
+      else if (age < 40) ageBuckets['30代']++;
+      else ageBuckets['40代+']++;
+    });
+
+    const genderMap = { '男性': 0, '女性': 0, 'その他': 0, '不明': 0 };
+    participants.forEach(p => {
+      const g = (p.gender || '').trim().toLowerCase();
+      if (g === '男性' || g === 'male' || g === 'm') genderMap['男性']++;
+      else if (g === '女性' || g === 'female' || g === 'f') genderMap['女性']++;
+      else if (g) genderMap['その他']++;
+      else genderMap['不明']++;
+    });
+
+    const nationalityMap = {};
+    participants.forEach(p => {
+      const n = (p.nationality || '不明').trim() || '不明';
+      nationalityMap[n] = (nationalityMap[n] || 0) + 1;
+    });
+    const topNationalities = Object.entries(nationalityMap).map(([nation, count]) => ({ nation, count })).sort((a, b) => b.count - a.count).slice(0, 8);
+    const uniqueNationalities = Object.keys(nationalityMap).filter(n => n !== '不明').length;
+
+    const now = new Date();
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      months.push({ key, label: (d.getMonth() + 1) + '月', count: 0 });
+    }
+    const monthMap = {};
+    months.forEach(m => monthMap[m.key] = m);
+    participants.forEach(p => {
+      if (!p.createdAt) return;
+      const d = new Date(p.createdAt);
+      if (isNaN(d.getTime())) return;
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      if (monthMap[key]) monthMap[key].count += 1;
+    });
+
+    const jlptMap = {};
+    participants.forEach(p => {
+      const lv = (p.jlpt || 'none').trim() || 'none';
+      jlptMap[lv] = (jlptMap[lv] || 0) + 1;
+    });
+    const jlptOrder = ['N1', 'N2', 'N3', 'N4', 'N5', 'none'];
+    const jlptData = jlptOrder.map(lv => ({ level: lv === 'none' ? '未取得' : lv, count: jlptMap[lv] || 0 }));
+
+    const totalUsers = participants.length;
+    const activeUsers = Object.keys(userRegCount).length;
+    const engagementRate = totalUsers > 0 ? Math.round(activeUsers / totalUsers * 1000) / 10 : 0;
+    const avgRegPerUser = activeUsers > 0 ? Math.round(Object.values(userRegCount).reduce((s, n) => s + n, 0) / activeUsers * 10) / 10 : 0;
+
+    const topParticipants = participants
+      .map(p => ({
+        id: p.id,
+        name: p.name || p.nickname || p.id,
+        nickname: p.nickname || '',
+        dept: p.dept || '',
+        regCount: userRegCount[p.id] || 0,
+        eventCount: (userEventIds[p.id] || new Set()).size,
+        revenue: userRevenue[p.id] || 0,
+      }))
+      .filter(p => p.regCount > 0)
+      .sort((a, b) => b.regCount - a.regCount || b.revenue - a.revenue)
+      .slice(0, 5);
+
+    const firstHalf = months.slice(0, 6).reduce((s, m) => s + m.count, 0);
+    const secondHalf = months.slice(6).reduce((s, m) => s + m.count, 0);
+    const growthRate = firstHalf > 0 ? Math.round(((secondHalf - firstHalf) / firstHalf) * 1000) / 10 : (secondHalf > 0 ? 100 : 0);
+
+    const insights = [];
+    if (topParticipants.length > 0 && topParticipants[0].regCount >= 5) {
+      insights.push({ text: `${topParticipants[0].name} さんが ${topParticipants[0].regCount} 回参加で最多`, kind: 'highlight' });
+    }
+    if (uniqueNationalities >= 5) {
+      insights.push({ text: `${uniqueNationalities} カ国 の方が登録しています`, kind: 'info' });
+    }
+    if (growthRate >= 20) {
+      insights.push({ text: `直近 6 ヶ月で新規登録が ${growthRate}% 増加`, kind: 'positive' });
+    } else if (growthRate <= -20) {
+      insights.push({ text: `直近 6 ヶ月で新規登録が ${Math.abs(growthRate)}% 減少`, kind: 'negative' });
+    }
+    if (engagementRate >= 70) {
+      insights.push({ text: `エンゲージ率 ${engagementRate}% — 高活発コミュニティ`, kind: 'positive' });
+    } else if (engagementRate < 30 && totalUsers > 10) {
+      insights.push({ text: `エンゲージ率 ${engagementRate}% — アクティブ化が課題`, kind: 'warning' });
+    }
+    if (repeatUsers > 0 && (repeatUsers / Math.max(1, newUsers + repeatUsers)) >= 0.5) {
+      insights.push({ text: `${periodLabel}: リピーターが過半数 (定着 良好)`, kind: 'positive' });
+    }
+    const topDept = topDepts[0];
+    if (topDept) {
+      insights.push({ text: `最多所属: ${topDept.dept} (${topDept.active} 名)`, kind: 'info' });
+    }
+
+    return {
+      newUsers, repeatUsers, repeatBuckets, topDepts, ageBuckets, genderMap,
+      topNationalities, uniqueNationalities, months, growthRate, jlptData,
+      totalUsers, activeUsers, engagementRate, avgRegPerUser, topParticipants, insights,
+    };
+  }, [participants, registrations, period, periodLabel, departments]);
+
+  // ========== 落ち着いた配色 (1 つのアクセント + ニュートラル) ==========
+  // メイン: ネイビー (#0a2960), アクセント: コーラル (#e8243b), ニュートラル: グレー
+  const PRIMARY = '#0a2960';
+  const ACCENT = '#e8243b';
+  const SUCCESS = '#15803d';
+  const NEUTRAL = '#6b7280';
+  const BAR_COLOR = '#475569';  // 全ての棒グラフを統一色 (落ち着いた寒色)
+
+  // ========== コンポーネント ==========
+
+  // シンプル横棒 (単色、 アニメ控えめ)
+  const SimpleBar = ({ data, valueKey = 'count', labelKey = 'label', maxValue, suffix = '' }) => {
+    const max = maxValue || Math.max(...data.map(d => d[valueKey] || 0), 1);
+    return (
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {data.map((d, i) => {
+          const v = d[valueKey] || 0;
+          const pct = max > 0 ? (v / max) * 100 : 0;
+          return (
+            <div key={d[labelKey] + '-' + i} style={{display:'flex',alignItems:'center',gap:12}}>
+              <div style={{
+                width:110,fontSize:12,color:'var(--ink2)',
+                textAlign:'right',whiteSpace:'nowrap',
+                overflow:'hidden',textOverflow:'ellipsis',
+                flexShrink:0,
+              }}>{d[labelKey]}</div>
+              <div style={{flex:1,position:'relative',height:8,background:'var(--bg2)',borderRadius:4,overflow:'hidden'}}>
+                <div style={{
+                  position:'absolute',top:0,left:0,bottom:0,
+                  width:`${pct}%`,
+                  background: PRIMARY,
+                  borderRadius:4,
+                  transition: 'width 0.6s ease-out',
+                }}/>
+              </div>
+              <div className="mono" style={{
+                width:54,fontSize:12,
+                color:'var(--ink1)',fontWeight:600,
+                textAlign:'right',flexShrink:0,
+              }}>{v}{suffix}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // シンプル ドーナツ (落ち着いた色)
+  const SimpleDonut = ({ data, valueKey = 'count', labelKey = 'label', size = 160, centerLabel = 'TOTAL' }) => {
+    const total = data.reduce((s, d) => s + (d[valueKey] || 0), 0);
+    if (total === 0) {
+      return <div style={{height:size,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--ink4)',fontSize:12}}>データなし</div>;
+    }
+    // 落ち着いた配色 (ネイビー系階調)
+    const palette = ['#0a2960', '#3b5998', '#6c7ba8', '#94a3b8', '#cbd5e1', '#e2e8f0', '#9ca3af', '#475569'];
+    const radius = size / 2 - 16;
+    const innerRadius = radius * 0.65;
+    const center = size / 2;
+    let startAngle = -Math.PI / 2;
+    return (
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:18}}>
+        <div style={{position:'relative'}}>
+          <svg width={size} height={size}>
+            {data.map((d, i) => {
+              const v = d[valueKey] || 0;
+              if (v === 0) return null;
+              const angle = (v / total) * 2 * Math.PI;
+              const endAngle = startAngle + angle;
+              const x1 = center + radius * Math.cos(startAngle);
+              const y1 = center + radius * Math.sin(startAngle);
+              const x2 = center + radius * Math.cos(endAngle);
+              const y2 = center + radius * Math.sin(endAngle);
+              const xi1 = center + innerRadius * Math.cos(endAngle);
+              const yi1 = center + innerRadius * Math.sin(endAngle);
+              const xi2 = center + innerRadius * Math.cos(startAngle);
+              const yi2 = center + innerRadius * Math.sin(startAngle);
+              const largeArc = angle > Math.PI ? 1 : 0;
+              const path = `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} L ${xi1} ${yi1} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${xi2} ${yi2} Z`;
+              startAngle = endAngle;
+              return <path key={i} d={path} fill={palette[i % palette.length]} stroke="#fff" strokeWidth="2"/>;
+            })}
+          </svg>
+          <div style={{
+            position:'absolute',inset:0,
+            display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+            pointerEvents:'none',
+          }}>
+            <div style={{fontSize:26,fontWeight:800,color:'var(--ink1)',letterSpacing:'-0.02em',lineHeight:1}}>{total}</div>
+            <div style={{fontSize:10,color:'var(--ink4)',letterSpacing:'0.16em',marginTop:6,fontWeight:600}}>{centerLabel}</div>
+          </div>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:8,width:'100%'}}>
+          {data.map((d, i) => {
+            const v = d[valueKey] || 0;
+            const pct = total > 0 ? Math.round(v / total * 1000) / 10 : 0;
+            return (
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,fontSize:12}}>
+                <span style={{width:10,height:10,background:palette[i % palette.length],borderRadius:2,flexShrink:0}}/>
+                <span style={{color:'var(--ink2)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d[labelKey]}</span>
+                <span className="mono" style={{color:'var(--ink1)',fontWeight:600,minWidth:36,textAlign:'right'}}>{v}</span>
+                <span className="mono" style={{color:'var(--ink4)',fontSize:10,minWidth:42,textAlign:'right'}}>{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // 月次ラインチャート (単色、 落ち着いた)
+  const SimpleLine = ({ data, height = 200 }) => {
+    const max = Math.max(...data.map(d => d.count || 0), 1);
+    if (data.length === 0) return null;
+    const padX = 6, padTop = 24, padBottom = 32;
+    const chartH = height - padTop - padBottom;
+    const points = data.map((d, i) => {
+      const x = padX + (i / (data.length - 1)) * (100 - padX*2);
+      const y = padTop + chartH - ((d.count || 0) / max) * chartH;
+      return { x, y, ...d };
+    });
+    const pathLine = points.map((p, i) => (i === 0 ? 'M' : 'L') + ' ' + p.x + ' ' + p.y).join(' ');
+    const pathArea = pathLine + ` L ${points[points.length-1].x} ${padTop + chartH} L ${points[0].x} ${padTop + chartH} Z`;
+    return (
+      <div style={{position:'relative',height,width:'100%'}}>
+        <svg width="100%" height={height} viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{overflow:'visible'}}>
+          <defs>
+            <linearGradient id="simpleAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={PRIMARY} stopOpacity="0.18"/>
+              <stop offset="100%" stopColor={PRIMARY} stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d={pathArea} fill="url(#simpleAreaGrad)"/>
+          <path d={pathLine} stroke={PRIMARY} strokeWidth="1.8" fill="none" vectorEffect="non-scaling-stroke"/>
+          {points.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r="3" fill="#fff" stroke={PRIMARY} strokeWidth="1.8" vectorEffect="non-scaling-stroke">
+              <title>{p.label}: {p.count} 名</title>
+            </circle>
+          ))}
+        </svg>
+        <div style={{
+          display:'flex',justifyContent:'space-between',
+          position:'absolute',bottom:6,left:0,right:0,
+          padding:'0 8px',fontSize:10,color:'var(--ink4)',
+        }}>
+          {data.map((d, i) => (
+            <span key={i} style={{textAlign:'center'}}>{d.label}</span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // シンプル数値カード (白 + ボーダー + アクセント数字)
+  const StatCard = ({ label, value, sub, accentColor }) => (
+    <div style={{
+      padding:'22px 24px',
+      background:'#fff',
+      border:'1px solid var(--line)',
+      borderRadius: 10,
+      minHeight: 110,
+    }}>
+      <div style={{
+        fontSize:11,letterSpacing:'0.12em',fontWeight:600,
+        color:'var(--ink4)',marginBottom:14,textTransform:'uppercase',
+      }}>{label}</div>
+      <div style={{
+        fontSize:32,fontWeight:800,lineHeight:1,
+        letterSpacing:'-0.02em',
+        color: accentColor || 'var(--ink1)',
+      }}>{value}</div>
+      {sub && (
+        <div style={{
+          fontSize:11,color:'var(--ink4)',
+          marginTop:12,fontWeight:500,
+        }}>{sub}</div>
+      )}
+    </div>
+  );
+
+  const newRepeatData = [
+    { label: '新規', count: analytics.newUsers },
+    { label: 'リピーター', count: analytics.repeatUsers },
+  ];
+  const genderData = Object.entries(analytics.genderMap).filter(([, c]) => c > 0).map(([label, count]) => ({ label, count }));
+  const ageData = Object.entries(analytics.ageBuckets).map(([label, count]) => ({ label, count }));
+  const repeatData = Object.entries(analytics.repeatBuckets).map(([label, count]) => ({ label, count }));
+
+  const insightStyle = (kind) => {
+    const styles = {
+      highlight: { bg: '#fff', border: 'var(--line)', accent: PRIMARY },
+      positive:  { bg: '#fff', border: 'var(--line)', accent: SUCCESS },
+      negative:  { bg: '#fff', border: 'var(--line)', accent: ACCENT },
+      warning:   { bg: '#fff', border: 'var(--line)', accent: '#f59e0b' },
+      info:      { bg: '#fff', border: 'var(--line)', accent: NEUTRAL },
+    };
+    return styles[kind] || styles.info;
+  };
+
+  return (
+    <div>
+      {/* 主要数値: ゆったり 4 列 */}
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:'repeat(4, 1fr)',
+        gap:16,marginBottom:24,
+      }} className="resp-grid-4">
+        <StatCard label="総登録者" value={analytics.totalUsers} sub={`内 ${analytics.activeUsers} 名がアクティブ`}/>
+        <StatCard label="エンゲージ率" value={`${analytics.engagementRate}%`} sub={`参加経験のあるユーザー割合`} accentColor={PRIMARY}/>
+        <StatCard label={`${periodLabel} 新規参加`} value={analytics.newUsers} sub="はじめての参加"/>
+        <StatCard label={`${periodLabel} リピーター`} value={analytics.repeatUsers} sub={`平均 ${analytics.avgRegPerUser} 回参加`} accentColor={SUCCESS}/>
+      </div>
+
+      {/* インサイト (シンプル箱、 アクセント縦線) */}
+      {analytics.insights.length > 0 && (
+        <div style={{
+          padding:'18px 22px',marginBottom:24,
+          background:'#fff',border:'1px solid var(--line)',borderRadius:10,
+        }}>
+          <div style={{
+            fontSize:11,letterSpacing:'0.16em',color:'var(--ink3)',
+            fontWeight:700,marginBottom:14,textTransform:'uppercase',
+          }}>ハイライト</div>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {analytics.insights.map((ins, i) => {
+              const st = insightStyle(ins.kind);
+              return (
+                <div key={i} style={{
+                  display:'flex',alignItems:'center',gap:12,
+                  paddingLeft:14,position:'relative',
+                  fontSize:13,color:'var(--ink1)',lineHeight:1.6,
+                }}>
+                  <span style={{
+                    position:'absolute',left:0,top:'50%',
+                    transform:'translateY(-50%)',
+                    width:3,height:'70%',background:st.accent,borderRadius:2,
+                  }}/>
+                  <span>{ins.text}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* セクション 1: TOP 5 + 新規/リピーター */}
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:'1.6fr 1fr',
+        gap:20,marginBottom:24,
+      }} className="resp-grid-2">
+        <div style={{
+          padding:'20px 24px',background:'#fff',
+          border:'1px solid var(--line)',borderRadius:10,
+        }}>
+          <div style={{
+            display:'flex',justifyContent:'space-between',alignItems:'baseline',
+            marginBottom:18,
+          }}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)'}}>TOP 5 参加者</div>
+            <span style={{fontSize:10,color:'var(--ink4)',letterSpacing:'0.08em'}}>全期間 累計</span>
+          </div>
+          {analytics.topParticipants.length === 0 ? (
+            <div style={{padding:32,textAlign:'center',color:'var(--ink4)',fontSize:12}}>まだ参加者がいません</div>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              {analytics.topParticipants.map((p, i) => (
+                <div key={p.id} style={{
+                  display:'flex',alignItems:'center',gap:14,
+                  padding:'12px 0',
+                  borderBottom: i < analytics.topParticipants.length - 1 ? '1px solid var(--bg2)' : 'none',
+                }}>
+                  <div style={{
+                    width:28,height:28,
+                    background: i < 3 ? PRIMARY : 'var(--bg2)',
+                    color: i < 3 ? '#fff' : 'var(--ink3)',
+                    fontSize:12,fontWeight:700,
+                    borderRadius:'50%',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    flexShrink:0,
+                    fontFamily:'var(--mono)',
+                  }}>{i + 1}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{
+                      fontSize:13,fontWeight:600,color:'var(--ink1)',
+                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                      lineHeight:1.4,
+                    }}>{p.name}</div>
+                    <div style={{
+                      fontSize:11,color:'var(--ink4)',marginTop:4,
+                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                    }}>{p.dept || '所属未登録'}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{
+                      fontSize:20,fontWeight:800,
+                      color: i < 3 ? PRIMARY : 'var(--ink2)',
+                      fontFamily:'var(--mono)',lineHeight:1,
+                    }}>{p.regCount}</div>
+                    <div style={{fontSize:9,color:'var(--ink4)',marginTop:6,letterSpacing:'0.06em'}}>
+                      {p.eventCount} イベント
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          padding:'20px 24px',background:'#fff',
+          border:'1px solid var(--line)',borderRadius:10,
+        }}>
+          <div style={{
+            display:'flex',justifyContent:'space-between',alignItems:'baseline',
+            marginBottom:18,
+          }}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)'}}>新規 vs リピーター</div>
+            <span style={{fontSize:10,color:'var(--ink4)'}}>{periodLabel}</span>
+          </div>
+          <SimpleDonut data={newRepeatData} size={160} centerLabel="期間内"/>
+        </div>
+      </div>
+
+      {/* セクション 2: 月次新規登録 ライン */}
+      <div style={{
+        padding:'20px 24px',marginBottom:24,
+        background:'#fff',border:'1px solid var(--line)',borderRadius:10,
+      }}>
+        <div style={{
+          display:'flex',justifyContent:'space-between',alignItems:'baseline',
+          marginBottom:14,
+        }}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)'}}>月次 新規登録者数</div>
+            <div style={{fontSize:11,color:'var(--ink4)',marginTop:4}}>
+              過去 12 ヶ月 · 累計 {analytics.months.reduce((s,m)=>s+m.count,0)} 名
+            </div>
+          </div>
+          {analytics.growthRate !== 0 && (
+            <div style={{
+              padding:'4px 12px',
+              background: analytics.growthRate > 0 ? '#f0fdf4' : '#fef2f2',
+              color: analytics.growthRate > 0 ? SUCCESS : ACCENT,
+              border: `1px solid ${analytics.growthRate > 0 ? '#bbf7d0' : '#fecaca'}`,
+              borderRadius:4,fontSize:11,fontWeight:600,fontFamily:'var(--mono)',
+            }}>
+              {analytics.growthRate > 0 ? '+' : ''}{analytics.growthRate}%
+            </div>
+          )}
+        </div>
+        <SimpleLine data={analytics.months} height={200}/>
+      </div>
+
+      {/* セクション 3: リピート分布 + 所属 (2 列) */}
+      <div style={{
+        display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginBottom:24,
+      }} className="resp-grid-2">
+        <div style={{padding:'20px 24px',background:'#fff',border:'1px solid var(--line)',borderRadius:10}}>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)',marginBottom:18}}>リピート回数 分布</div>
+          <SimpleBar data={repeatData} suffix=" 人"/>
+        </div>
+        <div style={{padding:'20px 24px',background:'#fff',border:'1px solid var(--line)',borderRadius:10}}>
+          <div style={{
+            display:'flex',justifyContent:'space-between',alignItems:'baseline',
+            marginBottom:18,
+          }}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)'}}>所属 TOP 8</div>
+            <span style={{fontSize:10,color:'var(--ink4)'}}>アクティブ順</span>
+          </div>
+          {analytics.topDepts.length > 0
+            ? <SimpleBar data={analytics.topDepts.map(d => ({label: d.dept, count: d.active}))} suffix=" 人"/>
+            : <div style={{padding:24,textAlign:'center',color:'var(--ink4)',fontSize:12}}>所属情報未登録</div>}
+        </div>
+      </div>
+
+      {/* セクション 4: 国籍 + 年齢層 + JLPT (3 列、 ゆったり) */}
+      <div style={{
+        display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr',gap:20,marginBottom:24,
+      }} className="resp-grid-3">
+        <div style={{padding:'20px 24px',background:'#fff',border:'1px solid var(--line)',borderRadius:10}}>
+          <div style={{
+            display:'flex',justifyContent:'space-between',alignItems:'baseline',
+            marginBottom:18,
+          }}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)'}}>国籍の多様性</div>
+            <span style={{fontSize:10,color:'var(--ink4)'}}>{analytics.uniqueNationalities} カ国</span>
+          </div>
+          {analytics.topNationalities.length > 0
+            ? <SimpleDonut data={analytics.topNationalities.map(d => ({label: d.nation, count: d.count}))} size={150} centerLabel="国籍"/>
+            : <div style={{padding:24,textAlign:'center',color:'var(--ink4)',fontSize:12}}>国籍情報なし</div>}
+        </div>
+        <div style={{padding:'20px 24px',background:'#fff',border:'1px solid var(--line)',borderRadius:10}}>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)',marginBottom:18}}>年齢層</div>
+          <SimpleBar data={ageData} suffix=" 人"/>
+        </div>
+        <div style={{padding:'20px 24px',background:'#fff',border:'1px solid var(--line)',borderRadius:10}}>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)',marginBottom:18}}>JLPT レベル</div>
+          <SimpleBar data={analytics.jlptData} valueKey="count" labelKey="level" suffix=" 人"/>
+        </div>
+      </div>
+
+      {/* セクション 5: ジェンダー */}
+      <div style={{
+        padding:'20px 24px',marginBottom:24,
+        background:'#fff',border:'1px solid var(--line)',borderRadius:10,
+      }}>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--ink1)',marginBottom:18}}>ジェンダー構成</div>
+        <div style={{display:'flex',justifyContent:'center'}}>
+          <SimpleDonut data={genderData} size={180} centerLabel="GENDER"/>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * 写真ライブラリ。アルバム空時は EmptyState、データ投入後はグリッド表示。
@@ -17565,9 +18995,11 @@ function renderPage(name) {
 
 const PAGES = {
   // ----- 概要 -----
-  dashboard:      () => renderPage('PageDashboard'),
-  analytics:      () => renderPage('PageAnalytics'),
-  notifications:  () => renderPage('PageNotifications'),
+  dashboard:              () => renderPage('PageDashboard'),
+  analytics:              () => renderPage('PageAnalytics'),
+  // (Phase 15.S139) 参加者分析 専用ページ
+  "participant-analytics": () => renderPage('PageParticipantAnalytics'),
+  notifications:          () => renderPage('PageNotifications'),
 
   // ----- イベント (Phase 2新-A + D-1) -----
   events:         () => renderPage('PageEvents'),
