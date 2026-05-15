@@ -12365,7 +12365,15 @@ function PageEventCreate(){
                           );
                         } else if (item.type === 'circle') {
                           // (Phase 15.S148) opacity プロパティを反映 (デフォルト 1)
-                          const op = (item.opacity !== undefined && item.opacity !== null) ? Number(item.opacity) : 1;
+                          const op = (() => {
+                            if (item.opacity !== undefined && item.opacity !== null) return Number(item.opacity);
+                            // (S149) rgba color から透明度を抽出 (後方互換)
+                            if (typeof item.color === 'string' && /^rgba/i.test(item.color)) {
+                              const m = item.color.match(/rgba?\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\s*\)/);
+                              if (m) return parseFloat(m[1]);
+                            }
+                            return 1;
+                          })();
                           return (
                             <div key={item.id} onMouseDown={onMouseDown} style={{
                               ...baseStyle,
@@ -12376,7 +12384,15 @@ function PageEventCreate(){
                             }}/>
                           );
                         } else if (item.type === 'rect') {
-                          const op = (item.opacity !== undefined && item.opacity !== null) ? Number(item.opacity) : 1;
+                          const op = (() => {
+                            if (item.opacity !== undefined && item.opacity !== null) return Number(item.opacity);
+                            // (S149) rgba color から透明度を抽出 (後方互換)
+                            if (typeof item.color === 'string' && /^rgba/i.test(item.color)) {
+                              const m = item.color.match(/rgba?\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\s*\)/);
+                              if (m) return parseFloat(m[1]);
+                            }
+                            return 1;
+                          })();
                           return (
                             <div key={item.id} onMouseDown={onMouseDown} style={{
                               ...baseStyle,
@@ -12387,7 +12403,15 @@ function PageEventCreate(){
                           );
                         } else if (item.type === 'triangle') {
                           // SVGで三角形 (回転は親のtransform)
-                          const op = (item.opacity !== undefined && item.opacity !== null) ? Number(item.opacity) : 1;
+                          const op = (() => {
+                            if (item.opacity !== undefined && item.opacity !== null) return Number(item.opacity);
+                            // (S149) rgba color から透明度を抽出 (後方互換)
+                            if (typeof item.color === 'string' && /^rgba/i.test(item.color)) {
+                              const m = item.color.match(/rgba?\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\s*\)/);
+                              if (m) return parseFloat(m[1]);
+                            }
+                            return 1;
+                          })();
                           return (
                             <div key={item.id} onMouseDown={onMouseDown} style={{...baseStyle, opacity: op}}>
                               <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{display:'block'}}>
@@ -12486,7 +12510,17 @@ function PageEventCreate(){
                               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
                                 <div>
                                   <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>塗り色</label>
-                                  <input type="color" className="input" value={(sel.color||'').startsWith('rgba')?'#ffffff':sel.color} onChange={e => update({color: e.target.value})} style={{padding:2,height:36}}/>
+                                  <input type="color" className="input" value={(sel.color||'').startsWith('rgba')?'#ffffff':sel.color} onChange={e => {
+                                    // (S149) 元の color が rgba なら 透明度を opacity に移してから hex に置き換え
+                                    const patch = { color: e.target.value };
+                                    if (sel.opacity === undefined || sel.opacity === null) {
+                                      if (typeof sel.color === 'string' && /^rgba/i.test(sel.color)) {
+                                        const m = sel.color.match(/rgba?\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\s*\)/);
+                                        if (m) patch.opacity = parseFloat(m[1]);
+                                      }
+                                    }
+                                    update(patch);
+                                  }} style={{padding:2,height:36}}/>
                                 </div>
                                 <div>
                                   <label style={{fontSize:11,color:'var(--ink2)',display:'block',marginBottom:4}}>枠色</label>
