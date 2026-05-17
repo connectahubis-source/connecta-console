@@ -3356,7 +3356,9 @@ function EventCard({e, onDelete, onMapClick, onCancel, onPostpone}){
     : (e.coverImageUrl || '');
 
   return (
-    <div className="card jb-event-card" style={{overflow:'hidden',cursor:'pointer',transition:'transform .15s, box-shadow .15s, border-color .15s', opacity: e.status === "アーカイブ" ? 0.6 : 1, borderRadius:12, border:'1px solid var(--jb-line)', background:'var(--jb-paper)'}}>
+    <div className="card jb-event-card"
+      onClick={() => { window.location.hash = `event-detail?id=${e.id}`; }}
+      style={{overflow:'hidden',cursor:'pointer',transition:'transform .15s, box-shadow .15s, border-color .15s', opacity: e.status === "アーカイブ" ? 0.6 : 1, borderRadius:12, border:'1px solid var(--jb-line)', background:'var(--jb-paper)'}}>
       {/* カバー画像 or デフォルト Japan Blue グラデ背景 */}
       <div style={{
         height: 140,
@@ -5076,6 +5078,833 @@ function PageSatisfaction(){
 window.PageEvents = PageEvents;
 window.PageRegistrations = PageRegistrations;
 window.PageSatisfaction = PageSatisfaction;
+
+// =============================================================================
+// (Phase 17.I) PageEventAdminDetail — Admin の イベントごと詳細管理ページ
+//   URL: #event-detail?id=EVT-001
+//   表示: 基本情報 / KPI / Day 別 / 申込者一覧
+// =============================================================================
+function PageEventAdminDetail() {
+  const [eventId, setEventId] = useState(() => {
+    try {
+      const hash = window.location.hash || '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx < 0) return '';
+      const qs = new URLSearchParams(hash.substring(qIdx + 1));
+      return qs.get('id') || '';
+    } catch (e) { return ''; }
+  });
+  const [event, setEvent] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [apps, setApps] = useState([]);
+  const [regs, setRegs] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [activities, setActivities] = useState([]);  // (Phase 17.K)
+  const [loading, setLoading] = useState(true);
+  const [detailModalApp, setDetailModalApp] = useState(null);
+  const [activityModal, setActivityModal] = useState(null);  // (Phase 17.K) {mode, activity?, defaultSessionId?}
+
+  // hash 変化に追従
+  useEffect(() => {
+    const onHashChange = () => {
+      try {
+        const hash = window.location.hash || '';
+        const qIdx = hash.indexOf('?');
+        const qs = qIdx >= 0 ? new URLSearchParams(hash.substring(qIdx + 1)) : new URLSearchParams();
+        const id = qs.get('id') || '';
+        if (id !== eventId) setEventId(id);
+      } catch (e) {}
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [eventId]);
+
+  const loadAll = async () => {
+    if (!eventId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const [evs, sessAll, allApps, allRegs, parts, acts] = await Promise.all([
+        window.fetchData('listEvents'),
+        window.fetchData('listEventSessions', { eventId }),
+        window.fetchData('listApplications'),
+        window.fetchData('listRegistrations'),
+        window.fetchData('listParticipants'),
+        window.fetchData('listActivities', { eventId }),  // (Phase 17.K)
+      ]);
+      const ev = (Array.isArray(evs) ? evs : []).find(e => e.id === eventId);
+      setEvent(ev || null);
+      setSessions(Array.isArray(sessAll) ? sessAll : []);
+      setApps((Array.isArray(allApps) ? allApps : []).filter(a => a.eventId === eventId));
+      setRegs((Array.isArray(allRegs) ? allRegs : []).filter(r => r.eventId === eventId));
+      setParticipants(Array.isArray(parts) ? parts : []);
+      setActivities(Array.isArray(acts) ? acts : []);
+    } catch (e) {
+      console.error('PageEventAdminDetail load failed', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadAll(); }, [eventId]);
+
+  const participantMap = useMemo(() => {
+    const m = {};
+    participants.forEach(p => { m[p.id] = p; });
+    return m;
+  }, [participants]);
+
+  const sessionMap = useMemo(() => {
+    const m = {};
+    sessions.forEach(s => { m[s.id] = s; });
+    return m;
+  }, [sessions]);
+
+  // KPI 集計
+  const kpi = useMemo(() => {
+    let activeAppCount = 0, paidAppCount = 0, refundPendingCount = 0;
+    let totalRevenue = 0, totalRefunded = 0;
+    apps.forEach(a => {
+      if (!a.isAllCancelled) activeAppCount++;
+      if (a.hasPendingRefund) refundPendingCount++;
+      if (Number(a.totalPaid || 0) > 0) paidAppCount++;
+      totalRevenue += Number(a.totalPaid || 0);
+      totalRefunded += Number(a.totalRefunded || 0);
+    });
+    const activeRegs = regs.filter(r =>
+      r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち'
+    );
+    return {
+      totalApps: apps.length,
+      activeApps: activeAppCount,
+      activeRegs: activeRegs.length,
+      paidApps: paidAppCount,
+      refundPendingCount,
+      totalRevenue,
+      totalRefunded,
+      netRevenue: totalRevenue - totalRefunded,
+    };
+  }, [apps, regs]);
+
+  // Day 別 申込数集計 (multi 用)
+  const sessionStats = useMemo(() => {
+    return sessions.map(s => {
+      const sRegs = regs.filter(r => r.sessionId === s.id);
+      const active = sRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+      const paid = active.filter(r => r.paid);
+      const checkedIn = active.filter(r => r.status === 'チェックイン済');
+      return {
+        session: s,
+        total: sRegs.length,
+        active: active.length,
+        paid: paid.length,
+        checkedIn: checkedIn.length,
+        capacity: Number(s.capacity) || 0,
+      };
+    });
+  }, [sessions, regs]);
+
+  if (loading) {
+    return <div style={{padding:60,textAlign:'center',color:'var(--jb-ink-soft)',fontFamily:'var(--jb-mono)',letterSpacing:'0.1em',fontSize:11}}>LOADING…</div>;
+  }
+  if (!event) {
+    return (
+      <div style={{padding:40,textAlign:'center'}}>
+        <h2 style={{color:'var(--jb-shouwa)',fontFamily:'var(--jb-display)'}}>イベントが見つかりません</h2>
+        <p style={{fontSize:13,color:'var(--jb-ink-soft)'}}>eventId: <code>{eventId || '(なし)'}</code></p>
+        <button className="jb-btn" onClick={() => { window.location.hash = 'events'; }} style={{marginTop:14}}>← 一覧へ戻る</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{padding:'24px 28px',maxWidth:1100,margin:'0 auto'}}>
+
+      {/* ヘッダー */}
+      <section style={{marginBottom:24}}>
+        <button onClick={() => { window.location.hash = 'events'; }}
+          className="jb-btn"
+          style={{padding:'4px 10px',fontSize:11,marginBottom:12}}>← イベント一覧</button>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:18,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:280}}>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-blue)',textTransform:'uppercase',fontWeight:700,marginBottom:6}}>EVENT · {event.id}</div>
+            <h1 style={{fontFamily:'var(--jb-display)',fontSize:30,fontWeight:800,color:'var(--jb-ink)',margin:0,letterSpacing:'-0.01em',lineHeight:1.2}}>{event.title}</h1>
+            <div style={{marginTop:8,display:'flex',gap:10,flexWrap:'wrap',fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',letterSpacing:'0.05em'}}>
+              <span>{event.date || '—'}</span>
+              {event.time && <span>· {event.time}</span>}
+              <span>· {event.venue || (event.online ? 'オンライン' : '—')}</span>
+              <span>· {event.format === 'multi' ? `multi (${sessions.length} Day)` : '単発'}</span>
+              {event.feeMode && <span>· {event.feeMode === 'uniform' ? '一律料金' : 'セッション別'}</span>}
+            </div>
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {/* (Phase 17.I) 編集は 一覧画面で行う (= PageEvents の編集パネルを利用) */}
+            <button className="jb-btn" onClick={() => { window.location.hash = 'events'; }}>
+              <Icon n="edit" s={12}/> 編集 (一覧へ)
+            </button>
+            <a href={`#qr?eventId=${event.id}`} className="jb-btn">
+              <Icon n="qr" s={12}/> QR
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* KPI サマリー */}
+      <section style={{marginBottom:24}}>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10}}>申込・売上 サマリー</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))',gap:10}}>
+          <KpiCard label="申込" value={kpi.activeApps} unit="件" total={kpi.totalApps} color="var(--jb-blue)"/>
+          <KpiCard label="個別 reg" value={kpi.activeRegs} unit="件" color="var(--jb-blue-deep)"/>
+          <KpiCard label="決済済" value={kpi.paidApps} unit="件" total={kpi.totalApps} color="var(--jb-success)"/>
+          <KpiCard label="返金待ち" value={kpi.refundPendingCount} unit="件" color="var(--jb-shouwa)"/>
+          <KpiCard label="売上" value={`¥${Number(kpi.netRevenue).toLocaleString()}`} unit="" color="var(--jb-blue)" sub={`入金 ¥${Number(kpi.totalRevenue).toLocaleString()} / 返金 ¥${Number(kpi.totalRefunded).toLocaleString()}`}/>
+        </div>
+      </section>
+
+      {/* Day / セッション一覧 (multi) */}
+      {event.format === 'multi' && sessions.length > 0 && (
+        <>
+          <SessionTimetable
+            sessions={sessions}
+            stats={sessionStats}
+            activities={activities}
+            onAddActivity={(sessionId) => setActivityModal({ mode: 'create', defaultSessionId: sessionId })}
+            onEditActivity={(activity) => setActivityModal({ mode: 'edit', activity })}
+          />
+          <SessionDayList
+            sessions={sessions}
+            stats={sessionStats}
+            regs={regs}
+            participantMap={participantMap}
+            event={event}
+          />
+        </>
+      )}
+
+      {/* 単発イベント用のタイムテーブル */}
+      {event.format !== 'multi' && (event.time || activities.length > 0) && (
+        <SessionTimetable
+          sessions={[{
+            id: '', order: 1, date: event.date, startTime: event.time || '',
+            endTime: event.endTime || '', venue: event.venue, name: event.title,
+          }]}
+          stats={[{ session: { id: '', order: 1, date: event.date, startTime: event.time, endTime: event.endTime, venue: event.venue, name: event.title }, total: 0, active: 0, paid: 0, checkedIn: 0, capacity: 0 }]}
+          activities={activities}
+          onAddActivity={(sessionId) => setActivityModal({ mode: 'create', defaultSessionId: sessionId })}
+          onEditActivity={(activity) => setActivityModal({ mode: 'edit', activity })}
+        />
+      )}
+
+      {/* 申込者一覧 */}
+      <section style={{marginBottom:24}}>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+          <span>申込者一覧 ({apps.length})</span>
+          {apps.length > 0 && <span style={{color:'var(--jb-ink-ghost)',fontSize:9,letterSpacing:'0.1em',textTransform:'none'}}>クリックで詳細</span>}
+        </div>
+        {apps.length === 0 ? (
+          <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>申込なし</div>
+        ) : (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:10}}>
+            {apps.map(a => {
+              const p = participantMap[a.userId];
+              const stateColor = a.isAllCancelled ? 'var(--jb-ink-ghost)'
+                                : a.hasPendingRefund ? 'var(--jb-shouwa)'
+                                : a.isPartialCancelled ? 'var(--jb-blue-deep)'
+                                : a.netPaid > 0 ? 'var(--jb-success)'
+                                : 'var(--jb-blue)';
+              const stateLabel = a.isAllCancelled ? 'キャンセル'
+                                : a.hasPendingRefund ? '返金待ち'
+                                : a.isPartialCancelled ? '一部キャンセル'
+                                : a.netPaid > 0 ? '決済済'
+                                : '申込済';
+              return (
+                <div key={a.applicationId}
+                  onClick={() => setDetailModalApp(a)}
+                  style={{
+                    padding:'12px 14px',
+                    background:'var(--jb-paper)',
+                    border:'1px solid var(--jb-line)',
+                    borderLeft:`3px solid ${stateColor}`,
+                    borderRadius:6,
+                    cursor:'pointer',
+                    transition:'all 0.12s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 168, 225, 0.12)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                >
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
+                    <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.08em',color:'var(--jb-blue)',fontWeight:700}}>{a.applicationId}</span>
+                    <span style={{padding:'1px 7px',background:'var(--jb-paper-mist)',color:stateColor,fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.08em',fontWeight:700,borderRadius:999}}>{stateLabel}</span>
+                  </div>
+                  <div style={{fontFamily:'var(--jb-sans)',fontSize:13,fontWeight:700,color:'var(--jb-ink)',marginBottom:2}}>{p ? p.name : a.userId}</div>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
+                    {a.totalCount} reg · ¥{Number(a.totalAmount || 0).toLocaleString()}
+                    {a.kind !== 'original' && <span style={{marginLeft:6,color:'var(--jb-shouwa)'}}>· {a.kind}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* 詳細モーダル */}
+      {detailModalApp && window.ApplicationDetailModal && (() => {
+        const ApplicationDetailModalLocal = window.ApplicationDetailModal;
+        return (
+          <ApplicationDetailModalLocal
+            app={detailModalApp}
+            event={event}
+            participant={participantMap[detailModalApp.userId]}
+            onClose={() => setDetailModalApp(null)}
+            onReload={() => { setDetailModalApp(null); loadAll(); }}
+          />
+        );
+      })()}
+
+      {/* (Phase 17.K) アクティビティ編集モーダル */}
+      {activityModal && (
+        <ActivityFormModal
+          mode={activityModal.mode}
+          activity={activityModal.activity}
+          defaultSessionId={activityModal.defaultSessionId}
+          eventId={eventId}
+          sessions={sessions}
+          onClose={() => setActivityModal(null)}
+          onSaved={() => { setActivityModal(null); loadAll(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function KpiCard({ label, value, unit, total, color, sub }) {
+  return (
+    <div style={{
+      padding:'12px 14px',
+      background:'var(--jb-paper)',
+      border:'1px solid var(--jb-line)',
+      borderTop:`3px solid ${color}`,
+      borderRadius:6,
+    }}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:4}}>{label}</div>
+      <div style={{fontFamily:'var(--jb-display)',fontSize:22,fontWeight:800,color:color,letterSpacing:'-0.01em',lineHeight:1}}>
+        {value}{unit && <span style={{fontSize:11,fontWeight:600,marginLeft:3,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>{unit}</span>}
+        {total !== undefined && total > 0 && <span style={{fontSize:11,color:'var(--jb-ink-ghost)',marginLeft:4,fontFamily:'var(--jb-mono)'}}>/ {total}</span>}
+      </div>
+      {sub && <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',letterSpacing:'0.04em',marginTop:4}}>{sub}</div>}
+    </div>
+  );
+}
+
+function DayMetric({ label, value, cap, color }) {
+  return (
+    <div style={{textAlign:'right'}}>
+      <div style={{fontSize:8,color:'var(--jb-ink-soft)',letterSpacing:'0.14em',textTransform:'uppercase',fontWeight:600}}>{label}</div>
+      <div style={{fontSize:14,fontWeight:800,color:color,fontFamily:'var(--jb-display)',lineHeight:1}}>
+        {value}{cap > 0 && <span style={{fontSize:9,color:'var(--jb-ink-ghost)',marginLeft:2}}>/{cap}</span>}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// (Phase 17.J / 17.K) SessionTimetable — Day を横軸、 時間を縦軸 にしたガントチャート風表示
+//   セッション (Day 枠) + アクティビティ (詳細プログラム) を重ねて表示
+//   同時刻重複あり → 横並びカラム自動配置
+// =============================================================================
+function SessionTimetable({ sessions, stats, activities, onAddActivity, onEditActivity }) {
+  // (Phase 17.K) sessionId 不整合検出
+  const sessionIdSet = new Set(sessions.map(s => String(s.id || '')));
+  const orphanActivities = (activities || []).filter(a => !sessionIdSet.has(String(a.sessionId || '')));
+  const toMin = (t) => {
+    if (!t) return null;
+    const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  };
+
+  // 全 Day の startTime / endTime + 全 アクティビティ時刻 から min-max を算出
+  const sessionTimes = sessions.flatMap(s => [toMin(s.startTime), toMin(s.endTime)]).filter(v => v != null);
+  const activityTimes = (activities || []).flatMap(a => [toMin(a.startTime), toMin(a.endTime)]).filter(v => v != null);
+  const allTimes = [...sessionTimes, ...activityTimes];
+  if (allTimes.length === 0) {
+    return (
+      <section style={{marginBottom:24}}>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10}}>タイムテーブル</div>
+        <div style={{padding:30,background:'var(--jb-paper-mist)',borderRadius:8,textAlign:'center',fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',letterSpacing:'0.06em'}}>
+          開始/終了時刻 未設定 — イベントの時刻設定 or アクティビティ追加で表示されます
+        </div>
+      </section>
+    );
+  }
+
+  let minT = Math.min(...allTimes);
+  let maxT = Math.max(...allTimes);
+  minT = Math.max(0, Math.floor((minT - 30) / 30) * 30);
+  maxT = Math.min(24 * 60, Math.ceil((maxT + 30) / 30) * 30);
+  const range = Math.max(60, maxT - minT);
+  const hourMarks = [];
+  for (let m = Math.ceil(minT / 60) * 60; m <= maxT; m += 60) hourMarks.push(m);
+  const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+  const KIND_COLORS = {
+    program: { bg: 'linear-gradient(135deg, var(--jb-blue-deep), var(--jb-blue))', fg: '#fff', label: 'プログラム' },
+    staff:   { bg: 'linear-gradient(135deg, var(--jb-shouwa), #F26B4A)',           fg: '#fff', label: '運営' },
+    meal:    { bg: 'linear-gradient(135deg, #F0A500, #FFC04A)',                    fg: '#fff', label: '食事' },
+    break:   { bg: 'linear-gradient(135deg, #9CA8B2, #C0CAD3)',                    fg: '#fff', label: '休憩' },
+    other:   { bg: 'linear-gradient(135deg, var(--jb-ink-soft), #8898A6)',         fg: '#fff', label: 'その他' },
+  };
+
+  // 各 Day カラム内で アクティビティを重なり判定 → サブカラム振り分け
+  // 戻り値: { aId: { subCol, subTotal } }
+  function layoutActivities(acts) {
+    // 同 Day 内の acts を 開始時刻でソート
+    const sorted = acts.slice().sort((a, b) => {
+      const aS = toMin(a.startTime) || 0;
+      const bS = toMin(b.startTime) || 0;
+      if (aS !== bS) return aS - bS;
+      return (a.order || 0) - (b.order || 0);
+    });
+    // greedy: 各 act を「現在使われていない」 サブカラムに割り当て
+    const colEndTimes = [];  // 各サブカラムの最後の end 時刻
+    const result = {};
+    sorted.forEach(a => {
+      const s = toMin(a.startTime) || 0;
+      const e = toMin(a.endTime) || s + 30;
+      let assigned = -1;
+      for (let c = 0; c < colEndTimes.length; c++) {
+        if (colEndTimes[c] <= s) { assigned = c; break; }
+      }
+      if (assigned < 0) { assigned = colEndTimes.length; colEndTimes.push(e); }
+      else { colEndTimes[assigned] = e; }
+      result[a.activityId] = { subCol: assigned };
+    });
+    const subTotal = Math.max(1, colEndTimes.length);
+    Object.keys(result).forEach(k => { result[k].subTotal = subTotal; });
+    return result;
+  }
+
+  const CHART_HEIGHT = 380;
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
+        <span>タイムテーブル · プログラム {activities.length} 件</span>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <LegendChip color="var(--jb-blue-deep)" label="プログラム"/>
+          <LegendChip color="var(--jb-shouwa)" label="運営"/>
+          <LegendChip color="#F0A500" label="食事"/>
+          <LegendChip color="#9CA8B2" label="休憩"/>
+        </div>
+      </div>
+      <div style={{
+        padding:'16px 18px 12px',
+        background:'var(--jb-paper)',
+        border:'1px solid var(--jb-line)',
+        borderRadius:8,
+        overflow:'auto',
+      }}>
+        {orphanActivities.length > 0 && (
+          <div style={{
+            marginBottom:12,padding:'8px 12px',
+            background:'var(--jb-shouwa-soft)',border:'1px solid var(--jb-shouwa)',borderRadius:6,
+            fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-shouwa)',letterSpacing:'0.05em',lineHeight:1.5,
+          }}>
+            ⚠ {orphanActivities.length} 件のアクティビティが Day に紐付かず (sessionId: {orphanActivities.map(a => `"${a.sessionId}"`).join(', ')})。 暫定で 最初の Day に表示しています。 編集モーダルから Day を設定してください。
+          </div>
+        )}
+        <div style={{display:'flex',gap:0,minWidth:Math.max(500, sessions.length * 200 + 60),paddingTop:28}}>
+          {/* 左端: 時間目盛り */}
+          <div style={{flexShrink:0,width:50,position:'relative',height:CHART_HEIGHT}}>
+            {hourMarks.map(m => (
+              <div key={m} style={{
+                position:'absolute',
+                top: `${((m - minT) / range) * 100}%`,
+                right:6,
+                transform:'translateY(-50%)',
+                fontFamily:'var(--jb-mono)',fontSize:9,
+                color:'var(--jb-ink-soft)',letterSpacing:'0.06em',
+              }}>{fmt(m)}</div>
+            ))}
+          </div>
+          {/* 各 Day の縦列 */}
+          {sessions.map((s, i) => {
+            // (Phase 17.K) 各 Day のアクティビティ + orphan を最初の Day にフォールバック吸収
+            let sessActivities = (activities || []).filter(a => String(a.sessionId || '') === String(s.id || ''));
+            if (i === 0 && orphanActivities.length > 0) {
+              sessActivities = sessActivities.concat(orphanActivities);
+            }
+            const layout = layoutActivities(sessActivities);
+            const startM = toMin(s.startTime);
+            const endM = toMin(s.endTime);
+            const sessValid = startM != null && endM != null;
+            return (
+              <div key={s.id || i} style={{
+                flex:1,minWidth:180,
+                position:'relative',
+                height:CHART_HEIGHT,
+                borderLeft:'1px solid var(--jb-line)',
+              }}>
+                {/* グリッドライン */}
+                {hourMarks.map(m => (
+                  <div key={m} style={{
+                    position:'absolute',
+                    top:`${((m - minT) / range) * 100}%`,
+                    left:0,right:0,
+                    borderTop:'1px dashed var(--jb-line)',
+                    pointerEvents:'none',
+                  }}/>
+                ))}
+                {/* ヘッダー: Day N + 日付 + 追加ボタン */}
+                <div style={{
+                  position:'absolute',top:-28,left:4,right:4,
+                  display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:4,
+                }}>
+                  <div style={{flex:1,minWidth:0,textAlign:'left'}}>
+                    <span style={{fontFamily:'var(--jb-display)',fontSize:11,fontWeight:800,color:'var(--jb-blue)',letterSpacing:'-0.005em'}}>Day {s.order || (i+1)}</span>
+                    <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',marginLeft:5,letterSpacing:'0.04em'}}>{s.date || '—'}</span>
+                  </div>
+                  {onAddActivity && (
+                    <button onClick={() => onAddActivity(s.id)}
+                      title="アクティビティ追加"
+                      style={{
+                        background:'var(--jb-blue)',color:'#fff',border:'none',
+                        width:18,height:18,borderRadius:'50%',
+                        fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:800,
+                        cursor:'pointer',lineHeight:1,padding:0,
+                        boxShadow:'0 2px 4px rgba(0, 168, 225, 0.3)',
+                      }}>+</button>
+                  )}
+                </div>
+
+                {/* セッション枠 (= 薄い背景バー) */}
+                {sessValid && (
+                  <div style={{
+                    position:'absolute',
+                    top:`${((startM - minT) / range) * 100}%`,
+                    height:`${((endM - startM) / range) * 100}%`,
+                    left:0,right:0,
+                    background:'var(--jb-blue-soft)',
+                    borderTop:'1px solid var(--jb-blue)',
+                    borderBottom:'1px solid var(--jb-blue)',
+                    opacity:0.5,
+                    pointerEvents:'none',
+                  }}/>
+                )}
+
+                {/* アクティビティバー (= 重ね合わせ + サブカラム) */}
+                {sessActivities.map(a => {
+                  const aS = toMin(a.startTime);
+                  const aE = toMin(a.endTime);
+                  if (aS == null || aE == null) return null;
+                  const { subCol = 0, subTotal = 1 } = layout[a.activityId] || {};
+                  const widthPct = 100 / subTotal;
+                  const leftPct = subCol * widthPct;
+                  const kindStyle = KIND_COLORS[a.kind] || KIND_COLORS.program;
+                  return (
+                    <div key={a.activityId}
+                      onClick={() => onEditActivity && onEditActivity(a)}
+                      title={`${a.title} — ${a.startTime}〜${a.endTime}${a.place ? ' @ ' + a.place : ''}`}
+                      style={{
+                        position:'absolute',
+                        top:`${((aS - minT) / range) * 100}%`,
+                        height:`${((aE - aS) / range) * 100}%`,
+                        left:`calc(${leftPct}% + 2px)`,
+                        width:`calc(${widthPct}% - 4px)`,
+                        background:kindStyle.bg,
+                        color:kindStyle.fg,
+                        borderRadius:3,
+                        padding:'4px 6px',
+                        cursor:'pointer',
+                        overflow:'hidden',
+                        boxShadow:'0 1px 3px rgba(0, 0, 0, 0.15)',
+                        transition:'all 0.12s',
+                        zIndex:2,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.25)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.15)'; }}
+                    >
+                      <div style={{fontFamily:'var(--jb-mono)',fontSize:8,letterSpacing:'0.04em',opacity:0.95,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.startTime}-{a.endTime}</div>
+                      <div style={{fontFamily:'var(--jb-sans)',fontSize:9,fontWeight:700,lineHeight:1.2,marginTop:2,wordBreak:'break-all',display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{a.title}</div>
+                      {a.place && <div style={{fontFamily:'var(--jb-mono)',fontSize:7,opacity:0.85,marginTop:2,letterSpacing:'0.04em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>@ {a.place}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LegendChip({ color, label }) {
+  return (
+    <span style={{display:'inline-flex',alignItems:'center',gap:4,fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.04em',textTransform:'none'}}>
+      <span style={{width:10,height:10,background:color,borderRadius:2,display:'inline-block'}}/>
+      {label}
+    </span>
+  );
+}
+
+// =============================================================================
+// (Phase 17.K) ActivityFormModal — アクティビティ作成 / 編集 / 削除モーダル
+// =============================================================================
+function ActivityFormModal({ mode, activity, defaultSessionId, eventId, sessions, onClose, onSaved }) {
+  const [title, setTitle] = useState(activity?.title || '');
+  const [kind, setKind] = useState(activity?.kind || 'program');
+  const [sessionId, setSessionId] = useState(activity?.sessionId || defaultSessionId || '');
+  const [startTime, setStartTime] = useState(activity?.startTime || '');
+  const [endTime, setEndTime] = useState(activity?.endTime || '');
+  const [place, setPlace] = useState(activity?.place || '');
+  const [owner, setOwner] = useState(activity?.owner || '');
+  const [memo, setMemo] = useState(activity?.memo || '');
+  const [submitting, setSubmitting] = useState(false);
+
+  const kinds = [
+    { v: 'program', label: 'プログラム' },
+    { v: 'staff',   label: '運営' },
+    { v: 'meal',    label: '食事' },
+    { v: 'break',   label: '休憩' },
+    { v: 'other',   label: 'その他' },
+  ];
+
+  async function handleSubmit() {
+    if (!title.trim()) { window.toast.error('タイトル必須'); return; }
+    if (!startTime || !endTime) { window.toast.error('開始/終了時刻 必須'); return; }
+    setSubmitting(true);
+    try {
+      const payload = { sessionId, kind, title: title.trim(), startTime, endTime, place: place.trim(), owner: owner.trim(), memo: memo.trim() };
+      if (mode === 'edit' && activity) {
+        await window.postData('admin.activity.update', { activityId: activity.activityId, patch: payload });
+        window.toast.success('更新しました');
+      } else {
+        await window.postData('admin.activity.create', { eventId, ...payload });
+        window.toast.success('追加しました');
+      }
+      // (Phase 17.K) キャッシュ無効化 — dot 始まり action は _autoInvalidate でマッチしないため明示
+      if (window.invalidateCache) window.invalidateCache('listActivities');
+      onSaved();
+    } catch (e) {
+      window.toast.error('保存失敗: ' + (e.message || e));
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!activity) return;
+    if (!window.confirm(`アクティビティ「${activity.title}」 を削除しますか?`)) return;
+    setSubmitting(true);
+    try {
+      await window.postData('admin.activity.delete', { activityId: activity.activityId });
+      if (window.invalidateCache) window.invalidateCache('listActivities');
+      window.toast.success('削除しました');
+      onSaved();
+    } catch (e) {
+      window.toast.error('削除失敗: ' + (e.message || e));
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(30,50,71,0.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:120,padding:20}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'var(--jb-paper)',borderRadius:12,width:540,maxWidth:'94%',maxHeight:'90vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0, 168, 225, 0.25)'}}>
+        <div style={{padding:'22px 26px 18px',background:'linear-gradient(135deg, var(--jb-blue) 0%, var(--jb-cyan) 100%)',color:'var(--jb-paper)',borderRadius:'12px 12px 0 0'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.2em',textTransform:'uppercase',opacity:0.85}}>{mode === 'edit' ? 'EDIT ACTIVITY' : 'NEW ACTIVITY'}</div>
+              <div style={{fontFamily:'var(--jb-display)',fontSize:22,fontWeight:800,marginTop:6,letterSpacing:'-0.01em'}}>{mode === 'edit' ? 'アクティビティ編集' : 'アクティビティ追加'}</div>
+            </div>
+            <button onClick={onClose} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'var(--jb-paper)',borderRadius:'50%',width:30,height:30,cursor:'pointer',fontSize:18}}>×</button>
+          </div>
+        </div>
+
+        <div style={{padding:'22px 26px',display:'flex',flexDirection:'column',gap:14}}>
+          <FormRow label="タイトル *">
+            <input className="input" value={title} onChange={e => setTitle(e.target.value)} placeholder="例: 開会挨拶 / 受付 / 設営"/>
+          </FormRow>
+          <FormRow label="種別">
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {kinds.map(k => (
+                <button key={k.v} type="button" onClick={() => setKind(k.v)}
+                  style={{
+                    padding:'6px 12px',
+                    background: kind === k.v ? 'var(--jb-blue)' : 'var(--jb-paper)',
+                    color: kind === k.v ? '#fff' : 'var(--jb-ink)',
+                    border: `1px solid ${kind === k.v ? 'var(--jb-blue)' : 'var(--jb-line)'}`,
+                    borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',
+                    fontFamily:'var(--jb-display)',
+                  }}>{k.label}</button>
+              ))}
+            </div>
+          </FormRow>
+          {sessions.length > 0 && (
+            <FormRow label="Day">
+              <select className="input" value={sessionId} onChange={e => setSessionId(e.target.value)}>
+                <option value="">(イベント全体)</option>
+                {sessions.map((s, i) => (
+                  <option key={s.id} value={s.id}>Day {s.order || (i+1)} · {s.date || ''}</option>
+                ))}
+              </select>
+            </FormRow>
+          )}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+            <FormRow label="開始時刻 *">
+              <input type="time" className="input" value={startTime} onChange={e => setStartTime(e.target.value)}/>
+            </FormRow>
+            <FormRow label="終了時刻 *">
+              <input type="time" className="input" value={endTime} onChange={e => setEndTime(e.target.value)}/>
+            </FormRow>
+          </div>
+          <FormRow label="場所 (任意)">
+            <input className="input" value={place} onChange={e => setPlace(e.target.value)} placeholder="例: メインホール / 控室"/>
+          </FormRow>
+          <FormRow label="担当者 (任意)">
+            <input className="input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="例: 田中 / 受付チーム"/>
+          </FormRow>
+          <FormRow label="メモ (任意)">
+            <textarea className="input" value={memo} onChange={e => setMemo(e.target.value)} rows={2} style={{resize:'vertical'}}/>
+          </FormRow>
+        </div>
+
+        <div style={{padding:'14px 26px 22px',display:'flex',justifyContent:'space-between',gap:10,borderTop:'1px solid var(--jb-line)'}}>
+          {mode === 'edit' && (
+            <button className="jb-btn" onClick={handleDelete} disabled={submitting}
+              style={{color:'var(--jb-shouwa)',borderColor:'var(--jb-shouwa)'}}>削除</button>
+          )}
+          <div style={{flex:1}}></div>
+          <button className="jb-btn" onClick={onClose} disabled={submitting}>キャンセル</button>
+          <button className="jb-btn jb-btn-primary" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? '保存中…' : (mode === 'edit' ? '更新' : '追加')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormRow({ label, children }) {
+  return (
+    <label style={{display:'flex',flexDirection:'column',gap:5}}>
+      <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600}}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+// =============================================================================
+// (Phase 17.J) SessionDayList — Day 別の出席者一覧 (展開可能)
+// =============================================================================
+function SessionDayList({ sessions, stats, regs, participantMap, event }) {
+  const [expandedId, setExpandedId] = useState(null);
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+        <span>Day / セッション ({sessions.length})</span>
+        <span style={{color:'var(--jb-ink-ghost)',fontSize:9,letterSpacing:'0.1em',textTransform:'none'}}>クリックで出席者展開</span>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {stats.map((stat, i) => {
+          const s = stat.session;
+          const isExpanded = expandedId === s.id;
+          const sessionRegs = regs.filter(r => r.sessionId === s.id);
+          const activeRegs = sessionRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+          return (
+            <div key={s.id} style={{
+              background:'var(--jb-paper)',
+              border:'1px solid var(--jb-line)',
+              borderRadius:6,
+              overflow:'hidden',
+              transition:'all 0.15s',
+            }}>
+              {/* ヘッダー */}
+              <div
+                onClick={() => setExpandedId(isExpanded ? null : s.id)}
+                style={{
+                  padding:'12px 14px',
+                  display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',
+                  cursor:'pointer',
+                  background: isExpanded ? 'var(--jb-blue-soft)' : 'transparent',
+                }}>
+                <span style={{
+                  display:'inline-flex',alignItems:'center',justifyContent:'center',
+                  width:18,height:18,
+                  fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:800,
+                  color: isExpanded ? 'var(--jb-blue)' : 'var(--jb-ink-soft)',
+                  transition:'transform 0.15s',
+                  transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                }}>▸</span>
+                <div style={{minWidth:60,fontFamily:'var(--jb-display)',fontSize:14,fontWeight:800,color:'var(--jb-blue)'}}>Day {s.order || (i+1)}</div>
+                <div style={{flex:1,minWidth:160}}>
+                  <div style={{fontFamily:'var(--jb-sans)',fontSize:13,fontWeight:600,color:'var(--jb-ink)'}}>
+                    {s.date || '—'}
+                    {s.startTime && <span style={{marginLeft:8,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>{s.startTime}{s.endTime ? `〜${s.endTime}` : ''}</span>}
+                  </div>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',letterSpacing:'0.04em',marginTop:2}}>
+                    {s.name ? `${s.name} · ` : ''}{s.venue || (s.online ? 'オンライン' : '—')}
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:14,fontFamily:'var(--jb-mono)',fontSize:11}}>
+                  <DayMetric label="申込" value={stat.active} cap={stat.capacity} color="var(--jb-blue)"/>
+                  <DayMetric label="決済" value={stat.paid} color="var(--jb-success)"/>
+                  <DayMetric label="入場" value={stat.checkedIn} color="var(--jb-blue-deep)"/>
+                </div>
+                <a href={`#qr?eventId=${event.id}&sessionId=${s.id}`}
+                   onClick={e => e.stopPropagation()}
+                   className="jb-btn" style={{padding:'4px 10px',fontSize:10}}>
+                  <Icon n="qr" s={10}/> QR
+                </a>
+              </div>
+
+              {/* 出席者一覧 (展開時) */}
+              {isExpanded && (
+                <div style={{padding:'12px 14px 14px',borderTop:'1px solid var(--jb-line)',background:'var(--jb-paper-mist)'}}>
+                  {activeRegs.length === 0 ? (
+                    <div style={{padding:14,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>申込なし</div>
+                  ) : (
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))',gap:6}}>
+                      {activeRegs.map(r => {
+                        const p = participantMap[r.userId];
+                        const isCheckedIn = r.status === 'チェックイン済';
+                        const isPaidStatus = r.paid || r.status === '決済済';
+                        const statusColor = isCheckedIn ? 'var(--jb-blue-deep)'
+                                          : isPaidStatus ? 'var(--jb-success)'
+                                          : 'var(--jb-blue)';
+                        const statusLabel = isCheckedIn ? '入場済'
+                                          : isPaidStatus ? '決済済'
+                                          : '未決済';
+                        return (
+                          <div key={r.id} style={{
+                            padding:'8px 10px',
+                            background:'var(--jb-paper)',
+                            border:'1px solid var(--jb-line)',
+                            borderLeft:`3px solid ${statusColor}`,
+                            borderRadius:4,
+                          }}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                              <span style={{fontFamily:'var(--jb-sans)',fontSize:12,fontWeight:700,color:'var(--jb-ink)'}}>{p ? p.name : r.userId}</span>
+                              <span style={{padding:'1px 6px',background:'var(--jb-paper-mist)',color:statusColor,fontFamily:'var(--jb-mono)',fontSize:8,fontWeight:700,letterSpacing:'0.06em',borderRadius:999}}>{statusLabel}</span>
+                            </div>
+                            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
+                              {r.id}{p && p.email ? ` · ${p.email}` : ''}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+window.PageEventAdminDetail = PageEventAdminDetail;
 // 他のスクリプトブロックから参照される共有コンポーネント (Phase 6 fix)
 window.MiniStat = MiniStat;
 window.EventCard = EventCard;
@@ -11625,6 +12454,8 @@ function MarkPaidModal({ app, appRegs, sessionMap, onCancel, onSubmit }) {
 
 
 window.PageApplications = PageApplications;
+// (Phase 17.I) 他スクリプトブロック (= PageEventAdminDetail) から参照するために export
+window.ApplicationDetailModal = ApplicationDetailModal;
 
 // =============================================================================
 // (Phase 15.S119) PaymentMethodChangeModal — 支払い方法変更モーダル
@@ -20878,6 +21709,8 @@ const PAGES = {
   // ----- イベント (Phase 2新-A + D-1) -----
   events:         () => renderPage('PageEvents'),
   "event-create": () => renderPage('PageEventCreate'),
+  // (Phase 17.I) イベントごとの詳細管理ページ
+  "event-detail": () => renderPage('PageEventAdminDetail'),
   registrations:  () => renderPage('PageRegistrations'),
   qr:             () => renderPage('PageQR'),
   schedule:       () => renderPage('PageSchedule'),
