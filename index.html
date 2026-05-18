@@ -5140,6 +5140,561 @@ window.PageSatisfaction = PageSatisfaction;
 //   URL: #event-detail?id=EVT-001
 //   表示: 基本情報 / KPI / Day 別 / 申込者一覧
 // =============================================================================
+// =============================================================================
+// (Phase 17.N) 心が躍動する アニメーション helper 群
+// =============================================================================
+
+// CountUp — 数値を 0 → target に カウントアップ
+function useCountUp(target, duration = 1200) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (target === 0) { setVal(0); return; }
+    let rafId = null;
+    const start = performance.now();
+    const animate = (now) => {
+      const elapsed = now - start;
+      const t = Math.min(1, elapsed / duration);
+      // easeOutQuart
+      const eased = 1 - Math.pow(1 - t, 4);
+      setVal(Math.round(target * eased));
+      if (t < 1) rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+    return () => { if (rafId) cancelAnimationFrame(rafId); };
+  }, [target, duration]);
+  return val;
+}
+
+// CountUpDisplay — 数字を カウントアップで表示
+function CountUpDisplay({ value, prefix = '', suffix = '', duration = 1200, style }) {
+  const display = useCountUp(value, duration);
+  return <span style={style}>{prefix}{display.toLocaleString()}{suffix}</span>;
+}
+
+// CircleMeter — 円形メーター (= 定員消化率 等)
+function CircleMeter({ value, max, color, size = 80, label }) {
+  const pct = max > 0 ? Math.min(1, value / max) : 0;
+  const radius = (size - 8) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const [dashOffset, setDashOffset] = useState(circumference);
+  useEffect(() => {
+    // 100ms 遅延でアニメ開始 (= マウント直後の transition を確実に)
+    const id = setTimeout(() => setDashOffset(circumference * (1 - pct)), 100);
+    return () => clearTimeout(id);
+  }, [pct, circumference]);
+  return (
+    <div style={{position:'relative',width:size,height:size,display:'inline-block'}}>
+      <svg width={size} height={size} style={{transform:'rotate(-90deg)'}}>
+        <circle cx={size/2} cy={size/2} r={radius}
+          fill="none" stroke="var(--jb-line)" strokeWidth="4"/>
+        <circle cx={size/2} cy={size/2} r={radius}
+          fill="none" stroke={color} strokeWidth="4"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          strokeLinecap="round"
+          style={{transition:'stroke-dashoffset 1.6s cubic-bezier(0.22, 1, 0.36, 1)'}}/>
+      </svg>
+      <div style={{
+        position:'absolute',top:0,left:0,width:size,height:size,
+        display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+      }}>
+        <div style={{fontFamily:'var(--jb-display)',fontSize:14,fontWeight:800,color:color,lineHeight:1}}>
+          <CountUpDisplay value={Math.round(pct * 100)} suffix="%"/>
+        </div>
+        {label && <div style={{fontFamily:'var(--jb-mono)',fontSize:7,color:'var(--jb-ink-soft)',letterSpacing:'0.1em',marginTop:2}}>{label}</div>}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// (Phase 17.N-2) ApplicationTrendChart — 登録推移 + ハイブリッド予測
+//   B: 定員クリップ      — Σ session.capacity を上限
+//   C: 期間正規化         — 現在進捗% で 比率を割って 最終件数を推定
+//   E: 過去パターン学習    — 過去イベントの 中央値曲線を 当てはめる
+//   フォールバック: 学習データが少ない → ロジスティック S 字曲線
+// =============================================================================
+
+// ロジスティック S 字 (= バックアップカーブ)
+// パラメータ: t0 = 0.65 (締切前 35% で 50% 達成、 締切直前の駆け込みパターン)
+function logisticS(t) {
+  const k = 7, t0 = 0.65;
+  const y = 1 / (1 + Math.exp(-k * (t - t0)));
+  // 端で 0 / 1 にクランプ
+  const y0 = 1 / (1 + Math.exp(-k * (0 - t0)));
+  const y1 = 1 / (1 + Math.exp(-k * (1 - t0)));
+  return (y - y0) / (y1 - y0);
+}
+
+// (Phase 17.N-5) progress 0..1 における 指定パーセンタイル (= 'p10'/'p25'/'p50'/'p75'/'p90') の比率
+function getPatternRatio(progress, pattern, percentile) {
+  const key = percentile || 'p50';
+  if (!pattern || !Array.isArray(pattern.points) || pattern.points.length === 0 || pattern.sampleCount < 2) {
+    return logisticS(Math.max(0, Math.min(1, progress)));
+  }
+  const points = pattern.points;
+  const p = Math.max(0, Math.min(1, progress));
+  // 新形式 (= オブジェクト) を 検出
+  const isNewFormat = points[0] && typeof points[0] === 'object' && !Array.isArray(points[0]);
+  if (isNewFormat) {
+    for (let i = 1; i < points.length; i++) {
+      if (p <= points[i].progress) {
+        const x0 = points[i - 1].progress, y0 = points[i - 1][key];
+        const x1 = points[i].progress, y1 = points[i][key];
+        if (y0 == null || y1 == null) return logisticS(p);
+        if (x1 === x0) return y1;
+        const t = (p - x0) / (x1 - x0);
+        return y0 + t * (y1 - y0);
+      }
+    }
+    const last = points[points.length - 1];
+    return last[key] != null ? last[key] : 1;
+  }
+  // 旧形式 (= [progress, value] 配列) フォールバック
+  for (let i = 1; i < points.length; i++) {
+    if (p <= points[i][0]) {
+      const x0 = points[i - 1][0], y0 = points[i - 1][1];
+      const x1 = points[i][0], y1 = points[i][1];
+      if (x1 === x0) return y1;
+      const t = (p - x0) / (x1 - x0);
+      return y0 + t * (y1 - y0);
+    }
+  }
+  return points[points.length - 1][1];
+}
+
+function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats }) {
+  const startDate = event.regOpenDate || event.createdAt || (regs[0] && (regs[0].appliedAt || regs[0].createdAt));
+  const endDate = event.regCloseDate || event.date;
+  if (!startDate || !endDate || regs.length === 0) {
+    return (
+      <section style={{marginBottom:24,padding:20,background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:8,textAlign:'center',fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',letterSpacing:'0.06em'}}>
+        登録推移グラフ — 表示不可: {!startDate && '申込開始日 (regOpenDate) 未設定'} {!endDate && '申込締切日 (regCloseDate) 未設定'} {regs.length === 0 && '登録データなし'}
+      </section>
+    );
+  }
+  const toDate = (s) => {
+    if (!s) return null;
+    if (s instanceof Date) return s;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const sd = toDate(startDate);
+  const ed = toDate(endDate);
+  if (!sd || !ed || ed <= sd) return null;
+  sd.setHours(0, 0, 0, 0);
+  ed.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const totalMs = ed.getTime() - sd.getTime();
+  const totalDays = Math.max(1, Math.ceil(totalMs / (24 * 60 * 60 * 1000)));
+  const days = [];
+  for (let i = 0; i <= totalDays; i++) {
+    const d = new Date(sd.getTime() + i * 24 * 60 * 60 * 1000);
+    days.push(d);
+  }
+  let todayIdx = -1;
+  for (let i = 0; i < days.length; i++) {
+    if (days[i].getTime() === today.getTime()) { todayIdx = i; break; }
+  }
+  if (todayIdx < 0) {
+    if (today < days[0]) todayIdx = 0;
+    else if (today > days[days.length - 1]) todayIdx = days.length - 1;
+    else {
+      for (let i = days.length - 1; i >= 0; i--) {
+        if (days[i] <= today) { todayIdx = i; break; }
+      }
+      if (todayIdx < 0) todayIdx = 0;
+    }
+  }
+
+  // 各日の進捗% (= 0..1)
+  const progressAt = (i) => Math.max(0, Math.min(1, i / (days.length - 1)));
+
+  // (Phase 17.N-5) buildSeries — 精度向上版
+  //   1. 過去パターンの中央値で 推定最終 (= 既存)
+  //   2. 直近 7 日の傾きから 短期推定最終
+  //   3. 進捗% に応じて 加重平均 (= 序盤はパターン、 終盤は直近、 中盤は中央)
+  //   4. 信頼区間: p10 / p25 / p50 / p75 / p90 で 上下バンド生成
+  //   5. キャンセル考慮 + 定員クリップ + 一部キャンセル対応
+  const buildSeries = (regSubset, capacity) => {
+    const actual = days.map((d) => {
+      const cutoff = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+      const count = regSubset.filter(r => {
+        const ad = toDate(r.appliedAt || r.createdAt);
+        if (!ad || ad > cutoff) return false;
+        const cd = toDate(r.cancelledAt);
+        if (cd && cd <= cutoff) return false;
+        return true;
+      }).length;
+      return count;
+    });
+    const actualToToday = actual.slice(0, todayIdx + 1);
+    const lastActual = actualToToday[actualToToday.length - 1] || 0;
+    const progressNow = progressAt(todayIdx);
+    const ratioNow = getPatternRatio(progressNow, pattern, 'p50');
+
+    // 推定最終 — パターンベース
+    let patternFinal;
+    if (ratioNow < 0.05 || lastActual === 0) {
+      patternFinal = lastActual;
+    } else {
+      patternFinal = lastActual / ratioNow;
+    }
+
+    // 推定最終 — 直近 7 日トレンドベース
+    let shortFinal = lastActual;
+    if (todayIdx >= 2) {
+      const lookback = Math.min(7, todayIdx);
+      const recent = actualToToday.slice(-lookback - 1);
+      const rate = lookback > 0 ? Math.max(0, (recent[recent.length - 1] - recent[0]) / lookback) : 0;
+      shortFinal = lastActual + rate * (days.length - 1 - todayIdx);
+    }
+
+    // (Phase 17.N-5) 加重平均: 進捗% が高いほど 直近を 重視
+    //   weight_short = 0.2 + 0.6 * progressNow  (序盤 20%, 終盤 80%)
+    //   weight_pattern = 1 - weight_short
+    const wShort = 0.2 + 0.6 * Math.max(0, Math.min(1, progressNow));
+    const wPattern = 1 - wShort;
+    let estimatedFinal = wShort * shortFinal + wPattern * patternFinal;
+    if (capacity && capacity > 0) {
+      estimatedFinal = Math.min(estimatedFinal, capacity);
+    }
+    estimatedFinal = Math.max(lastActual, estimatedFinal);  // 現在値を下回らない
+
+    // 信頼区間用の推定最終 (= p25 / p75 経由)
+    const ratioNow25 = getPatternRatio(progressNow, pattern, 'p25');
+    const ratioNow75 = getPatternRatio(progressNow, pattern, 'p75');
+    // 楽観値 (= p25 ベース、 進捗率 が 同じだと 最終が大きい) ← パーセンタイル小 = 達成早い = 最終件数小、 注意
+    // 期間正規化: lastActual = final × ratioP
+    //   → final = lastActual / ratioP
+    //   ratioP が 小さい → final 大きい (= 楽観)
+    //   ratioP が 大きい → final 小さい (= 悲観)
+    const optimisticFinal = ratioNow25 > 0.05 ? Math.min(capacity || Infinity, lastActual / ratioNow25) : estimatedFinal;
+    const pessimisticFinal = ratioNow75 > 0.05 ? Math.min(capacity || Infinity, lastActual / ratioNow75) : estimatedFinal;
+
+    // 予測曲線生成
+    const predicted = [];
+    const predictedUpper = [];  // 楽観
+    const predictedLower = [];  // 悲観
+    for (let i = todayIdx + 1; i < days.length; i++) {
+      const r = progressAt(i);
+      const ratio = getPatternRatio(r, pattern, 'p50');
+      let v = estimatedFinal * ratio;
+      const prev = i === todayIdx + 1 ? lastActual : predicted[predicted.length - 1];
+      if (v < prev) v = prev;
+      if (capacity && capacity > 0) v = Math.min(v, capacity);
+      predicted.push(Math.round(v));
+
+      // 上下バンド (= 楽観/悲観の パーセンタイルカーブ)
+      let upper = optimisticFinal * getPatternRatio(r, pattern, 'p25');
+      let lower = pessimisticFinal * getPatternRatio(r, pattern, 'p75');
+      if (capacity && capacity > 0) {
+        upper = Math.min(upper, capacity);
+        lower = Math.min(lower, capacity);
+      }
+      const prevU = i === todayIdx + 1 ? lastActual : predictedUpper[predictedUpper.length - 1];
+      const prevL = i === todayIdx + 1 ? lastActual : predictedLower[predictedLower.length - 1];
+      if (upper < prevU) upper = prevU;
+      if (lower < prevL) lower = prevL;
+      predictedUpper.push(Math.round(Math.max(upper, v)));
+      predictedLower.push(Math.round(Math.min(lower, v)));
+    }
+    return {
+      actual: actualToToday,
+      predicted: predicted,
+      predictedUpper: predictedUpper,
+      predictedLower: predictedLower,
+      full: actualToToday.concat(predicted),
+      estimatedFinal: Math.round(estimatedFinal),
+      optimisticFinal: Math.round(Math.min(capacity || Infinity, Math.max(estimatedFinal, optimisticFinal))),
+      pessimisticFinal: Math.round(Math.max(lastActual, Math.min(estimatedFinal, pessimisticFinal))),
+    };
+  };
+
+  // 全体定員 = sessions の capacity 合計 (= single なら event.capacity)
+  let totalCapacity = 0;
+  if (event.format === 'multi' && sessions && sessions.length > 0) {
+    totalCapacity = sessions.reduce((s, x) => s + (Number(x.capacity) || 0), 0);
+  } else if (event.capacity) {
+    totalCapacity = Number(event.capacity);
+  }
+
+  const allData = buildSeries(regs, totalCapacity || null);
+  const sessionData = sessions.map(s => ({
+    session: s,
+    data: buildSeries(regs.filter(r => r.sessionId === s.id), Number(s.capacity) || null),
+  }));
+
+  // SVG 描画パラメータ
+  const W = 800, H = 280, padL = 40, padR = 60, padT = 20, padB = 30;
+  const maxY = Math.max(1, allData.full[allData.full.length - 1], totalCapacity || 5, 5);
+  const xStep = (W - padL - padR) / Math.max(1, days.length - 1);
+  const yScale = (H - padT - padB) / maxY;
+
+  const buildPath = (series, offset = 0) =>
+    series.map((v, i) => `${i === 0 ? 'M' : 'L'} ${padL + (i + offset) * xStep} ${H - padB - v * yScale}`).join(' ');
+
+  const COLOR_ALL = 'var(--jb-ink)';
+  const DAY_COLORS = ['#0EA5E9','#F97316','#10B981','#8B5CF6','#F59E0B','#EC4899'];
+
+  const xLabelStep = totalDays <= 14 ? 2 : totalDays <= 28 ? 4 : 7;
+  const fmtDate = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const isPredicted = todayIdx < days.length - 1;
+
+  // 予測ソース表示
+  const predictionSource = pattern && pattern.sampleCount >= 2
+    ? `過去 ${pattern.sampleCount} イベント × 直近トレンド融合${pattern.avgWeight ? ` (= 類似度 平均 ${(pattern.avgWeight * 100).toFixed(0)}%)` : ''}`
+    : 'ロジスティック S 字 (= フォールバック)';
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
+        <span>登録推移 · {fmtDate(sd)} 〜 {fmtDate(ed)} ({totalDays} 日間){isPredicted && <span style={{marginLeft:8,color:'var(--jb-ink-ghost)'}}>(点線 = 予測 · {predictionSource})</span>}</span>
+      </div>
+      {/* (Phase 17.N-4) Day 別予測カード — 各 Day の 現在 / 予測 / 定員 を 一覧 */}
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))',
+        gap:8,marginBottom:10,
+      }}>
+        {/* 全体 */}
+        <div style={{
+          padding:'10px 12px',
+          background:'var(--jb-paper)',
+          border:'1px solid var(--jb-line)',
+          borderLeft:'3px solid var(--jb-ink)',
+          borderRadius:4,
+        }}>
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.12em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:3}}>全体</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+            <span style={{fontFamily:'var(--jb-display)',fontSize:18,fontWeight:800,color:'var(--jb-ink)',letterSpacing:'-0.01em'}}>{allData.actual[allData.actual.length - 1] || 0}</span>
+            {isPredicted && (
+              <>
+                <span style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-ghost)',margin:'0 2px'}}>→</span>
+                <span style={{fontFamily:'var(--jb-display)',fontSize:14,fontWeight:700,color:'var(--jb-blue-deep)'}}>≈{allData.estimatedFinal}</span>
+              </>
+            )}
+            {totalCapacity > 0 && (
+              <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginLeft:'auto'}}>/ {totalCapacity}</span>
+            )}
+          </div>
+          {/* (Phase 17.N-5) 楽観〜悲観 レンジ表示 */}
+          {isPredicted && allData.optimisticFinal !== undefined && (
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',marginTop:3,letterSpacing:'0.04em'}}>
+              範囲: {allData.pessimisticFinal}〜{allData.optimisticFinal}
+            </div>
+          )}
+          {totalCapacity > 0 && (
+            <div style={{marginTop:5,height:3,background:'var(--jb-paper-mist)',borderRadius:999,overflow:'hidden'}}>
+              <div style={{
+                height:'100%',
+                background:'var(--jb-ink)',
+                width: `${Math.min(100, ((isPredicted ? allData.estimatedFinal : allData.actual[allData.actual.length - 1] || 0) / totalCapacity) * 100)}%`,
+                transition:'width 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
+              }}/>
+            </div>
+          )}
+        </div>
+        {/* Day 別 */}
+        {sessionData.map((ss, i) => {
+          const color = DAY_COLORS[i % DAY_COLORS.length];
+          const now = ss.data.actual[ss.data.actual.length - 1] || 0;
+          const estimated = ss.data.estimatedFinal || 0;
+          const cap = Number(ss.session.capacity) || 0;
+          return (
+            <div key={ss.session.id} style={{
+              padding:'10px 12px',
+              background:'var(--jb-paper)',
+              border:'1px solid var(--jb-line)',
+              borderLeft:`3px solid ${color}`,
+              borderRadius:4,
+            }}>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.12em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:3}}>
+                Day {ss.session.order || (i+1)}
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                <span style={{fontFamily:'var(--jb-display)',fontSize:18,fontWeight:800,color:color,letterSpacing:'-0.01em'}}>{now}</span>
+                {isPredicted && (
+                  <>
+                    <span style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-ghost)',margin:'0 2px'}}>→</span>
+                    <span style={{fontFamily:'var(--jb-display)',fontSize:14,fontWeight:700,color:color,opacity:0.75}}>≈{estimated}</span>
+                  </>
+                )}
+                {cap > 0 && (
+                  <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginLeft:'auto'}}>/ {cap}</span>
+                )}
+              </div>
+              {cap > 0 && (
+                <div style={{marginTop:5,height:3,background:'var(--jb-paper-mist)',borderRadius:999,overflow:'hidden'}}>
+                  <div style={{
+                    height:'100%',
+                    background:color,
+                    width: `${Math.min(100, ((isPredicted ? estimated : now) / cap) * 100)}%`,
+                    transition:'width 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
+                  }}/>
+                </div>
+              )}
+              {/* 充足診断 (= 定員到達予測) */}
+              {cap > 0 && isPredicted && (
+                <div style={{
+                  fontFamily:'var(--jb-mono)',fontSize:8,
+                  marginTop:4,letterSpacing:'0.04em',
+                  color: estimated >= cap ? 'var(--jb-success)' : estimated >= cap * 0.7 ? '#F59E0B' : 'var(--jb-shouwa)',
+                  fontWeight:700,
+                }}>
+                  {estimated >= cap ? '✓ 定員到達見込み' : estimated >= cap * 0.7 ? '! あと一歩 (= ' + (cap - estimated) + ')' : '⚠ 未達見込み (= -' + (cap - estimated) + ')'}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{padding:'16px 18px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:8,overflow:'auto'}}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',minWidth:520,display:'block'}}>
+          {/* Y 軸 グリッド */}
+          {[0, 0.25, 0.5, 0.75, 1].map(t => {
+            const y = H - padB - t * (H - padT - padB);
+            const v = Math.round(maxY * t);
+            return (
+              <g key={t}>
+                <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--jb-line)" strokeDasharray="3,3"/>
+                <text x={padL - 6} y={y + 4} textAnchor="end" fontSize="10" fill="var(--jb-ink-soft)" fontFamily="monospace">{v}</text>
+              </g>
+            );
+          })}
+          {/* (Phase 17.N-2) 定員ライン (= 全体定員、 該当時) */}
+          {totalCapacity > 0 && totalCapacity <= maxY && (
+            <g>
+              <line
+                x1={padL} x2={W - padR}
+                y1={H - padB - totalCapacity * yScale}
+                y2={H - padB - totalCapacity * yScale}
+                stroke="var(--jb-success)" strokeWidth="1" strokeDasharray="6,3" opacity="0.6"
+              />
+              <text x={W - padR + 2} y={H - padB - totalCapacity * yScale + 3}
+                fontSize="9" fill="var(--jb-success)" fontFamily="var(--jb-mono)" fontWeight="700">
+                定員 {totalCapacity}
+              </text>
+            </g>
+          )}
+          {/* 今日の縦線 */}
+          {todayIdx >= 0 && todayIdx < days.length && (
+            <g>
+              <line
+                x1={padL + todayIdx * xStep} y1={padT}
+                x2={padL + todayIdx * xStep} y2={H - padB}
+                stroke="var(--jb-shouwa)" strokeWidth="1.5" strokeDasharray="4,4" opacity="0.5"
+              />
+              <text x={padL + todayIdx * xStep} y={padT + 11}
+                textAnchor="middle" fontSize="9" fontWeight="700"
+                fill="var(--jb-shouwa)" fontFamily="var(--jb-mono)" letterSpacing="0.04em">TODAY</text>
+            </g>
+          )}
+          {/* X 軸ラベル */}
+          {days.map((d, i) => {
+            if (i % xLabelStep !== 0 && i !== days.length - 1) return null;
+            const x = padL + i * xStep;
+            return (
+              <g key={i}>
+                <line x1={x} y1={H - padB} x2={x} y2={H - padB + 4} stroke="var(--jb-ink-soft)"/>
+                <text x={x} y={H - padB + 16} textAnchor="middle" fontSize="9" fill="var(--jb-ink-soft)" fontFamily="monospace">{fmtDate(d)}</text>
+              </g>
+            );
+          })}
+          {/* (Phase 17.N-5) 全体 信頼区間バンド (= 上下バンド、 影付き) */}
+          {allData.predictedUpper && allData.predictedUpper.length > 0 && (() => {
+            const idxOffset = allData.actual.length - 1;
+            const startX = padL + idxOffset * xStep;
+            const startY = H - padB - (allData.actual[allData.actual.length - 1] || 0) * yScale;
+            const upperPath = [startX + ' ' + startY].concat(
+              allData.predictedUpper.map((v, i) => `${padL + (idxOffset + i + 1) * xStep} ${H - padB - v * yScale}`)
+            );
+            const lowerPath = allData.predictedLower.slice().reverse().map((v, i) => {
+              const realI = allData.predictedLower.length - 1 - i;
+              return `${padL + (idxOffset + realI + 1) * xStep} ${H - padB - v * yScale}`;
+            });
+            const bandPath = `M ${upperPath.join(' L ')} L ${lowerPath.join(' L ')} L ${startX} ${startY} Z`;
+            return (
+              <path d={bandPath}
+                fill="var(--jb-ink)" opacity="0.08" stroke="none"
+                style={{opacity:0,animation:'jbFadeInBand 0.8s ease-out 1.8s forwards'}}/>
+            );
+          })()}
+          {/* Day 別 折れ線 */}
+          {sessionData.map((ss, i) => {
+            const color = DAY_COLORS[i % DAY_COLORS.length];
+            const actualPath = buildPath(ss.data.actual);
+            const predictedFull = ss.data.actual.length > 0
+              ? [ss.data.actual[ss.data.actual.length - 1]].concat(ss.data.predicted)
+              : ss.data.predicted;
+            const predictedPath = buildPath(predictedFull, ss.data.actual.length - 1);
+            const lastVal = ss.data.full[ss.data.full.length - 1];
+            return (
+              <g key={ss.session.id}>
+                <path d={actualPath}
+                  stroke={color} strokeWidth="2.5" fill="none" opacity="0.95" strokeLinejoin="round" strokeLinecap="round"
+                  style={{strokeDasharray:2000,strokeDashoffset:2000,animation:`jbDrawLine 1.8s ease-out ${0.3 + i * 0.12}s forwards`}}/>
+                {ss.data.predicted.length > 0 && (
+                  <path d={predictedPath}
+                    stroke={color} strokeWidth="2" fill="none" opacity="0.55" strokeLinejoin="round" strokeLinecap="round"
+                    strokeDasharray="5,4"
+                    style={{opacity:0,animation:`jbFadeIn 0.6s ease-out ${1.8 + i * 0.12}s forwards`}}/>
+                )}
+                {/* (Phase 17.N-4) Day 別 終端マーカー + 予測数値 */}
+                <circle cx={padL + (days.length - 1) * xStep} cy={H - padB - lastVal * yScale}
+                  r="3.5" fill={color} opacity="0.9"
+                  style={{animation:`jbPopIn 0.4s ease-out ${2.2 + i * 0.08}s both`}}/>
+                <text x={padL + (days.length - 1) * xStep + 7} y={H - padB - lastVal * yScale + 3}
+                  textAnchor="start" fontSize="10" fontWeight="700" fill={color} fontFamily="var(--jb-mono)"
+                  style={{animation:`jbPopIn 0.4s ease-out ${2.2 + i * 0.08}s both`}}>
+                  {isPredicted ? '≈' : ''}{lastVal}
+                </text>
+              </g>
+            );
+          })}
+          {/* 全体 折れ線 */}
+          <path d={buildPath(allData.actual)}
+            stroke={COLOR_ALL} strokeWidth="3" fill="none" strokeLinejoin="round" strokeLinecap="round"
+            style={{strokeDasharray:2000,strokeDashoffset:2000,animation:'jbDrawLine 1.8s ease-out forwards'}}/>
+          {allData.predicted.length > 0 && (
+            <path d={(() => {
+              const arr = allData.actual.length > 0
+                ? [allData.actual[allData.actual.length - 1]].concat(allData.predicted)
+                : allData.predicted;
+              return buildPath(arr, allData.actual.length - 1);
+            })()}
+              stroke={COLOR_ALL} strokeWidth="2.5" fill="none" opacity="0.5" strokeLinejoin="round" strokeLinecap="round"
+              strokeDasharray="6,4"
+              style={{opacity:0,animation:'jbFadeIn 0.6s ease-out 1.8s forwards'}}/>
+          )}
+          {/* 終端ドット + 数値 (= 予測末尾値、 N≈ で 推定表示) */}
+          <circle cx={padL + (days.length - 1) * xStep} cy={H - padB - allData.full[allData.full.length - 1] * yScale}
+            r="5" fill={COLOR_ALL} style={{animation:'jbPopIn 0.4s ease-out 2.1s both'}}/>
+          <text x={padL + (days.length - 1) * xStep - 8} y={H - padB - allData.full[allData.full.length - 1] * yScale - 10}
+            textAnchor="end" fontSize="14" fontWeight="800" fill={COLOR_ALL} fontFamily="var(--jb-display)"
+            style={{animation:'jbPopIn 0.4s ease-out 2.1s both'}}>
+            {isPredicted ? `≈${allData.full[allData.full.length - 1]}` : allData.full[allData.full.length - 1]}
+          </text>
+          {/* 今日 時点の値 マーカー */}
+          {todayIdx >= 0 && todayIdx < days.length && allData.actual.length > 0 && (
+            <circle cx={padL + todayIdx * xStep}
+              cy={H - padB - allData.actual[allData.actual.length - 1] * yScale}
+              r="4" fill="#ffffff" stroke={COLOR_ALL} strokeWidth="2.5"
+              style={{animation:'jbPopIn 0.4s ease-out 1.6s both'}}/>
+          )}
+        </svg>
+        <style>{`
+          @keyframes jbDrawLine { to { stroke-dashoffset: 0; } }
+          @keyframes jbPopIn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+          @keyframes jbFadeIn { from { opacity: 0; } to { opacity: 0.55; } }
+          @keyframes jbFadeInBand { from { opacity: 0; } to { opacity: 0.08; } }
+        `}</style>
+      </div>
+    </section>
+  );
+}
+
 function PageEventAdminDetail() {
   const [eventId, setEventId] = useState(() => {
     try {
@@ -5160,6 +5715,7 @@ function PageEventAdminDetail() {
   const [detailModalApp, setDetailModalApp] = useState(null);
   const [activityModal, setActivityModal] = useState(null);  // (Phase 17.K) {mode, activity?, defaultSessionId?}
   const [bulkMailOpen, setBulkMailOpen] = useState(false);  // (Phase 17.M-B4)
+  const [trendPattern, setTrendPattern] = useState(null);  // (Phase 17.N-2) 過去パターン
 
   // hash 変化に追従
   useEffect(() => {
@@ -5195,6 +5751,19 @@ function PageEventAdminDetail() {
       setRegs((Array.isArray(allRegs) ? allRegs : []).filter(r => r.eventId === eventId));
       setParticipants(Array.isArray(parts) ? parts : []);
       setActivities(Array.isArray(acts) ? acts : []);
+      // (Phase 17.N-2) 過去パターンを 別途取得 (= 並列だが エラーで本体ロードを止めない)
+      const dur = ev && ev.regOpenDate && (ev.regCloseDate || ev.date)
+        ? (new Date(ev.regCloseDate || ev.date).getTime() - new Date(ev.regOpenDate).getTime()) / (24 * 60 * 60 * 1000)
+        : 0;
+      const totalCap = ev && ev.format === 'multi' && Array.isArray(sessAll)
+        ? sessAll.filter(s => s.eventId === eventId).reduce((s, x) => s + (Number(x.capacity) || 0), 0)
+        : (ev ? Number(ev.capacity) || 0 : 0);
+      window.postData('admin.getApplicationTrendPattern', {
+        excludeEventId: eventId,
+        format: ev ? (ev.format || 'all') : 'all',
+        durationDays: dur,
+        capacity: totalCap,
+      }).then(p => setTrendPattern(p)).catch(e => { console.warn('trendPattern fetch failed:', e); setTrendPattern(null); });
     } catch (e) {
       console.error('PageEventAdminDetail load failed', e);
     } finally {
@@ -5339,7 +5908,33 @@ function PageEventAdminDetail() {
           <KpiCard label="返金待ち" value={kpi.refundPendingCount} unit="件" color="var(--jb-shouwa)"/>
           <KpiCard label="売上" value={`¥${Number(kpi.netRevenue).toLocaleString()}`} unit="" color="var(--jb-blue)" sub={`入金 ¥${Number(kpi.totalRevenue).toLocaleString()} / 返金 ¥${Number(kpi.totalRefunded).toLocaleString()}`}/>
         </div>
+        {/* (Phase 17.N) 定員消化率 円形メーター (= multi イベント時) */}
+        {event.format === 'multi' && sessions.length > 0 && (
+          <div style={{
+            marginTop:14,
+            padding:'14px 16px',
+            background:'var(--jb-paper)',
+            border:'1px solid var(--jb-line)',
+            borderRadius:6,
+            display:'flex',gap:14,flexWrap:'wrap',alignItems:'center',justifyContent:'center',
+          }}>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600}}>定員消化率</div>
+            {sessionStats.map((stat, i) => (
+              stat.capacity > 0 && (
+                <div key={stat.session.id} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                  <CircleMeter value={stat.active} max={stat.capacity} color={['var(--jb-blue)','var(--jb-shouwa)','var(--jb-success)','#F0A500','#9CA8B2'][i % 5]} size={66}/>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.06em'}}>Day {stat.session.order || (i+1)} ({stat.active}/{stat.capacity})</div>
+                </div>
+              )
+            ))}
+          </div>
+        )}
       </section>
+
+      {/* (Phase 17.N) 登録推移 折れ線グラフ */}
+      {regs.length > 0 && (
+        <ApplicationTrendChart event={event} sessions={sessions} regs={regs} pattern={trendPattern} sessionStats={sessionStats}/>
+      )}
 
       {/* Day / セッション一覧 (multi) */}
       {event.format === 'multi' && sessions.length > 0 && (
@@ -5468,7 +6063,9 @@ function PageEventAdminDetail() {
   );
 }
 
-function KpiCard({ label, value, unit, total, color, sub }) {
+function KpiCard({ label, value, unit, total, color, sub, animate }) {
+  // 数値か文字列か判定 (= 数値ならカウントアップ)
+  const isNumeric = typeof value === 'number';
   return (
     <div style={{
       padding:'12px 14px',
@@ -5476,13 +6073,35 @@ function KpiCard({ label, value, unit, total, color, sub }) {
       border:'1px solid var(--jb-line)',
       borderTop:`3px solid ${color}`,
       borderRadius:6,
+      overflow:'hidden',
+      position:'relative',
     }}>
       <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:4}}>{label}</div>
       <div style={{fontFamily:'var(--jb-display)',fontSize:22,fontWeight:800,color:color,letterSpacing:'-0.01em',lineHeight:1}}>
-        {value}{unit && <span style={{fontSize:11,fontWeight:600,marginLeft:3,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>{unit}</span>}
+        {isNumeric ? <CountUpDisplay value={value}/> : value}
+        {unit && <span style={{fontSize:11,fontWeight:600,marginLeft:3,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>{unit}</span>}
         {total !== undefined && total > 0 && <span style={{fontSize:11,color:'var(--jb-ink-ghost)',marginLeft:4,fontFamily:'var(--jb-mono)'}}>/ {total}</span>}
       </div>
       {sub && <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',letterSpacing:'0.04em',marginTop:4}}>{sub}</div>}
+      {/* (Phase 17.N) 比率メーター (= total 指定時、 下に表示) */}
+      {total !== undefined && total > 0 && isNumeric && (
+        <div style={{
+          marginTop:6,
+          height:3,
+          background:'var(--jb-paper-mist)',
+          borderRadius:999,
+          overflow:'hidden',
+        }}>
+          <div style={{
+            height:'100%',
+            background:color,
+            borderRadius:999,
+            width: `${Math.min(100, (value / total) * 100)}%`,
+            transition:'width 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
+            transformOrigin:'left',
+          }}/>
+        </div>
+      )}
     </div>
   );
 }
@@ -20123,16 +20742,16 @@ function PageHomepageSettings(){
   const SETTING_DEFS = [
     // (Phase 15.S37 / S38) ヘッダータグライン + オープニング演出 — Phase 15.S59 で PC 用にも追加
     { section: 'Header', label: 'ヘッダー (常時表示)', help: 'ロゴの下に小さく出る常時表示テキスト' },
-    { key: 'home_header_tagline_ja',   label: 'タグライン (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
-    { key: 'home_header_tagline_en',   label: 'タグライン (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
-    { key: 'home_header_tagline_easy', label: 'タグライン (やさしい日本語)', ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_ja',   label: 'タグライン (日)',   ph: 'EST. 2025 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_en',   label: 'タグライン (英)',   ph: 'EST. 2025 · TOKYO · JP', type: 'text' },
+    { key: 'home_header_tagline_easy', label: 'タグライン (やさしい日本語)', ph: 'EST. 2025 · TOKYO · JP', type: 'text' },
 
     { section: 'Opening (起動演出)', label: 'オープニング画面', help: 'サイトを開いた瞬間の演出画面 (1.9秒間表示)' },
     { key: 'opening_main_ja',          label: 'メインコピー (日)',   ph: 'WELCOME TO TOKYO', type: 'text' },
     { key: 'opening_main_en',          label: 'メインコピー (英)',   ph: 'WELCOME TO TOKYO', type: 'text' },
     { key: 'opening_main_easy',        label: 'メインコピー (やさしい日本語)', ph: 'ようこそ とうきょうへ', type: 'text' },
-    { key: 'opening_subtitle_ja',      label: 'サブタイトル (日)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: '画面下に小さく表示される装飾テキスト' },
-    { key: 'opening_subtitle_en',      label: 'サブタイトル (英)',   ph: 'EST. 2018 · TOKYO · JP', type: 'text' },
+    { key: 'opening_subtitle_ja',      label: 'サブタイトル (日)',   ph: 'EST. 2025 · TOKYO · JP', type: 'text', help: '画面下に小さく表示される装飾テキスト' },
+    { key: 'opening_subtitle_en',      label: 'サブタイトル (英)',   ph: 'EST. 2025 · TOKYO · JP', type: 'text' },
     { key: 'opening_subtitle_easy',    label: 'サブタイトル (やさしい日本語)', ph: '2018 ねん から · とうきょう', type: 'text' },
 
     { section: 'Hero', label: 'ヒーロー (トップ画面)' },
@@ -20203,7 +20822,7 @@ function PageHomepageSettings(){
     { key: 'footer_tagline_ja',  label: 'ブランドステートメント (日)',  ph: '出会いから、はじまる東京。\n在日外国人留学生と日本人を\nつなぐコミュニティです。', type: 'textarea', help: '改行 (Enter) で 3 行表示できます' },
     { key: 'footer_tagline_en',  label: 'ブランドステートメント (英)',  ph: 'Where strangers become friends.\nA community for international students and locals in Tokyo.', type: 'textarea' },
     { key: 'footer_tagline_easy',label: 'ブランドステートメント (やさしい日本語)', ph: 'であいから、はじまる とうきょう。\nりゅうがくせいと とうきょうのひとが\nつながる ばしょ。', type: 'textarea' },
-    { key: 'footer_est_line',    label: 'EST. 行 (フッター装飾)', ph: 'EST. 2018 · TOKYO · JP', type: 'text', help: 'フッターのブランドステートメント上に表示される小さな装飾テキスト。 言語共通 (日本語/英語版を分けない)' },
+    { key: 'footer_est_line',    label: 'EST. 行 (フッター装飾)', ph: 'EST. 2025 · TOKYO · JP', type: 'text', help: 'フッターのブランドステートメント上に表示される小さな装飾テキスト。 言語共通 (日本語/英語版を分けない)' },
     { key: 'footer_est_year',    label: '設立年 (EST.)', ph: '2018', type: 'text' },
     // (Phase 15.S40) 法人情報 + 著作権を Admin 編集可能に
     { key: 'footer_legal_name_ja',     label: '法人名 (日)', ph: '一般社団法人 connec+a', type: 'text' },
