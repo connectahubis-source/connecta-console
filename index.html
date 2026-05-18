@@ -5159,6 +5159,7 @@ function PageEventAdminDetail() {
   const [loading, setLoading] = useState(true);
   const [detailModalApp, setDetailModalApp] = useState(null);
   const [activityModal, setActivityModal] = useState(null);  // (Phase 17.K) {mode, activity?, defaultSessionId?}
+  const [bulkMailOpen, setBulkMailOpen] = useState(false);  // (Phase 17.M-B4)
 
   // hash 変化に追従
   useEffect(() => {
@@ -5296,6 +5297,10 @@ function PageEventAdminDetail() {
             {/* (Phase 17.M-A1) 編集 — #events?edit=EVT-001 で 該当イベントを直接編集 */}
             <button className="jb-btn jb-btn-primary" onClick={() => { window.location.hash = `events?edit=${event.id}`; }}>
               <Icon n="edit" s={12}/> 編集
+            </button>
+            {/* (Phase 17.M-B4) 一斉メール送信 */}
+            <button className="jb-btn" onClick={() => setBulkMailOpen(true)}>
+              <Icon n="mail" s={12}/> 一斉メール
             </button>
             {/* (Phase 17.M-B2) 印刷 (= タイムテーブル + 出席者) */}
             <button className="jb-btn" onClick={() => window.print()}>
@@ -5448,6 +5453,15 @@ function PageEventAdminDetail() {
           sessions={sessions}
           onClose={() => setActivityModal(null)}
           onSaved={() => { setActivityModal(null); loadAll(); }}
+        />
+      )}
+
+      {/* (Phase 17.M-B4) 一斉メール モーダル */}
+      {bulkMailOpen && (
+        <BulkMailModal
+          event={event}
+          appCount={apps.length}
+          onClose={() => setBulkMailOpen(false)}
         />
       )}
     </div>
@@ -5871,6 +5885,249 @@ function FormRow({ label, children }) {
 }
 
 // =============================================================================
+// (Phase 17.M-B4) BulkMailModal — 同イベントの 全申込者へ一斉メール送信
+// =============================================================================
+function BulkMailModal({ event, appCount, onClose }) {
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+  const [statuses, setStatuses] = useState(['申込済み','決済済み','チェックイン保留','チェックイン済']);
+  const [view, setView] = useState('edit');  // 'edit' | 'preview'
+
+  const toggleStatus = (s) => {
+    setStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  };
+
+  // 件名 quick template
+  const subjectTemplates = [
+    { label: 'リマインダー', text: `【connec+a】 {{event}} 開催前のリマインダー` },
+    { label: 'お礼',         text: `【connec+a】 {{event}} ご参加ありがとうございました` },
+    { label: '変更連絡',     text: `【connec+a】 重要なお知らせ — {{event}}` },
+  ];
+
+  // プレビュー用: {{name}} → "山田 太郎"、 {{event}} → eventTitle に置換
+  const previewName = '山田 太郎';
+  const previewSubject = subject
+    .replace(/\{\{name\}\}/g, previewName)
+    .replace(/\{\{event\}\}/g, event.title || '');
+  const previewBody = body
+    .replace(/\{\{name\}\}/g, previewName)
+    .replace(/\{\{event\}\}/g, event.title || '');
+
+  async function handleSend() {
+    if (!subject.trim()) { window.toast.error('件名必須'); return; }
+    if (!body.trim()) { window.toast.error('本文必須'); return; }
+    if (statuses.length === 0) { window.toast.error('対象ステータスを 1 つ以上'); return; }
+    const ok = await window.confirmDialog({
+      title: `${appCount} 名 程度に メール送信しますか?`,
+      body: `件名: ${subject}\n\n対象ステータス: ${statuses.join(', ')}\n\n本文の {{name}} は 各参加者名、 {{event}} は イベント名に 置換されます。`,
+      confirmLabel: '送信',
+      warn: true,
+    });
+    if (!ok) return;
+    setSending(true);
+    try {
+      const res = await window.postData('admin.sendBulkMail', {
+        eventId: event.id,
+        subject: subject.trim(),
+        body: body.trim(),
+        includeStatuses: statuses,
+      });
+      setResult(res);
+      window.toast.success(`送信完了: ${res.sent} / ${res.total} 件`);
+    } catch (e) {
+      window.toast.error('送信失敗: ' + (e.message || e));
+      setSending(false);
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(30,50,71,0.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:120,padding:20}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'var(--jb-paper)',borderRadius:12,width:780,maxWidth:'96%',maxHeight:'92vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0, 168, 225, 0.25)'}}>
+        <div style={{padding:'22px 26px 18px',background:'linear-gradient(135deg, var(--jb-blue-deep) 0%, var(--jb-blue) 100%)',color:'var(--jb-paper)',borderRadius:'12px 12px 0 0'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.2em',textTransform:'uppercase',opacity:0.85}}>BULK MAIL</div>
+              <div style={{fontFamily:'var(--jb-display)',fontSize:22,fontWeight:800,marginTop:6,letterSpacing:'-0.01em'}}>一斉メール送信</div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,opacity:0.9,marginTop:4}}>{event.title} · 約 {appCount} 名 候補</div>
+            </div>
+            <button onClick={onClose} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:'50%',width:30,height:30,cursor:'pointer',fontSize:18}}>×</button>
+          </div>
+        </div>
+        {result ? (
+          <div style={{padding:'24px 26px'}}>
+            <div style={{fontFamily:'var(--jb-display)',fontSize:28,fontWeight:800,color:result.failed === 0 ? 'var(--jb-success)' : 'var(--jb-shouwa)',marginBottom:8}}>
+              ✓ 送信完了
+            </div>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:12,color:'var(--jb-ink)',marginBottom:14}}>
+              成功 {result.sent} / 失敗 {result.failed} / 合計 {result.total} 件
+            </div>
+            {result.errors && result.errors.length > 0 && (
+              <div style={{padding:10,background:'var(--jb-shouwa-soft)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-shouwa)',whiteSpace:'pre-line'}}>
+                {result.errors.join('\n')}
+              </div>
+            )}
+            <div style={{marginTop:20,display:'flex',justifyContent:'flex-end'}}>
+              <button className="jb-btn jb-btn-primary" onClick={onClose}>閉じる</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* タブ切替 */}
+            <div style={{borderBottom:'1px solid var(--jb-line)',padding:'0 26px',display:'flex',gap:0}}>
+              {[{k:'edit',label:'編集'},{k:'preview',label:'プレビュー (= 受信側の見た目)'}].map(tab => (
+                <button key={tab.k} onClick={() => setView(tab.k)}
+                  style={{
+                    padding:'12px 18px',
+                    background:'transparent',
+                    border:'none',
+                    borderBottom: view === tab.k ? '2px solid var(--jb-blue)' : '2px solid transparent',
+                    color: view === tab.k ? 'var(--jb-blue)' : 'var(--jb-ink-soft)',
+                    fontFamily:'var(--jb-display)',
+                    fontSize:13,fontWeight:700,
+                    cursor:'pointer',letterSpacing:'0.02em',
+                  }}>{tab.label}</button>
+              ))}
+            </div>
+
+            {view === 'edit' && (
+              <div style={{padding:'22px 26px',display:'flex',flexDirection:'column',gap:14}}>
+                <FormRow label="対象ステータス">
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    {['申込済み','決済済み','チェックイン保留','チェックイン済'].map(s => {
+                      const on = statuses.includes(s);
+                      return (
+                        <button key={s} type="button" onClick={() => toggleStatus(s)}
+                          style={{
+                            padding:'4px 10px',
+                            background: on ? 'var(--jb-blue)' : 'var(--jb-paper)',
+                            color: on ? '#fff' : 'var(--jb-ink-soft)',
+                            border: `1px solid ${on ? 'var(--jb-blue)' : 'var(--jb-line)'}`,
+                            borderRadius:4,fontSize:11,fontFamily:'var(--jb-display)',fontWeight:600,cursor:'pointer',
+                          }}>{on ? '✓ ' : ''}{s}</button>
+                      );
+                    })}
+                  </div>
+                </FormRow>
+
+                <FormRow label="件名 *">
+                  <input className="input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例: 【connec+a】 {{event}} のご案内"/>
+                  <div style={{display:'flex',gap:5,marginTop:6,flexWrap:'wrap',alignItems:'center'}}>
+                    <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.06em'}}>テンプレ:</span>
+                    {subjectTemplates.map(tpl => (
+                      <button key={tpl.label} type="button" onClick={() => setSubject(tpl.text)}
+                        style={{
+                          padding:'2px 8px',
+                          background:'var(--jb-paper-mist)',
+                          border:'1px solid var(--jb-line)',
+                          color:'var(--jb-blue-deep)',
+                          fontSize:10,fontFamily:'var(--jb-mono)',fontWeight:600,
+                          borderRadius:3,cursor:'pointer',
+                          letterSpacing:'0.04em',
+                        }}>{tpl.label}</button>
+                    ))}
+                    <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginLeft:'auto'}}>{subject.length} 文字</span>
+                  </div>
+                </FormRow>
+
+                <FormRow label="本文 * — {{name}} {{event}} は自動置換">
+                  <textarea className="input" value={body} onChange={e => setBody(e.target.value)} rows={12} style={{resize:'vertical',fontFamily:'var(--jb-mono)',fontSize:12,lineHeight:1.7}}
+                    placeholder={`{{name}} さん\n\nいつもお世話になっております。 connec+a です。\n\n{{event}} の開催が近づいてきました。 当日のご参加をお待ちしています。\n\n— connec+a 事務局`}/>
+                  <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap',alignItems:'center'}}>
+                    <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.06em'}}>変数挿入:</span>
+                    {['{{name}}','{{event}}'].map(v => (
+                      <button key={v} type="button" onClick={() => setBody(b => b + v)}
+                        style={{
+                          padding:'2px 8px',
+                          background:'var(--jb-blue-soft)',
+                          border:'1px solid var(--jb-blue)',
+                          color:'var(--jb-blue-deep)',
+                          fontSize:10,fontFamily:'var(--jb-mono)',fontWeight:700,
+                          borderRadius:3,cursor:'pointer',
+                          letterSpacing:'0.04em',
+                        }}>{v}</button>
+                    ))}
+                    <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginLeft:'auto'}}>{body.length} 文字 · {body.split('\n').length} 行</span>
+                  </div>
+                </FormRow>
+
+                <div style={{padding:10,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',lineHeight:1.6}}>
+                  ⚠ GAS の MailApp は 1 日 100 通 (= 無料) または 1500 通 (= Workspace) の送信上限あり。 多人数の場合は分割送信を推奨。
+                </div>
+              </div>
+            )}
+
+            {view === 'preview' && (
+              <div style={{padding:'22px 26px',background:'#F2F7FB'}}>
+                {/* メールヘッダー風 */}
+                <div style={{
+                  background:'#fff',
+                  border:'1px solid #D8E4ED',
+                  borderRadius:8,
+                  overflow:'hidden',
+                  boxShadow:'0 4px 16px rgba(0,168,225,0.08)',
+                }}>
+                  {/* From / Subject */}
+                  <div style={{padding:'14px 18px',borderBottom:'1px solid #D8E4ED',background:'#fafbfc'}}>
+                    <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'#8898A6',letterSpacing:'0.06em',marginBottom:3}}>FROM</div>
+                    <div style={{fontFamily:'var(--jb-display)',fontSize:13,fontWeight:700,color:'#1E3247',marginBottom:8}}>connec+a <span style={{color:'#8898A6',fontWeight:400}}>&lt;connecta.hub.is@gmail.com&gt;</span></div>
+                    <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'#8898A6',letterSpacing:'0.06em',marginBottom:3}}>SUBJECT</div>
+                    <div style={{fontFamily:'var(--jb-display)',fontSize:15,fontWeight:800,color:'#1E3247'}}>{previewSubject || '(件名未入力)'}</div>
+                  </div>
+                  {/* ブランド帯 */}
+                  <div style={{
+                    background:'linear-gradient(135deg, #00A8E1 0%, #00C8E5 100%)',
+                    padding:'20px 28px',color:'#fff',
+                    display:'flex',justifyContent:'space-between',alignItems:'center',gap:14,
+                  }}>
+                    <div>
+                      <div style={{fontFamily:'var(--jb-display)',fontSize:20,fontWeight:800,letterSpacing:'-0.01em',lineHeight:1.2}}>connec+a</div>
+                      <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.16em',textTransform:'uppercase',opacity:0.9,marginTop:3}}>{event.title}</div>
+                    </div>
+                    <div style={{
+                      width:56,height:56,
+                      background:'#fff',borderRadius:8,
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      flexShrink:0,
+                    }}>
+                      <span style={{
+                        fontFamily:'serif',fontSize:24,fontWeight:900,
+                        color:'#0a2960',letterSpacing:'-0.02em',
+                      }}>+a</span>
+                    </div>
+                  </div>
+                  {/* 本文 */}
+                  <div style={{padding:'24px 28px',fontSize:14,lineHeight:1.8,color:'#1E3247',whiteSpace:'pre-wrap'}}>
+                    {previewBody || <span style={{color:'#C0CAD3',fontStyle:'italic'}}>(本文未入力)</span>}
+                  </div>
+                  {/* フッター */}
+                  <div style={{borderTop:'1px solid #D8E4ED',padding:'14px 28px 18px',fontSize:10,color:'#8898A6',lineHeight:1.7}}>
+                    <div style={{marginBottom:4}}>このメールは <strong style={{color:'#00A8E1'}}>connec+a</strong> の イベント参加者へお送りしています。</div>
+                    <div style={{marginBottom:6}}>マイページ: <span style={{color:'#00A8E1',textDecoration:'underline'}}>https://connectahubis-source.github.io/event</span></div>
+                    <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.04em',color:'#C0CAD3'}}>一般社団法人 connec+a · 在日外国人留学生 × 日本人 国際交流</div>
+                  </div>
+                </div>
+                <div style={{textAlign:'center',marginTop:14,fontFamily:'var(--jb-mono)',fontSize:10,color:'#8898A6',letterSpacing:'0.06em'}}>
+                  ↑ 「山田 太郎」 さんへの送信例 (= 各参加者には名前が置換されます)
+                </div>
+              </div>
+            )}
+
+            <div style={{padding:'14px 26px 22px',display:'flex',justifyContent:'flex-end',gap:10,borderTop:'1px solid var(--jb-line)'}}>
+              <button className="jb-btn" onClick={onClose} disabled={sending}>キャンセル</button>
+              <button className="jb-btn jb-btn-primary" onClick={handleSend} disabled={sending}>
+                {sending ? '送信中…' : '送信'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // (Phase 17.J) SessionDayList — Day 別の出席者一覧 (展開可能)
 // =============================================================================
 function SessionDayList({ sessions, stats, regs, participantMap, event, onReload }) {
@@ -6059,6 +6316,9 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
                                           : isPending ? '決済確認待ち'
                                           : isPaidStatus ? '決済済'
                                           : '未決済';
+                        // (Phase 17.M-A4) 「[当日申告] 現金 / PayPay」 抽出
+                        const declaredMatch = String(r.note || '').match(/\[当日申告\]\s*(現金|PayPay)/);
+                        const declaredMethod = declaredMatch ? declaredMatch[1] : '';
                         return (
                           <div key={r.id} style={{
                             padding:'8px 10px',
@@ -6067,13 +6327,28 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
                             borderLeft:`3px solid ${statusColor}`,
                             borderRadius:4,
                           }}>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2,gap:6}}>
                               <span style={{fontFamily:'var(--jb-sans)',fontSize:12,fontWeight:700,color:'var(--jb-ink)'}}>{p ? p.name : r.userId}</span>
                               <span style={{padding:'1px 6px',background:'var(--jb-paper-mist)',color:statusColor,fontFamily:'var(--jb-mono)',fontSize:8,fontWeight:700,letterSpacing:'0.06em',borderRadius:999}}>{statusLabel}</span>
                             </div>
                             <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.04em',marginBottom:6}}>
                               {r.id}{p && p.email ? ` · ${p.email}` : ''}
                             </div>
+                            {/* (Phase 17.M-A4) 当日決済方法の申告 pill */}
+                            {declaredMethod && !isPaidStatus && !isCheckedIn && (
+                              <div style={{marginBottom:6}}>
+                                <span style={{
+                                  display:'inline-block',
+                                  padding:'2px 8px',
+                                  background: declaredMethod === '現金' ? '#65a30d' : '#dc2626',
+                                  color:'#fff',
+                                  fontSize:9,fontWeight:800,
+                                  borderRadius:3,
+                                  fontFamily:'var(--jb-mono)',
+                                  letterSpacing:'0.04em',
+                                }}>当日申告: {declaredMethod}</span>
+                              </div>
+                            )}
                             {/* (Phase 17.M-A2/A3) クイックアクション */}
                             <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                               {!isCheckedIn && !isPending && (
@@ -15676,12 +15951,14 @@ function PageQR(){
       if (unpaidResults.length > 0) {
         if (window.playChime) window.playChime({ volume: 0.6 });
         // 大型警告ダイアログ (= 「決済を確認しました」 ボタン付き)
-        const lines = unpaidResults.map(r =>
-          `${r.userName || r.userId} / ${r.eventTitle}${r.sessionInfo ? ' · ' + r.sessionInfo : ''} / ¥${Number(r.amount || 0).toLocaleString()}`
-        );
+        const lines = unpaidResults.map(r => {
+          const declaredTag = r.declaredMethod ? ` 【参加者申告: ${r.declaredMethod}】` : '';
+          return `${r.userName || r.userId} / ${r.eventTitle}${r.sessionInfo ? ' · ' + r.sessionInfo : ''} / ¥${Number(r.amount || 0).toLocaleString()}${declaredTag}`;
+        });
+        const hasDeclared = unpaidResults.some(r => r.declaredMethod);
         const confirmed = await window.confirmDialog({
           title: '⚠ 未決済です。 決済を完了してください',
-          body: `${lines.join('\n')}\n\n上記の参加者の決済を確認したら 「決済を確認しました」 を押してください。`,
+          body: `${lines.join('\n')}\n\n${hasDeclared ? '※ 上記の【参加者申告】 を参考に 決済方法を確認してください。\n' : ''}決済を確認したら 「決済を確認しました」 を押してください。`,
           confirmLabel: '決済を確認しました',
           cancelLabel: '後で確認',
           warn: true,
