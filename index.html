@@ -1674,6 +1674,43 @@ svg{display:block}
    * 例: invalidateCache('listMembers') → listMembers* 全部クリア
    *     invalidateCache() → 全キャッシュクリア
    */
+
+  /**
+   * (Phase 17.L) playChime — Web Audio API で 2 連続トーンを再生
+   * 880Hz → 1100Hz の 0.18s ずつ、 音量 0.5
+   * QR 未決済警告で使う (= エラーではないが目立つ音)
+   */
+  window.playChime = function(opts) {
+    opts = opts || {};
+    const volume = typeof opts.volume === 'number' ? opts.volume : 0.5;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const tones = [880, 1100];  // チャイム的 2 連続
+      const duration = 0.18;
+      tones.forEach(function(freq, i) {
+        const t0 = ctx.currentTime + i * (duration + 0.05);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, t0);
+        gain.gain.linearRampToValueAtTime(volume, t0 + 0.01);
+        gain.gain.linearRampToValueAtTime(volume, t0 + duration - 0.04);
+        gain.gain.linearRampToValueAtTime(0, t0 + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + duration);
+      });
+      // 自動でクローズ (= リソース解放)
+      setTimeout(function() { try { ctx.close(); } catch (e) {} }, (tones.length * (duration + 0.05) + 0.2) * 1000);
+    } catch (e) {
+      console.warn('playChime failed', e);
+    }
+  };
+
   window.invalidateCache = function(pattern) {
     if (!pattern) {
       window._dataCache.clear();
@@ -4769,6 +4806,25 @@ function PageSatisfaction(){
       );
       const allResp = [].concat(...respArrays.map(r => Array.isArray(r) ? r : []));
       setResponses(allResp);
+      // (Phase 17.M-A1) URL ?edit=EVT-001 を検出 → 該当イベントを自動編集
+      try {
+        const hash = window.location.hash || '';
+        const qIdx = hash.indexOf('?');
+        if (qIdx >= 0) {
+          const qs = new URLSearchParams(hash.substring(qIdx + 1));
+          const editId = qs.get('edit');
+          if (editId) {
+            const target = (Array.isArray(evs) ? evs : []).find(e => e.id === editId);
+            if (target) {
+              setEditing({ mode: 'edit', values: target });
+              // クエリ削除 (= 二重発火防止)
+              setTimeout(() => {
+                history.replaceState(null, '', '#events');
+              }, 200);
+            }
+          }
+        }
+      } catch (e) {}
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -5237,9 +5293,13 @@ function PageEventAdminDetail() {
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {/* (Phase 17.I) 編集は 一覧画面で行う (= PageEvents の編集パネルを利用) */}
-            <button className="jb-btn" onClick={() => { window.location.hash = 'events'; }}>
-              <Icon n="edit" s={12}/> 編集 (一覧へ)
+            {/* (Phase 17.M-A1) 編集 — #events?edit=EVT-001 で 該当イベントを直接編集 */}
+            <button className="jb-btn jb-btn-primary" onClick={() => { window.location.hash = `events?edit=${event.id}`; }}>
+              <Icon n="edit" s={12}/> 編集
+            </button>
+            {/* (Phase 17.M-B2) 印刷 (= タイムテーブル + 出席者) */}
+            <button className="jb-btn" onClick={() => window.print()}>
+              <Icon n="download" s={12}/> 印刷
             </button>
             <a href={`#qr?eventId=${event.id}`} className="jb-btn">
               <Icon n="qr" s={12}/> QR
@@ -5247,6 +5307,22 @@ function PageEventAdminDetail() {
           </div>
         </div>
       </section>
+
+      {/* (Phase 17.M-B2) 印刷専用 CSS */}
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 12mm; }
+          body { background: #fff !important; }
+          /* サイドバー / ヘッダー / ナビ など 非表示 */
+          aside, nav, header, .jb-sidebar, .toast-host, .confirm-modal-bg { display: none !important; }
+          /* ボタン非表示 */
+          button, .jb-btn { display: none !important; }
+          /* カードの shadow / hover 無効化 */
+          * { box-shadow: none !important; }
+          /* タイムテーブルは スクロール無効 + 折り返し */
+          section[data-print-section] { page-break-inside: avoid; }
+        }
+      `}</style>
 
       {/* KPI サマリー */}
       <section style={{marginBottom:24}}>
@@ -5276,6 +5352,7 @@ function PageEventAdminDetail() {
             regs={regs}
             participantMap={participantMap}
             event={event}
+            onReload={loadAll}
           />
         </>
       )}
@@ -5796,13 +5873,111 @@ function FormRow({ label, children }) {
 // =============================================================================
 // (Phase 17.J) SessionDayList — Day 別の出席者一覧 (展開可能)
 // =============================================================================
-function SessionDayList({ sessions, stats, regs, participantMap, event }) {
+function SessionDayList({ sessions, stats, regs, participantMap, event, onReload }) {
   const [expandedId, setExpandedId] = useState(null);
+  const miniBtnStyle = (color, outline) => ({
+    padding:'2px 8px',
+    fontSize:9,fontWeight:700,
+    fontFamily:'var(--jb-mono)',letterSpacing:'0.04em',
+    background: outline ? 'transparent' : color,
+    color: outline ? color : '#fff',
+    border:`1px solid ${color}`,
+    borderRadius:3,cursor:'pointer',
+  });
+  // (Phase 17.M-B1) CSV エクスポート
+  const downloadCsv = (filename, rows) => {
+    const csv = rows.map(row => row.map(cell => {
+      const s = String(cell == null ? '' : cell);
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+  };
+  const exportDayCsv = (sess) => {
+    const sessRegs = regs.filter(r => r.sessionId === sess.id);
+    const active = sessRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+    const rows = [
+      ['RegID','名前','メール','ステータス','決済','金額','備考'],
+      ...active.map(r => {
+        const p = participantMap[r.userId] || {};
+        return [r.id, p.name || r.userId, p.email || '', r.status, r.paid ? '済' : '未', r.amount || '', r.note || ''];
+      }),
+    ];
+    const dateStr = (sess.date || '').replace(/-/g, '');
+    downloadCsv(`${event.id}_Day${sess.order || ''}_${dateStr}_attendees.csv`, rows);
+  };
+  const exportAllCsv = () => {
+    const rows = [
+      ['EventID','Day','RegID','名前','メール','ステータス','決済','金額','備考'],
+    ];
+    sessions.forEach(sess => {
+      const sessRegs = regs.filter(r => r.sessionId === sess.id);
+      const active = sessRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+      active.forEach(r => {
+        const p = participantMap[r.userId] || {};
+        rows.push([event.id, `Day${sess.order || ''}`, r.id, p.name || r.userId, p.email || '', r.status, r.paid ? '済' : '未', r.amount || '', r.note || '']);
+      });
+    });
+    downloadCsv(`${event.id}_all_attendees.csv`, rows);
+  };
+  // (Phase 17.M-A2/A3) 手動チェックイン / 決済済マーク
+  const handleManualCheckin = async (reg) => {
+    try {
+      const res = await window.postData('admin.checkin', { regId: reg.id });
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      if (res && res.requiresPayment) {
+        window.toast.warn(`${res.userName || reg.userId}: チェックイン保留 (= 未決済)`);
+      } else {
+        window.toast.success(`${res.userName || reg.userId}: 入場完了`);
+      }
+      if (onReload) onReload();
+    } catch (e) {
+      window.toast.error('チェックイン失敗: ' + (e.message || e));
+    }
+  };
+  const handleMarkPaid = async (reg) => {
+    const ok = await window.confirmDialog({
+      title: '決済済にしますか?',
+      body: `${reg.id} を「決済済」 にマークします。`,
+      confirmLabel: '決済済にする',
+    });
+    if (!ok) return;
+    try {
+      await window.postData('updateRegistration', { regId: reg.id, fields: { paid: true, status: '決済済' } });
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      window.toast.success('決済済にしました');
+      if (onReload) onReload();
+    } catch (e) {
+      window.toast.error('失敗: ' + (e.message || e));
+    }
+  };
+  const handleConfirmPayment = async (reg) => {
+    try {
+      await window.postData('admin.confirmPayment', { regId: reg.id, paymentMethod: '当日確認' });
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      window.toast.success('決済確認 → 入場完了');
+      if (onReload) onReload();
+    } catch (e) {
+      window.toast.error('失敗: ' + (e.message || e));
+    }
+  };
   return (
     <section style={{marginBottom:24}}>
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
         <span>Day / セッション ({sessions.length})</span>
-        <span style={{color:'var(--jb-ink-ghost)',fontSize:9,letterSpacing:'0.1em',textTransform:'none'}}>クリックで出席者展開</span>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <button onClick={exportAllCsv} className="jb-btn" style={{padding:'3px 9px',fontSize:9,letterSpacing:'0.04em'}}>
+            <Icon n="download" s={10}/> 全 Day CSV
+          </button>
+          <span style={{color:'var(--jb-ink-ghost)',fontSize:9,letterSpacing:'0.1em',textTransform:'none'}}>クリックで出席者展開</span>
+        </div>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:6}}>
         {stats.map((stat, i) => {
@@ -5860,6 +6035,13 @@ function SessionDayList({ sessions, stats, regs, participantMap, event }) {
               {/* 出席者一覧 (展開時) */}
               {isExpanded && (
                 <div style={{padding:'12px 14px 14px',borderTop:'1px solid var(--jb-line)',background:'var(--jb-paper-mist)'}}>
+                  <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+                    <button onClick={(e) => { e.stopPropagation(); exportDayCsv(s); }}
+                      className="jb-btn"
+                      style={{padding:'3px 9px',fontSize:9,letterSpacing:'0.04em'}}>
+                      <Icon n="download" s={10}/> Day {s.order || (i+1)} CSV
+                    </button>
+                  </div>
                   {activeRegs.length === 0 ? (
                     <div style={{padding:14,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>申込なし</div>
                   ) : (
@@ -5867,11 +6049,14 @@ function SessionDayList({ sessions, stats, regs, participantMap, event }) {
                       {activeRegs.map(r => {
                         const p = participantMap[r.userId];
                         const isCheckedIn = r.status === 'チェックイン済';
+                        const isPending = r.status === 'チェックイン保留';
                         const isPaidStatus = r.paid || r.status === '決済済';
                         const statusColor = isCheckedIn ? 'var(--jb-blue-deep)'
+                                          : isPending ? 'var(--jb-shouwa)'
                                           : isPaidStatus ? 'var(--jb-success)'
                                           : 'var(--jb-blue)';
                         const statusLabel = isCheckedIn ? '入場済'
+                                          : isPending ? '決済確認待ち'
                                           : isPaidStatus ? '決済済'
                                           : '未決済';
                         return (
@@ -5886,8 +6071,20 @@ function SessionDayList({ sessions, stats, regs, participantMap, event }) {
                               <span style={{fontFamily:'var(--jb-sans)',fontSize:12,fontWeight:700,color:'var(--jb-ink)'}}>{p ? p.name : r.userId}</span>
                               <span style={{padding:'1px 6px',background:'var(--jb-paper-mist)',color:statusColor,fontFamily:'var(--jb-mono)',fontSize:8,fontWeight:700,letterSpacing:'0.06em',borderRadius:999}}>{statusLabel}</span>
                             </div>
-                            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
+                            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.04em',marginBottom:6}}>
                               {r.id}{p && p.email ? ` · ${p.email}` : ''}
+                            </div>
+                            {/* (Phase 17.M-A2/A3) クイックアクション */}
+                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                              {!isCheckedIn && !isPending && (
+                                <button onClick={() => handleManualCheckin(r)} style={miniBtnStyle('var(--jb-blue-deep)')}>入場</button>
+                              )}
+                              {isPending && (
+                                <button onClick={() => handleConfirmPayment(r)} style={miniBtnStyle('var(--jb-success)')}>決済確認</button>
+                              )}
+                              {!isPaidStatus && !isCheckedIn && (
+                                <button onClick={() => handleMarkPaid(r)} style={miniBtnStyle('var(--jb-success)', true)}>決済済</button>
+                              )}
                             </div>
                           </div>
                         );
@@ -15459,25 +15656,68 @@ function PageQR(){
         );
       }
 
-      // 並列で 全対象 reg を チェックイン
-      await Promise.all(
+      // (Phase 17.L) 並列で 全対象 reg を チェックイン (= admin.checkin で 未決済判定 + 警告フラグ取得)
+      const results = await Promise.all(
         checkInTargets.map(r =>
-          window.postData('updateRegistration', { regId: r.id, fields: { status: 'チェックイン済' } })
+          window.postData('admin.checkin', { regId: r.id })
             .catch(err => { throw err; })
         )
       );
-      // ローカル state も更新
-      const updatedRegIds = new Set(checkInTargets.map(r => r.id));
-      setRegistrations(prev => prev.map(r =>
-        updatedRegIds.has(r.id) ? { ...r, status: 'チェックイン済' } : r
-      ));
-      const sessionInfo = checkInTargets.length > 1
-        ? ` (${checkInTargets.length} セッション一括${modeLabel})`
-        : modeLabel
-        ? ` (${modeLabel})`
-        : '';
-      setLastResult(buildResult('success', '入場完了', `チェックインしました${sessionInfo}`));
-      playSuccess();
+      // ローカル state も更新 (= status は backend の newStatus に従う)
+      const resultByRegId = {};
+      results.forEach(res => { if (res && res.regId) resultByRegId[res.regId] = res; });
+      setRegistrations(prev => prev.map(r => {
+        const res = resultByRegId[r.id];
+        if (!res) return r;
+        return { ...r, status: res.newStatus || r.status };
+      }));
+      // (Phase 17.L) 未決済 reg を抽出 → 警告ダイアログ + 大音 + 「決済を確認しました」 ボタン
+      const unpaidResults = results.filter(res => res && res.requiresPayment === true);
+      if (unpaidResults.length > 0) {
+        if (window.playChime) window.playChime({ volume: 0.6 });
+        // 大型警告ダイアログ (= 「決済を確認しました」 ボタン付き)
+        const lines = unpaidResults.map(r =>
+          `${r.userName || r.userId} / ${r.eventTitle}${r.sessionInfo ? ' · ' + r.sessionInfo : ''} / ¥${Number(r.amount || 0).toLocaleString()}`
+        );
+        const confirmed = await window.confirmDialog({
+          title: '⚠ 未決済です。 決済を完了してください',
+          body: `${lines.join('\n')}\n\n上記の参加者の決済を確認したら 「決済を確認しました」 を押してください。`,
+          confirmLabel: '決済を確認しました',
+          cancelLabel: '後で確認',
+          warn: true,
+        });
+        if (confirmed) {
+          // 全 unpaid reg を 'チェックイン済' に
+          try {
+            await Promise.all(unpaidResults.map(r =>
+              window.postData('admin.confirmPayment', { regId: r.regId, paymentMethod: '当日確認' })
+            ));
+            // ローカル state を 'チェックイン済' に
+            const confirmedIds = new Set(unpaidResults.map(r => r.regId));
+            setRegistrations(prev => prev.map(r =>
+              confirmedIds.has(r.id) ? { ...r, status: 'チェックイン済', paid: true } : r
+            ));
+            if (window.invalidateCache) {
+              window.invalidateCache('listRegistrations');
+            }
+            setLastResult(buildResult('success', '入場完了', `${unpaidResults.length} 件の決済を確認しました`));
+            playSuccess();
+          } catch (err) {
+            setLastResult(buildResult('error', '決済確認失敗', err.message || String(err)));
+            playError();
+          }
+        } else {
+          setLastResult(buildResult('warn', `未決済 ${unpaidResults.length} 件 保留中`, '後で「決済を確認しました」 を押してください'));
+        }
+      } else {
+        const sessionInfo = checkInTargets.length > 1
+          ? ` (${checkInTargets.length} セッション一括${modeLabel})`
+          : modeLabel
+          ? ` (${modeLabel})`
+          : '';
+        setLastResult(buildResult('success', '入場完了', `チェックインしました${sessionInfo}`));
+        playSuccess();
+      }
     } catch (err) {
       setLastResult(buildResult('error', 'チェックイン失敗', err.message || String(err)));
       playError();
