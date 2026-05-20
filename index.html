@@ -5643,6 +5643,8 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
       missing_sample: regs.find(r => !r.nationality && !(r.participant && r.participant.nationality)) || null,
     });
   }, [regs]);
+  // (Phase 17.Q-fix) event が null の場合は何も描画しない (= 初回ロード中)
+  if (!event) return null;
   const startDate = event.regOpenDate || event.createdAt || (regs[0] && (regs[0].appliedAt || regs[0].createdAt));
   const endDate = event.regCloseDate || event.date;
   if (!startDate || !endDate || regs.length === 0) {
@@ -6577,6 +6579,9 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
 function EventPromoPanel({ event, promos, regs, onChange }) {
   const [modal, setModal] = useState(null);  // { mode: 'create'|'edit', promo? }
 
+  // (Phase 17.Q-fix) event が null の場合は何も描画しない
+  if (!event) return null;
+
   // (Phase 17.O) ブースト効果計算 — 各広報後 3 日間 と それ以前 3 日間 の 新規申込数 比較
   const boostStats = React.useMemo(() => {
     if (!promos || promos.length === 0 || !regs) return null;
@@ -6988,13 +6993,14 @@ function LinkBuilderModal({ event, onClose }) {
   })();
 
   const targetUrl = (function() {
-    const u = new URL(baseUrl);
-    if (event && event.id) u.hash = `event/${event.id}`;
+    // (Phase 17.R) 自動リダイレクト対応 — `?event=E-XXX&ref=...` 形式
+    //   Participants サイトが ?event= を 読み取り、 ログイン後 自動で 該当イベント詳細へ
     const params = new URLSearchParams();
+    if (event && event.id) params.set('event', event.id);
     if (ref) params.set('ref', ref);
     if (campaign) params.set('campaign', campaign);
     const qs = params.toString();
-    return u.toString() + (qs ? (u.toString().indexOf('?') < 0 ? '?' : '&') + qs : '');
+    return baseUrl + (qs ? (baseUrl.indexOf('?') < 0 ? '?' : '&') + qs : '');
   })();
 
   const handleCopy = () => {
@@ -7401,6 +7407,21 @@ function PageEventAdminDetail() {
 
   // KPI 集計
   const kpi = useMemo(() => {
+    // (Phase 17.Q) event が null (= 初回ロード中) の場合は 空 KPI を返す
+    if (!event) {
+      return {
+        totalApps: 0, activeApps: 0, cancelledApps: 0, activeRegs: 0,
+        paidApps: 0, refundPendingCount: 0,
+        totalRevenue: 0, totalRefunded: 0, netRevenue: 0,
+        cancelRate: 0, avgDaysFromOpen: null,
+        repeaterCount: 0, repeaterRate: 0,
+        checkedInCount: 0, checkInRate: 0,
+        dailyPace: 0, projectedSoldOutDate: null, totalCapacity: 0,
+        channelCount: 0, topChannel: null, topChannelCount: 0,
+        referralKnownUsers: 0, referralDirectUsers: 0,
+        promoRoi: null, totalReach: 0,
+      };
+    }
     let activeAppCount = 0, paidAppCount = 0, refundPendingCount = 0, cancelledAppCount = 0;
     let totalRevenue = 0, totalRefunded = 0;
     apps.forEach(a => {
