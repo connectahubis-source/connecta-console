@@ -6914,8 +6914,30 @@ function ReferralPanel({ event }) {
       {loading ? (
         <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>読み込み中…</div>
       ) : !stats || totalAll === 0 ? (
-        <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>
-          流入データ なし。 「計測リンクを 作成」 で SNS 投稿用 URL を生成して 計測を開始してください。
+        <div style={{
+          padding:'30px 20px',
+          background:'linear-gradient(135deg, var(--jb-paper-mist) 0%, #E0EFFD 100%)',
+          borderRadius:8,
+          textAlign:'center',
+          border:'1px dashed var(--jb-blue)',
+        }}>
+          <div style={{fontFamily:'var(--jb-display)',fontSize:14,fontWeight:800,color:'var(--jb-blue-deep)',marginBottom:6,letterSpacing:'-0.01em'}}>
+            流入データ なし
+          </div>
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',letterSpacing:'0.04em',marginBottom:16,lineHeight:1.6}}>
+            SNS 投稿用の URL を 生成して 計測を 開始しましょう<br/>
+            生成された URL を Instagram / LINE / X 等に 貼ると、 自動で 流入元を 記録します
+          </div>
+          <button onClick={() => setBuilderOpen(true)} style={{
+            padding:'10px 24px',
+            fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,letterSpacing:'0.1em',
+            background:'var(--jb-blue)',color:'#fff',
+            border:'none',borderRadius:4,cursor:'pointer',
+            boxShadow:'0 4px 12px rgba(0, 168, 225, 0.3)',
+            textTransform:'none',
+          }}>
+            計測を 開始する →
+          </button>
         </div>
       ) : (
         <div style={{
