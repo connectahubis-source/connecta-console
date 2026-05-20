@@ -5621,7 +5621,7 @@ function NationalityWorldMap({ regs }) {
 
 window.NationalityWorldMap = NationalityWorldMap;
 
-function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats }) {
+function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, promos }) {
   // (Phase 17.N-6) グルーピングモード切替: 'session' (= Day 別) / 'payment' (= 決済方法別)
   const [groupMode, setGroupMode] = useState('session');
   // (Phase 17.N-6) hover state
@@ -6023,6 +6023,8 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
       for (const key in REGION_MAP) {
         if (nat.indexOf(key) >= 0) return REGION_MAP[key];
       }
+      // (Phase 17.N-12.5) マッピング外 = 「その他」 だが、 生値を ログに残す
+      console.warn('[regionOf] unmapped nationality:', JSON.stringify(nat), 'hex:', Array.from(nat).map(c => c.charCodeAt(0).toString(16)).join(' '));
       return 'その他';
     };
     const ORDER = ['アジア','ヨーロッパ','北米','南米','アフリカ','オセアニア','中東','その他','不明'];
@@ -6061,6 +6063,35 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
       key: k,
       label: k,
       data: buildSeries(buckets[k], null, { groupType: 'cumulative' }),
+    }));
+  } else if (groupMode === 'referral') {
+    // (Phase 17.P) 流入経路別 — 上位 6 + その他
+    const refOf = (r) => {
+      const v = String(r.referralRef || '').trim();
+      return v || '直接';
+    };
+    const buckets = {};
+    regs.forEach(r => {
+      const k = refOf(r);
+      if (!buckets[k]) buckets[k] = [];
+      buckets[k].push(r);
+    });
+    const sortedKeys = Object.keys(buckets).sort((a, b) => {
+      if (a === '直接') return 1;
+      if (b === '直接') return -1;
+      return buckets[b].length - buckets[a].length;
+    });
+    const topKeys = sortedKeys.slice(0, 6);
+    const rest = sortedKeys.slice(6);
+    const orderedBuckets = {};
+    topKeys.forEach(k => { orderedBuckets[k] = buckets[k]; });
+    if (rest.length > 0) {
+      orderedBuckets['その他 (' + rest.length + ' 経路)'] = rest.reduce((acc, k) => acc.concat(buckets[k]), []);
+    }
+    groupedData = Object.keys(orderedBuckets).map(k => ({
+      key: k,
+      label: k,
+      data: buildSeries(orderedBuckets[k], null, { groupType: 'cumulative' }),
     }));
   } else if (groupMode === 'country') {
     // (Phase 17.N-10/11) 国別 — 上位 6 ヵ国 + その他
@@ -6138,6 +6169,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
             {k:'region',l:'地域'},
             {k:'country',l:'国別'},
             {k:'origin',l:'日本人/在留'},
+            {k:'referral',l:'流入経路'},
           ].map(opt => (
             <button key={opt.k} type="button" onClick={() => setGroupMode(opt.k)}
               style={{
@@ -6327,6 +6359,43 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
               </text>
             </g>
           )}
+          {/* (Phase 17.O) 広報日マーカー — 縦線 + チャネルラベル */}
+          {(promos || []).map((promo, idx) => {
+            if (!promo.date) return null;
+            const promoDate = toDate(promo.date);
+            if (!promoDate) return null;
+            promoDate.setHours(0, 0, 0, 0);
+            // days 内 何番目か
+            const dayIdx = Math.floor((promoDate.getTime() - sd.getTime()) / (24 * 60 * 60 * 1000));
+            if (dayIdx < 0 || dayIdx > totalDays) return null;
+            const x = padL + dayIdx * xStep;
+            const isPast = promo.status === '実施済' || (promo.status !== '中止' && promoDate <= today);
+            const color = promo.status === '中止' ? 'var(--jb-ink-ghost)'
+                        : isPast ? 'var(--jb-blue)'
+                        : 'var(--jb-blue-deep)';
+            const channelShort = (function() {
+              const c = promo.channel || '';
+              if (c.indexOf('Insta') >= 0) return 'IG';
+              if (c.indexOf('LINE') >= 0) return 'LINE';
+              if (c === 'X' || c === 'Twitter') return 'X';
+              if (c.indexOf('メルマガ') >= 0) return 'メ';
+              if (c.indexOf('チラシ') >= 0) return '紙';
+              return c.substring(0, 2);
+            })();
+            return (
+              <g key={promo.id || idx}>
+                <line
+                  x1={x} y1={padT + 18}
+                  x2={x} y2={H - padB}
+                  stroke={color} strokeWidth="1" strokeDasharray="2,3" opacity={promo.status === '中止' ? 0.3 : 0.5}
+                />
+                <circle cx={x} cy={padT + 8} r="6" fill={color} opacity={promo.status === '中止' ? 0.4 : 0.9}/>
+                <text x={x} y={padT + 11}
+                  textAnchor="middle" fontSize="7" fontWeight="800"
+                  fill="#fff" fontFamily="var(--jb-mono)">{channelShort}</text>
+              </g>
+            );
+          })}
           {/* 今日の縦線 */}
           {todayIdx >= 0 && todayIdx < days.length && (
             <g>
@@ -6499,6 +6568,741 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
   );
 }
 
+// =============================================================================
+// (Phase 17.N-13) ApplicationsListSection — 申込者一覧 (= フィルタ + 検索)
+// =============================================================================
+// =============================================================================
+// (Phase 17.O) EventPromoPanel — 広報 一覧 + 追加 + 編集 + 削除 + ブースト効果
+// =============================================================================
+function EventPromoPanel({ event, promos, regs, onChange }) {
+  const [modal, setModal] = useState(null);  // { mode: 'create'|'edit', promo? }
+
+  // (Phase 17.O) ブースト効果計算 — 各広報後 3 日間 と それ以前 3 日間 の 新規申込数 比較
+  const boostStats = React.useMemo(() => {
+    if (!promos || promos.length === 0 || !regs) return null;
+    const toDate = s => { if (!s) return null; if (s instanceof Date) return s; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+    return promos
+      .filter(p => p.status === '実施済' || (p.status !== '中止' && toDate(p.date) <= new Date()))
+      .map(p => {
+        const pd = toDate(p.date);
+        if (!pd) return null;
+        pd.setHours(0, 0, 0, 0);
+        const before3 = new Date(pd.getTime() - 3 * 24 * 60 * 60 * 1000);
+        const after3 = new Date(pd.getTime() + 3 * 24 * 60 * 60 * 1000);
+        const beforeUsers = new Set();
+        const afterUsers = new Set();
+        regs.forEach(r => {
+          const ad = toDate(r.appliedAt || r.createdAt);
+          if (!ad || !r.userId) return;
+          if (ad >= before3 && ad < pd) beforeUsers.add(r.userId);
+          if (ad >= pd && ad < after3) afterUsers.add(r.userId);
+        });
+        return {
+          promo: p,
+          beforeCount: beforeUsers.size,
+          afterCount: afterUsers.size,
+          delta: afterUsers.size - beforeUsers.size,
+        };
+      })
+      .filter(Boolean);
+  }, [promos, regs]);
+
+  const formatDate = (d) => {
+    if (!d) return '';
+    const dd = d instanceof Date ? d : new Date(d);
+    if (isNaN(dd.getTime())) return String(d);
+    return `${dd.getMonth() + 1}/${dd.getDate()}`;
+  };
+
+  const handleSave = async (formData) => {
+    try {
+      await window.postData('admin.savePromo', formData);
+      window.toast.success(formData.promoId ? '広報を更新しました' : '広報を追加しました');
+      setModal(null);
+      if (onChange) onChange();
+    } catch (e) {
+      window.toast.error('失敗: ' + (e.message || e));
+    }
+  };
+
+  const handleDelete = async (promo) => {
+    const ok = await window.confirmDialog({
+      title: '削除確認',
+      body: `${promo.channel} (${formatDate(promo.date)}) を 削除しますか?`,
+      confirmLabel: '削除する',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await window.postData('admin.deletePromo', { promoId: promo.id });
+      window.toast.success('削除しました');
+      if (onChange) onChange();
+    } catch (e) {
+      window.toast.error('失敗: ' + (e.message || e));
+    }
+  };
+
+  const CHANNEL_COLORS = {
+    'Instagram': '#E1306C', 'LINE': '#06C755', 'X': '#000000',
+    'Twitter': '#1DA1F2', 'メルマガ': '#0EA5E9', 'チラシ': '#F59E0B',
+    'その他': '#9CA8B2',
+  };
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
+        <span>広報計画 ({(promos || []).length})</span>
+        <button onClick={() => setModal({ mode: 'create' })} style={{
+          padding:'4px 10px',fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:700,letterSpacing:'0.06em',
+          background:'var(--jb-blue)',color:'#fff',border:'1px solid var(--jb-blue)',
+          borderRadius:3,cursor:'pointer',textTransform:'none',
+        }}>+ 広報を追加</button>
+      </div>
+      {(!promos || promos.length === 0) ? (
+        <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>
+          まだ広報がありません。 「+ 広報を追加」 から 投稿予定や 実施履歴を 記録してください。
+        </div>
+      ) : (
+        <>
+          {/* 広報一覧 */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',gap:8,marginBottom:10}}>
+            {promos.map(p => {
+              const color = CHANNEL_COLORS[p.channel] || '#9CA8B2';
+              const stat = boostStats && boostStats.find(b => b.promo.id === p.id);
+              return (
+                <div key={p.id} style={{
+                  padding:'10px 12px',
+                  background:'var(--jb-paper)',
+                  border:'1px solid var(--jb-line)',
+                  borderLeft:`3px solid ${color}`,
+                  borderRadius:6,
+                  opacity: p.status === '中止' ? 0.6 : 1,
+                }}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:3,gap:6}}>
+                    <span style={{fontFamily:'var(--jb-display)',fontSize:14,fontWeight:800,color:color,letterSpacing:'-0.01em'}}>{p.channel}</span>
+                    <span style={{
+                      padding:'1px 6px',fontFamily:'var(--jb-mono)',fontSize:8,fontWeight:700,letterSpacing:'0.06em',
+                      background: p.status === '実施済' ? 'var(--jb-success)' : p.status === '中止' ? 'var(--jb-ink-ghost)' : 'var(--jb-paper-mist)',
+                      color: p.status === '実施済' || p.status === '中止' ? '#fff' : 'var(--jb-ink-soft)',
+                      borderRadius:999,
+                    }}>{p.status}</span>
+                  </div>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink)',fontWeight:700,marginBottom:4}}>
+                    {formatDate(p.date)}
+                  </div>
+                  {p.expectedReach > 0 && (
+                    <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
+                      想定リーチ: {p.expectedReach.toLocaleString()}
+                    </div>
+                  )}
+                  {stat && (
+                    <div style={{
+                      marginTop:5,paddingTop:5,borderTop:'1px dashed var(--jb-line)',
+                      fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.04em',
+                    }}>
+                      <span style={{color:'var(--jb-ink-soft)'}}>前3日 {stat.beforeCount} → 後3日 </span>
+                      <span style={{fontWeight:800,color: stat.delta > 0 ? 'var(--jb-success)' : 'var(--jb-ink)'}}>{stat.afterCount}</span>
+                      {stat.delta !== 0 && (
+                        <span style={{marginLeft:4,fontWeight:700,color: stat.delta > 0 ? 'var(--jb-success)' : 'var(--jb-shouwa)'}}>
+                          ({stat.delta > 0 ? '+' : ''}{stat.delta})
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {p.notes && (
+                    <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',letterSpacing:'0.04em',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{p.notes}</div>
+                  )}
+                  <div style={{display:'flex',gap:4,marginTop:6}}>
+                    <button onClick={() => setModal({ mode: 'edit', promo: p })} style={{
+                      flex:1,padding:'3px 6px',fontFamily:'var(--jb-mono)',fontSize:8,fontWeight:700,letterSpacing:'0.06em',
+                      background:'var(--jb-paper)',color:'var(--jb-blue)',
+                      border:'1px solid var(--jb-blue)',borderRadius:3,cursor:'pointer',
+                    }}>編集</button>
+                    <button onClick={() => handleDelete(p)} style={{
+                      padding:'3px 8px',fontFamily:'var(--jb-mono)',fontSize:8,fontWeight:700,letterSpacing:'0.06em',
+                      background:'var(--jb-paper)',color:'var(--jb-shouwa)',
+                      border:'1px solid var(--jb-shouwa)',borderRadius:3,cursor:'pointer',
+                    }}>削除</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {modal && (
+        <PromoFormModal
+          mode={modal.mode}
+          promo={modal.promo}
+          eventId={event.id}
+          onSave={handleSave}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </section>
+  );
+}
+window.EventPromoPanel = EventPromoPanel;
+
+// (Phase 17.O) PromoFormModal — 広報追加 / 編集 モーダル
+function PromoFormModal({ mode, promo, eventId, onSave, onClose }) {
+  const [date, setDate] = useState(promo ? promo.date : '');
+  const [channel, setChannel] = useState(promo ? promo.channel : 'Instagram');
+  const [status, setStatus] = useState(promo ? promo.status : '予定');
+  const [expectedReach, setExpectedReach] = useState(promo ? String(promo.expectedReach || '') : '');
+  const [actualClicks, setActualClicks] = useState(promo ? String(promo.actualClicks || '') : '');
+  const [notes, setNotes] = useState(promo ? promo.notes : '');
+
+  const CHANNELS = ['Instagram','LINE','X','メルマガ','チラシ','その他'];
+
+  const canSubmit = date && channel;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    onSave({
+      promoId: promo ? promo.id : null,
+      eventId: eventId,
+      date: date,
+      channel: channel,
+      status: status,
+      expectedReach: Number(expectedReach) || 0,
+      actualClicks: Number(actualClicks) || 0,
+      notes: notes,
+    });
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position:'fixed',inset:0,
+      background:'rgba(0,0,0,0.5)',
+      display:'flex',alignItems:'center',justifyContent:'center',
+      zIndex:1000,padding:20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width:'100%',maxWidth:480,
+        background:'var(--jb-paper)',
+        borderRadius:8,
+        padding:24,
+        maxHeight:'90vh',overflow:'auto',
+      }}>
+        <div style={{fontFamily:'var(--jb-display)',fontSize:18,fontWeight:800,marginBottom:16,letterSpacing:'-0.01em'}}>
+          {mode === 'create' ? '広報を追加' : '広報を編集'}
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:4}}>日付 *</div>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{
+              width:'100%',padding:'8px 10px',fontFamily:'var(--jb-mono)',fontSize:13,
+              border:'1px solid var(--jb-line)',borderRadius:4,
+            }}/>
+          </label>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:4}}>チャネル *</div>
+            <select value={channel} onChange={e => setChannel(e.target.value)} style={{
+              width:'100%',padding:'8px 10px',fontFamily:'var(--jb-sans)',fontSize:13,
+              border:'1px solid var(--jb-line)',borderRadius:4,
+            }}>
+              {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:4}}>ステータス</div>
+            <div style={{display:'flex',gap:4}}>
+              {['予定','実施済','中止'].map(s => (
+                <button key={s} type="button" onClick={() => setStatus(s)} style={{
+                  flex:1,padding:'6px 10px',fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,letterSpacing:'0.06em',
+                  background: status === s ? 'var(--jb-blue)' : 'var(--jb-paper)',
+                  color: status === s ? '#fff' : 'var(--jb-ink-soft)',
+                  border: `1px solid ${status === s ? 'var(--jb-blue)' : 'var(--jb-line)'}`,
+                  borderRadius:3,cursor:'pointer',
+                }}>{s}</button>
+              ))}
+            </div>
+          </label>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:4}}>想定リーチ</div>
+            <input type="number" min="0" value={expectedReach} onChange={e => setExpectedReach(e.target.value)} placeholder="例: 5000" style={{
+              width:'100%',padding:'8px 10px',fontFamily:'var(--jb-mono)',fontSize:13,
+              border:'1px solid var(--jb-line)',borderRadius:4,
+            }}/>
+          </label>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:4}}>実クリック数 (= 実施後 任意)</div>
+            <input type="number" min="0" value={actualClicks} onChange={e => setActualClicks(e.target.value)} placeholder="例: 120" style={{
+              width:'100%',padding:'8px 10px',fontFamily:'var(--jb-mono)',fontSize:13,
+              border:'1px solid var(--jb-line)',borderRadius:4,
+            }}/>
+          </label>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:4}}>備考</div>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="ストーリーズ投稿 / リール / 共同投稿者 等" style={{
+              width:'100%',padding:'8px 10px',fontFamily:'var(--jb-sans)',fontSize:12,
+              border:'1px solid var(--jb-line)',borderRadius:4,resize:'vertical',
+            }}/>
+          </label>
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:20,justifyContent:'flex-end'}}>
+          <button onClick={onClose} style={{
+            padding:'8px 16px',fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,letterSpacing:'0.06em',
+            background:'var(--jb-paper)',color:'var(--jb-ink-soft)',
+            border:'1px solid var(--jb-line)',borderRadius:4,cursor:'pointer',
+          }}>キャンセル</button>
+          <button onClick={handleSubmit} disabled={!canSubmit} style={{
+            padding:'8px 16px',fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,letterSpacing:'0.06em',
+            background: canSubmit ? 'var(--jb-blue)' : 'var(--jb-ink-ghost)',
+            color:'#fff',border:'none',borderRadius:4,cursor: canSubmit ? 'pointer' : 'not-allowed',
+          }}>{mode === 'create' ? '追加' : '更新'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.PromoFormModal = PromoFormModal;
+
+// =============================================================================
+// (Phase 17.P) ReferralPanel — 流入経路サマリー + リンクビルダー
+// =============================================================================
+function ReferralPanel({ event }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [builderOpen, setBuilderOpen] = useState(false);
+
+  React.useEffect(() => {
+    if (!event || !event.id) return;
+    setLoading(true);
+    window.fetchData('admin.getReferralStats', { eventId: event.id })
+      .then(s => setStats(s))
+      .catch(e => { console.warn('getReferralStats failed:', e); setStats(null); })
+      .finally(() => setLoading(false));
+  }, [event && event.id]);
+
+  // チャネル別カラー
+  const CHANNEL_COLORS = {
+    'instagram': '#E1306C', 'instagram_story': '#E1306C', 'instagram_post': '#E1306C', 'instagram_reel': '#E1306C',
+    'line': '#06C755', 'line_official': '#06C755',
+    'x': '#000000', 'twitter': '#1DA1F2',
+    'メルマガ': '#0EA5E9', 'mailmagazine': '#0EA5E9',
+    'チラシ': '#F59E0B', 'flyer': '#F59E0B',
+    'qr': '#8B5CF6',
+  };
+  const colorOf = (key) => {
+    const lower = String(key).toLowerCase();
+    for (const k in CHANNEL_COLORS) {
+      if (lower.indexOf(k) >= 0) return CHANNEL_COLORS[k];
+    }
+    return '#9CA8B2';
+  };
+
+  const totalAll = stats ? (stats.totalKnown + stats.totalDirect) : 0;
+  const channels = stats ? Object.entries(stats.byChannel).sort((a, b) => b[1] - a[1]) : [];
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
+        <span>流入経路 ({totalAll} 名)</span>
+        <button onClick={() => setBuilderOpen(true)} style={{
+          padding:'4px 10px',fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:700,letterSpacing:'0.06em',
+          background:'var(--jb-blue)',color:'#fff',border:'1px solid var(--jb-blue)',
+          borderRadius:3,cursor:'pointer',textTransform:'none',
+        }}>+ 計測リンクを 作成</button>
+      </div>
+      {loading ? (
+        <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>読み込み中…</div>
+      ) : !stats || totalAll === 0 ? (
+        <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>
+          流入データ なし。 「計測リンクを 作成」 で SNS 投稿用 URL を生成して 計測を開始してください。
+        </div>
+      ) : (
+        <div style={{
+          padding:'14px 16px',
+          background:'var(--jb-paper)',
+          border:'1px solid var(--jb-line)',
+          borderRadius:8,
+        }}>
+          {/* 横棒グラフ */}
+          {channels.map(([k, v]) => {
+            const pct = (v / totalAll) * 100;
+            return (
+              <div key={k} style={{display:'grid',gridTemplateColumns:'120px 1fr 50px',gap:'8px 12px',alignItems:'center',marginBottom:6}}>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.04em',color:'var(--jb-ink)',fontWeight:700,wordBreak:'break-all',textAlign:'right'}}>{k}</div>
+                <div style={{position:'relative',height:16,background:'var(--jb-paper-mist)',borderRadius:3,overflow:'hidden'}}>
+                  <div style={{
+                    position:'absolute',top:0,left:0,bottom:0,
+                    background:colorOf(k),
+                    width:`${pct}%`,
+                    transition:'width 1.2s cubic-bezier(0.22, 1, 0.36, 1)',
+                  }}/>
+                </div>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink)'}}>
+                  {v} <span style={{fontSize:8,color:'var(--jb-ink-ghost)'}}>({pct.toFixed(0)}%)</span>
+                </div>
+              </div>
+            );
+          })}
+          {/* Direct (= ref なし) */}
+          {stats.totalDirect > 0 && (() => {
+            const pct = (stats.totalDirect / totalAll) * 100;
+            return (
+              <div style={{display:'grid',gridTemplateColumns:'120px 1fr 50px',gap:'8px 12px',alignItems:'center',marginBottom:6}}>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.04em',color:'var(--jb-ink-soft)',fontWeight:700,textAlign:'right'}}>直接 (= ref なし)</div>
+                <div style={{position:'relative',height:16,background:'var(--jb-paper-mist)',borderRadius:3,overflow:'hidden'}}>
+                  <div style={{position:'absolute',top:0,left:0,bottom:0,background:'#9CA8B2',width:`${pct}%`,transition:'width 1.2s cubic-bezier(0.22, 1, 0.36, 1)'}}/>
+                </div>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink)'}}>
+                  {stats.totalDirect} <span style={{fontSize:8,color:'var(--jb-ink-ghost)'}}>({pct.toFixed(0)}%)</span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+      {builderOpen && (
+        <LinkBuilderModal event={event} onClose={() => setBuilderOpen(false)}/>
+      )}
+    </section>
+  );
+}
+window.ReferralPanel = ReferralPanel;
+
+// (Phase 17.P) LinkBuilderModal — UTM 付き計測用 URL を 生成
+function LinkBuilderModal({ event, onClose }) {
+  const [ref, setRef] = useState('instagram_story');
+  const [campaign, setCampaign] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const PRESETS = [
+    'instagram_story','instagram_post','instagram_reel',
+    'line_official','line_post',
+    'x_post','twitter_post',
+    'メルマガ','チラシ','qr_チラシ',
+    'youtube','tiktok','facebook',
+  ];
+
+  // Participants サイトの ベース URL — 本番 + ローカル 推測
+  const baseUrl = (function() {
+    // Admin と Participants が 別ドメインなので、 設定済みなら そこから 取る
+    if (window.PARTICIPANTS_URL) return window.PARTICIPANTS_URL;
+    if (event && event.participantsUrl) return event.participantsUrl;
+    // フォールバック: 既知の本番 URL
+    return 'https://connectahubis-source.github.io/event/';
+  })();
+
+  const targetUrl = (function() {
+    const u = new URL(baseUrl);
+    if (event && event.id) u.hash = `event/${event.id}`;
+    const params = new URLSearchParams();
+    if (ref) params.set('ref', ref);
+    if (campaign) params.set('campaign', campaign);
+    const qs = params.toString();
+    return u.toString() + (qs ? (u.toString().indexOf('?') < 0 ? '?' : '&') + qs : '');
+  })();
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(targetUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',
+      display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width:'100%',maxWidth:520,background:'var(--jb-paper)',borderRadius:8,padding:24,
+      }}>
+        <div style={{fontFamily:'var(--jb-display)',fontSize:18,fontWeight:800,marginBottom:6,letterSpacing:'-0.01em'}}>
+          計測リンクを 作成
+        </div>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',letterSpacing:'0.04em',marginBottom:16}}>
+          各 SNS / 媒体 に 投稿する URL を 生成 → 誰が どこから来たか 計測できる
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:6}}>流入元 (ref)</div>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>
+              {PRESETS.map(p => (
+                <button key={p} type="button" onClick={() => setRef(p)} style={{
+                  padding:'3px 8px',fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:600,letterSpacing:'0.04em',
+                  background: ref === p ? 'var(--jb-blue)' : 'var(--jb-paper)',
+                  color: ref === p ? '#fff' : 'var(--jb-ink-soft)',
+                  border: `1px solid ${ref === p ? 'var(--jb-blue)' : 'var(--jb-line)'}`,
+                  borderRadius:3,cursor:'pointer',
+                }}>{p}</button>
+              ))}
+            </div>
+            <input type="text" value={ref} onChange={e => setRef(e.target.value)} placeholder="自由入力 OK" style={{
+              width:'100%',padding:'8px 10px',fontFamily:'var(--jb-mono)',fontSize:13,
+              border:'1px solid var(--jb-line)',borderRadius:4,
+            }}/>
+          </label>
+          <label>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:6}}>キャンペーン (任意)</div>
+            <input type="text" value={campaign} onChange={e => setCampaign(e.target.value)} placeholder="例: summer2026, x-flyer-may" style={{
+              width:'100%',padding:'8px 10px',fontFamily:'var(--jb-mono)',fontSize:13,
+              border:'1px solid var(--jb-line)',borderRadius:4,
+            }}/>
+          </label>
+          <div>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700,marginBottom:6}}>生成された URL</div>
+            <div style={{
+              padding:'10px 12px',
+              background:'var(--jb-paper-mist)',
+              border:'1px solid var(--jb-line)',
+              borderRadius:4,
+              fontFamily:'var(--jb-mono)',fontSize:11,
+              wordBreak:'break-all',
+              color:'var(--jb-blue-deep)',
+              marginBottom:8,
+            }}>{targetUrl}</div>
+            <button onClick={handleCopy} style={{
+              width:'100%',padding:'10px 16px',fontFamily:'var(--jb-mono)',fontSize:12,fontWeight:700,letterSpacing:'0.06em',
+              background: copied ? 'var(--jb-success)' : 'var(--jb-blue)',color:'#fff',
+              border:'none',borderRadius:4,cursor:'pointer',transition:'background 0.2s',
+            }}>{copied ? '✓ コピーしました' : 'URL を コピー'}</button>
+          </div>
+          <div style={{
+            padding:'10px 12px',
+            background:'#FFF8E1',
+            border:'1px solid #F59E0B',
+            borderRadius:4,
+            fontFamily:'var(--jb-mono)',fontSize:9,color:'#92400E',letterSpacing:'0.04em',lineHeight:1.6,
+          }}>
+            <strong>使い方:</strong><br/>
+            1. 上の URL を コピー<br/>
+            2. SNS 投稿の リンク欄に 貼り付け<br/>
+            3. ユーザーが クリック → 流入元が 自動記録<br/>
+            4. このページの 「流入経路」 で 集計を 確認
+          </div>
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',marginTop:20}}>
+          <button onClick={onClose} style={{
+            padding:'8px 16px',fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,letterSpacing:'0.06em',
+            background:'var(--jb-paper)',color:'var(--jb-ink-soft)',
+            border:'1px solid var(--jb-line)',borderRadius:4,cursor:'pointer',
+          }}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.LinkBuilderModal = LinkBuilderModal;
+
+function ApplicationsListSection({ apps, participantMap, regs, sessions, event, onPickApp }) {
+  const [statusFilter, setStatusFilter] = useState('all');  // 'all' | '申込済' | '決済済' | '一部キャンセル' | '返金待ち' | 'キャンセル'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeOnly, setActiveOnly] = useState(false);  // true → キャンセル除外
+  const [dayFilter, setDayFilter] = useState('all');  // 'all' | session.id
+  // (Phase 17.N-13) status 文字列計算
+  const getStatus = (a) => {
+    if (a.isAllCancelled) return 'キャンセル';
+    if (a.hasPendingRefund) return '返金待ち';
+    if (a.isPartialCancelled) return '一部キャンセル';
+    if (a.netPaid > 0) return '決済済';
+    return '申込済';
+  };
+  // (Phase 17.N-13) フィルタリング
+  const filteredApps = React.useMemo(() => {
+    return apps.filter(a => {
+      const status = getStatus(a);
+      // アクティブのみ
+      if (activeOnly && status === 'キャンセル') return false;
+      // ステータスフィルタ
+      if (statusFilter !== 'all' && status !== statusFilter) return false;
+      // 検索 (= 名前 / userId / メール / applicationId)
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const p = participantMap[a.userId];
+        const hay = [
+          a.applicationId,
+          a.userId,
+          p && p.name,
+          p && p.email,
+          p && p.nickname,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      // Day フィルタ (= multi のみ)
+      if (dayFilter !== 'all') {
+        const userRegs = regs.filter(r => r.userId === a.userId && r.applicationId === a.applicationId);
+        if (!userRegs.some(r => r.sessionId === dayFilter)) return false;
+      }
+      return true;
+    });
+  }, [apps, statusFilter, searchQuery, activeOnly, dayFilter, participantMap, regs]);
+
+  // ステータス別件数 (= タブ表示用)
+  const statusCounts = React.useMemo(() => {
+    const m = { all: apps.length, '申込済': 0, '決済済': 0, '一部キャンセル': 0, '返金待ち': 0, 'キャンセル': 0 };
+    apps.forEach(a => { m[getStatus(a)]++; });
+    return m;
+  }, [apps]);
+
+  const isMulti = event.format === 'multi' && sessions && sessions.length > 0;
+  const hasActiveFilter = statusFilter !== 'all' || searchQuery.trim() || activeOnly || dayFilter !== 'all';
+
+  const STATUS_OPTIONS = [
+    { v: 'all',         l: '全て',          c: 'var(--jb-ink-soft)' },
+    { v: '申込済',       l: '申込済',         c: 'var(--jb-blue)' },
+    { v: '決済済',       l: '決済済',         c: 'var(--jb-success)' },
+    { v: '一部キャンセル', l: '一部キャンセル', c: 'var(--jb-blue-deep)' },
+    { v: '返金待ち',     l: '返金待ち',       c: 'var(--jb-shouwa)' },
+    { v: 'キャンセル',   l: 'キャンセル',     c: 'var(--jb-ink-ghost)' },
+  ];
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
+        <span>
+          申込者一覧 ({filteredApps.length}
+          {hasActiveFilter && <span style={{color:'var(--jb-blue)',marginLeft:4}}>/ {apps.length}</span>})
+        </span>
+        {apps.length > 0 && <span style={{color:'var(--jb-ink-ghost)',fontSize:9,letterSpacing:'0.1em',textTransform:'none'}}>クリックで詳細</span>}
+      </div>
+      {apps.length === 0 ? (
+        <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>申込なし</div>
+      ) : (
+        <>
+          {/* (Phase 17.N-13) フィルタバー */}
+          <div style={{
+            padding:'10px 12px',
+            background:'var(--jb-paper)',
+            border:'1px solid var(--jb-line)',
+            borderRadius:6,
+            marginBottom:10,
+            display:'flex',
+            flexDirection:'column',
+            gap:8,
+          }}>
+            {/* 検索 + アクティブのみ */}
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="名前 / ID / メール で検索"
+                style={{
+                  flex:1, minWidth:160,
+                  padding:'6px 10px',
+                  fontFamily:'var(--jb-sans)',
+                  fontSize:12,
+                  border:'1px solid var(--jb-line)',
+                  borderRadius:4,
+                  background:'var(--jb-paper-mist)',
+                  color:'var(--jb-ink)',
+                  outline:'none',
+                }}
+              />
+              <label style={{display:'inline-flex',alignItems:'center',gap:4,fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.06em',color:'var(--jb-ink-soft)',cursor:'pointer'}}>
+                <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} style={{margin:0,cursor:'pointer'}}/>
+                アクティブのみ
+              </label>
+              {isMulti && (
+                <select value={dayFilter} onChange={e => setDayFilter(e.target.value)}
+                  style={{
+                    padding:'5px 8px',
+                    fontFamily:'var(--jb-mono)',fontSize:10,
+                    border:'1px solid var(--jb-line)',
+                    borderRadius:4,
+                    background:'var(--jb-paper)',
+                    color:'var(--jb-ink)',
+                    cursor:'pointer',
+                  }}>
+                  <option value="all">全 Day</option>
+                  {sessions.map(s => <option key={s.id} value={s.id}>Day {s.order || ''}</option>)}
+                </select>
+              )}
+              {hasActiveFilter && (
+                <button onClick={() => { setStatusFilter('all'); setSearchQuery(''); setActiveOnly(false); setDayFilter('all'); }}
+                  style={{
+                    padding:'5px 10px',
+                    fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:700,letterSpacing:'0.06em',
+                    background:'var(--jb-paper)',color:'var(--jb-shouwa)',
+                    border:'1px solid var(--jb-shouwa)',borderRadius:3,cursor:'pointer',
+                  }}>クリア</button>
+              )}
+            </div>
+            {/* ステータス タブ */}
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              {STATUS_OPTIONS.map(opt => {
+                const count = statusCounts[opt.v];
+                if (opt.v !== 'all' && count === 0) return null;  // 0 件の ステータスは非表示
+                const isActive = statusFilter === opt.v;
+                return (
+                  <button key={opt.v} onClick={() => setStatusFilter(opt.v)}
+                    style={{
+                      padding:'4px 10px',
+                      fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:700,letterSpacing:'0.06em',
+                      background: isActive ? opt.c : 'var(--jb-paper)',
+                      color: isActive ? '#fff' : opt.c,
+                      border: `1px solid ${opt.c}`,
+                      borderRadius:999,
+                      cursor:'pointer',
+                      display:'inline-flex',alignItems:'center',gap:4,
+                    }}>
+                    {opt.l}
+                    <span style={{
+                      padding:'0 5px',fontSize:8,
+                      background: isActive ? 'rgba(255,255,255,0.25)' : opt.c,
+                      color: isActive ? '#fff' : '#fff',
+                      borderRadius:999,minWidth:14,textAlign:'center',
+                    }}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* (Phase 17.N-13) 申込者カード一覧 */}
+          {filteredApps.length === 0 ? (
+            <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>
+              条件に該当する申込なし
+            </div>
+          ) : (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:10}}>
+              {filteredApps.map(a => {
+                const p = participantMap[a.userId];
+                const status = getStatus(a);
+                const stateColor = status === 'キャンセル' ? 'var(--jb-ink-ghost)'
+                                  : status === '返金待ち' ? 'var(--jb-shouwa)'
+                                  : status === '一部キャンセル' ? 'var(--jb-blue-deep)'
+                                  : status === '決済済' ? 'var(--jb-success)'
+                                  : 'var(--jb-blue)';
+                return (
+                  <div key={a.applicationId}
+                    onClick={() => onPickApp(a)}
+                    style={{
+                      padding:'12px 14px',
+                      background:'var(--jb-paper)',
+                      border:'1px solid var(--jb-line)',
+                      borderLeft:`3px solid ${stateColor}`,
+                      borderRadius:6,
+                      cursor:'pointer',
+                      transition:'all 0.12s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 168, 225, 0.12)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                  >
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
+                      <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.08em',color:'var(--jb-blue)',fontWeight:700}}>{a.applicationId}</span>
+                      <span style={{padding:'1px 7px',background:'var(--jb-paper-mist)',color:stateColor,fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.08em',fontWeight:700,borderRadius:999}}>{status}</span>
+                    </div>
+                    <div style={{fontFamily:'var(--jb-sans)',fontSize:13,fontWeight:700,color:'var(--jb-ink)',marginBottom:2}}>{p ? p.name : a.userId}</div>
+                    <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
+                      {a.totalCount} reg · ¥{Number(a.totalAmount || 0).toLocaleString()}
+                      {a.kind !== 'original' && <span style={{marginLeft:6,color:'var(--jb-shouwa)'}}>· {a.kind}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function PageEventAdminDetail() {
   const [eventId, setEventId] = useState(() => {
     try {
@@ -6520,6 +7324,8 @@ function PageEventAdminDetail() {
   const [activityModal, setActivityModal] = useState(null);  // (Phase 17.K) {mode, activity?, defaultSessionId?}
   const [bulkMailOpen, setBulkMailOpen] = useState(false);  // (Phase 17.M-B4)
   const [trendPattern, setTrendPattern] = useState(null);  // (Phase 17.N-2) 過去パターン
+  const [promos, setPromos] = useState([]);  // (Phase 17.O) 広報イベント
+  const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
 
   // hash 変化に追従
   useEffect(() => {
@@ -6568,6 +7374,10 @@ function PageEventAdminDetail() {
         durationDays: dur,
         capacity: totalCap,
       }).then(p => setTrendPattern(p)).catch(e => { console.warn('trendPattern fetch failed:', e); setTrendPattern(null); });
+      // (Phase 17.O) 広報イベント一覧 取得
+      window.fetchData('admin.listPromos', { eventId: eventId })
+        .then(ps => setPromos(Array.isArray(ps) ? ps : []))
+        .catch(e => { console.warn('listPromos failed:', e); setPromos([]); });
     } catch (e) {
       console.error('PageEventAdminDetail load failed', e);
     } finally {
@@ -6591,10 +7401,11 @@ function PageEventAdminDetail() {
 
   // KPI 集計
   const kpi = useMemo(() => {
-    let activeAppCount = 0, paidAppCount = 0, refundPendingCount = 0;
+    let activeAppCount = 0, paidAppCount = 0, refundPendingCount = 0, cancelledAppCount = 0;
     let totalRevenue = 0, totalRefunded = 0;
     apps.forEach(a => {
-      if (!a.isAllCancelled) activeAppCount++;
+      if (a.isAllCancelled) cancelledAppCount++;
+      else activeAppCount++;
       if (a.hasPendingRefund) refundPendingCount++;
       if (Number(a.totalPaid || 0) > 0) paidAppCount++;
       totalRevenue += Number(a.totalPaid || 0);
@@ -6603,17 +7414,134 @@ function PageEventAdminDetail() {
     const activeRegs = regs.filter(r =>
       r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち'
     );
+    // (Phase 17.Q) 追加 KPI
+    const toDate = s => { if (!s) return null; if (s instanceof Date) return s; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+    // (1) キャンセル率
+    const cancelRate = apps.length > 0 ? cancelledAppCount / apps.length : 0;
+    // (2) 平均申込日数 — regOpenDate → 申込までの平均
+    let avgDaysFromOpen = null;
+    if (event.regOpenDate) {
+      const openDate = toDate(event.regOpenDate);
+      if (openDate) {
+        const diffs = regs
+          .filter(r => r.status !== 'キャンセル')
+          .map(r => {
+            const ad = toDate(r.appliedAt || r.createdAt);
+            if (!ad) return null;
+            return (ad.getTime() - openDate.getTime()) / (24 * 60 * 60 * 1000);
+          })
+          .filter(v => v !== null && v >= 0);
+        if (diffs.length > 0) avgDaysFromOpen = diffs.reduce((s, v) => s + v, 0) / diffs.length;
+      }
+    }
+    // (3) リピーター率 — participant.participantCount >= 2 を リピーター扱い
+    let repeaterCount = 0;
+    apps.forEach(a => {
+      if (a.isAllCancelled) return;
+      const p = participantMap[a.userId];
+      if (p && Number(p.participantCount || 0) >= 2) repeaterCount++;
+    });
+    const repeaterRate = activeAppCount > 0 ? repeaterCount / activeAppCount : 0;
+    // (4) チェックイン率 — チェックイン済 reg / アクティブ reg
+    const checkedInCount = activeRegs.filter(r => r.status === 'チェックイン済' || r.checkedIn).length;
+    const checkInRate = activeRegs.length > 0 ? checkedInCount / activeRegs.length : 0;
+    // (5) 日次申込ペース — 直近 7 日の 1 日平均
+    const now = new Date();
+    const sevenAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const recentReg = regs.filter(r => {
+      const ad = toDate(r.appliedAt || r.createdAt);
+      return ad && ad >= sevenAgo && r.status !== 'キャンセル';
+    });
+    const dailyPace = recentReg.length / 7;
+    // (6) 満員予測達成日 — sessionStats から定員ベース計算
+    //   簡易版: 全体定員 / dailyPace から 残り日数推定
+    let projectedSoldOutDate = null;
+    const totalCap = event.format === 'multi' && sessions
+      ? sessions.reduce((s, x) => s + (Number(x.capacity) || 0), 0)
+      : Number(event.capacity) || 0;
+    if (totalCap > 0 && dailyPace > 0) {
+      const remaining = Math.max(0, totalCap - activeRegs.length);
+      const daysToFill = remaining / dailyPace;
+      if (daysToFill < 365) {
+        const d = new Date(now.getTime() + daysToFill * 24 * 60 * 60 * 1000);
+        projectedSoldOutDate = `${d.getMonth() + 1}/${d.getDate()}`;
+      }
+    }
+    // (7) 流入経路統計 — reg から referralRef を 集計
+    const referralCounts = {};
+    let referralKnownUsers = new Set();
+    let referralDirectUsers = new Set();
+    regs.forEach(r => {
+      if (r.status === 'キャンセル' || !r.userId) return;
+      const ref = String(r.referralRef || '').trim();
+      if (ref) {
+        referralCounts[ref] = (referralCounts[ref] || 0) + 1;
+        referralKnownUsers.add(r.userId);
+      } else {
+        referralDirectUsers.add(r.userId);
+      }
+    });
+    const channelCount = Object.keys(referralCounts).length;
+    let topChannel = null, topChannelCount = 0;
+    Object.entries(referralCounts).forEach(([k, v]) => {
+      if (v > topChannelCount) { topChannel = k; topChannelCount = v; }
+    });
+    // (8) 広報 ROI — Σ申込増加 / Σ想定リーチ × 1000
+    let promoRoi = null, totalReach = 0;
+    if (promos && promos.length > 0) {
+      const executedPromos = promos.filter(p => p.status === '実施済' || (p.status !== '中止' && toDate(p.date) && toDate(p.date) <= now));
+      totalReach = executedPromos.reduce((s, p) => s + (Number(p.expectedReach) || 0), 0);
+      // 実施済広報 後 3 日 の 新規 user 数 を 累計
+      let totalLift = 0;
+      executedPromos.forEach(p => {
+        const pd = toDate(p.date);
+        if (!pd) return;
+        pd.setHours(0, 0, 0, 0);
+        const after3 = new Date(pd.getTime() + 3 * 24 * 60 * 60 * 1000);
+        const before3 = new Date(pd.getTime() - 3 * 24 * 60 * 60 * 1000);
+        const beforeUsers = new Set(), afterUsers = new Set();
+        regs.forEach(r => {
+          const ad = toDate(r.appliedAt || r.createdAt);
+          if (!ad || !r.userId) return;
+          if (ad >= before3 && ad < pd) beforeUsers.add(r.userId);
+          if (ad >= pd && ad < after3) afterUsers.add(r.userId);
+        });
+        totalLift += Math.max(0, afterUsers.size - beforeUsers.size);
+      });
+      if (totalReach > 0) {
+        promoRoi = (totalLift / totalReach) * 1000;
+      }
+    }
     return {
+      // 基本
       totalApps: apps.length,
       activeApps: activeAppCount,
+      cancelledApps: cancelledAppCount,
       activeRegs: activeRegs.length,
       paidApps: paidAppCount,
       refundPendingCount,
       totalRevenue,
       totalRefunded,
       netRevenue: totalRevenue - totalRefunded,
+      // (Phase 17.Q) 応用
+      cancelRate,
+      avgDaysFromOpen,
+      repeaterCount,
+      repeaterRate,
+      checkedInCount,
+      checkInRate,
+      dailyPace,
+      projectedSoldOutDate,
+      totalCapacity: totalCap,
+      channelCount,
+      topChannel,
+      topChannelCount,
+      referralKnownUsers: referralKnownUsers.size,
+      referralDirectUsers: referralDirectUsers.size,
+      promoRoi,
+      totalReach,
     };
-  }, [apps, regs]);
+  }, [apps, regs, participantMap, event, sessions, promos]);
 
   // Day 別 申込数集計 (multi 用)
   const sessionStats = useMemo(() => {
@@ -6702,15 +7630,102 @@ function PageEventAdminDetail() {
         }
       `}</style>
 
-      {/* KPI サマリー */}
+      {/* KPI サマリー — (Phase 17.Q) 基本 5 + 応用 9 = 14 指標 */}
       <section style={{marginBottom:24}}>
-        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10}}>申込・売上 サマリー</div>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10}}>基本サマリー</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))',gap:10}}>
-          <KpiCard label="申込" value={kpi.activeApps} unit="件" total={kpi.totalApps} color="var(--jb-blue)"/>
-          <KpiCard label="個別 reg" value={kpi.activeRegs} unit="件" color="var(--jb-blue-deep)"/>
-          <KpiCard label="決済済" value={kpi.paidApps} unit="件" total={kpi.totalApps} color="var(--jb-success)"/>
+          <KpiCard label="申込" value={kpi.totalApps} unit="件" color="var(--jb-blue)"
+            sub={kpi.totalApps !== kpi.activeApps ? `アクティブ ${kpi.activeApps} / キャンセル ${kpi.cancelledApps}` : `アクティブ ${kpi.activeApps}`}/>
+          <KpiCard label="セッション登録" value={kpi.activeRegs} unit="件" color="var(--jb-blue-deep)"
+            sub="(= Day 別の申込数合計)"/>
+          <KpiCard label="決済済" value={kpi.paidApps} unit="件" total={kpi.activeApps} color="var(--jb-success)"/>
           <KpiCard label="返金待ち" value={kpi.refundPendingCount} unit="件" color="var(--jb-shouwa)"/>
           <KpiCard label="売上" value={`¥${Number(kpi.netRevenue).toLocaleString()}`} unit="" color="var(--jb-blue)" sub={`入金 ¥${Number(kpi.totalRevenue).toLocaleString()} / 返金 ¥${Number(kpi.totalRefunded).toLocaleString()}`}/>
+        </div>
+
+        {/* (Phase 17.Q) 応用 KPI — 行動 / 質 / 集客効果 */}
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginTop:18,marginBottom:10}}>行動・質・集客効果</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))',gap:10}}>
+          {/* キャンセル率 */}
+          <KpiCard
+            label="キャンセル率"
+            value={`${(kpi.cancelRate * 100).toFixed(1)}%`}
+            unit=""
+            color={kpi.cancelRate > 0.2 ? 'var(--jb-shouwa)' : kpi.cancelRate > 0.1 ? '#F59E0B' : 'var(--jb-success)'}
+            sub={`${kpi.cancelledApps} 件 / 全 ${kpi.totalApps}`}
+          />
+          {/* 平均申込日数 */}
+          <KpiCard
+            label="平均申込日数"
+            value={kpi.avgDaysFromOpen !== null ? `${kpi.avgDaysFromOpen.toFixed(1)}` : '—'}
+            unit={kpi.avgDaysFromOpen !== null ? '日' : ''}
+            color="var(--jb-blue-deep)"
+            sub="開始から申込までの平均"
+          />
+          {/* リピーター率 */}
+          <KpiCard
+            label="リピーター率"
+            value={`${(kpi.repeaterRate * 100).toFixed(0)}%`}
+            unit=""
+            color="#8B5CF6"
+            sub={`${kpi.repeaterCount} 名 / アクティブ ${kpi.activeApps}`}
+          />
+          {/* チェックイン率 */}
+          <KpiCard
+            label="チェックイン率"
+            value={`${(kpi.checkInRate * 100).toFixed(0)}%`}
+            unit=""
+            color={kpi.checkInRate > 0.8 ? 'var(--jb-success)' : kpi.checkInRate > 0.5 ? 'var(--jb-blue)' : 'var(--jb-ink-soft)'}
+            sub={`${kpi.checkedInCount} 名 / アクティブ reg ${kpi.activeRegs}`}
+          />
+          {/* 日次申込ペース */}
+          <KpiCard
+            label="日次申込ペース"
+            value={kpi.dailyPace.toFixed(1)}
+            unit="件/日"
+            color="#0EA5E9"
+            sub="直近 7 日 平均"
+          />
+          {/* 満員予測達成日 */}
+          <KpiCard
+            label="満員予測"
+            value={kpi.projectedSoldOutDate || '—'}
+            unit=""
+            color={kpi.projectedSoldOutDate ? 'var(--jb-success)' : 'var(--jb-ink-soft)'}
+            sub={
+              kpi.totalCapacity > 0
+                ? `現 ${kpi.activeRegs}/${kpi.totalCapacity} · ペース ${kpi.dailyPace.toFixed(1)}/日`
+                : '定員未設定'
+            }
+          />
+          {/* 流入経路数 */}
+          <KpiCard
+            label="流入経路"
+            value={kpi.channelCount}
+            unit="経路"
+            color="#EC4899"
+            sub={kpi.channelCount === 0 ? '計測未開始' : `${kpi.referralKnownUsers} 名 計測済 / 直接 ${kpi.referralDirectUsers}`}
+          />
+          {/* トップ流入元 */}
+          <KpiCard
+            label="トップ流入元"
+            value={kpi.topChannel ? kpi.topChannel.length > 10 ? kpi.topChannel.substring(0, 10) + '...' : kpi.topChannel : '—'}
+            unit=""
+            color="#F59E0B"
+            sub={kpi.topChannel ? `${kpi.topChannelCount} 名` : 'データなし'}
+          />
+          {/* 広報 ROI */}
+          <KpiCard
+            label="広報 ROI"
+            value={kpi.promoRoi !== null ? kpi.promoRoi.toFixed(2) : '—'}
+            unit={kpi.promoRoi !== null ? '名/1000リーチ' : ''}
+            color="#10B981"
+            sub={
+              kpi.promoRoi !== null
+                ? `総リーチ ${kpi.totalReach.toLocaleString()}`
+                : (promos && promos.length > 0 ? '実施済 + 想定リーチ 必要' : '広報未登録')
+            }
+          />
         </div>
         {/* (Phase 17.N) 定員消化率 円形メーター (= multi イベント時) */}
         {event.format === 'multi' && sessions.length > 0 && (
@@ -6741,9 +7756,21 @@ function PageEventAdminDetail() {
         return <EventPayPayPanelLocal event={event} regs={regs} participants={participants} onReload={loadAll}/>;
       })()}
 
+      {/* (Phase 17.O) 広報計画 — 推移グラフの前に */}
+      {window.EventPromoPanel && (() => {
+        const EventPromoPanelLocal = window.EventPromoPanel;
+        return <EventPromoPanelLocal event={event} promos={promos} regs={regs} onChange={loadAll}/>;
+      })()}
+
+      {/* (Phase 17.P) 流入経路 — リンクビルダー + サマリー */}
+      {window.ReferralPanel && (() => {
+        const ReferralPanelLocal = window.ReferralPanel;
+        return <ReferralPanelLocal event={event}/>;
+      })()}
+
       {/* (Phase 17.N) 登録推移 折れ線グラフ */}
       {regs.length > 0 && (
-        <ApplicationTrendChart event={event} sessions={sessions} regs={regs} pattern={trendPattern} sessionStats={sessionStats}/>
+        <ApplicationTrendChart event={event} sessions={sessions} regs={regs} pattern={trendPattern} sessionStats={sessionStats} promos={promos}/>
       )}
 
       {/* (Phase 17.N-10) 国別 参加者分布 — 世界地図 choropleth */}
@@ -6791,58 +7818,15 @@ function PageEventAdminDetail() {
         />
       )}
 
-      {/* 申込者一覧 */}
-      <section style={{marginBottom:24}}>
-        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
-          <span>申込者一覧 ({apps.length})</span>
-          {apps.length > 0 && <span style={{color:'var(--jb-ink-ghost)',fontSize:9,letterSpacing:'0.1em',textTransform:'none'}}>クリックで詳細</span>}
-        </div>
-        {apps.length === 0 ? (
-          <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>申込なし</div>
-        ) : (
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:10}}>
-            {apps.map(a => {
-              const p = participantMap[a.userId];
-              const stateColor = a.isAllCancelled ? 'var(--jb-ink-ghost)'
-                                : a.hasPendingRefund ? 'var(--jb-shouwa)'
-                                : a.isPartialCancelled ? 'var(--jb-blue-deep)'
-                                : a.netPaid > 0 ? 'var(--jb-success)'
-                                : 'var(--jb-blue)';
-              const stateLabel = a.isAllCancelled ? 'キャンセル'
-                                : a.hasPendingRefund ? '返金待ち'
-                                : a.isPartialCancelled ? '一部キャンセル'
-                                : a.netPaid > 0 ? '決済済'
-                                : '申込済';
-              return (
-                <div key={a.applicationId}
-                  onClick={() => setDetailModalApp(a)}
-                  style={{
-                    padding:'12px 14px',
-                    background:'var(--jb-paper)',
-                    border:'1px solid var(--jb-line)',
-                    borderLeft:`3px solid ${stateColor}`,
-                    borderRadius:6,
-                    cursor:'pointer',
-                    transition:'all 0.12s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 168, 225, 0.12)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                >
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
-                    <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.08em',color:'var(--jb-blue)',fontWeight:700}}>{a.applicationId}</span>
-                    <span style={{padding:'1px 7px',background:'var(--jb-paper-mist)',color:stateColor,fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.08em',fontWeight:700,borderRadius:999}}>{stateLabel}</span>
-                  </div>
-                  <div style={{fontFamily:'var(--jb-sans)',fontSize:13,fontWeight:700,color:'var(--jb-ink)',marginBottom:2}}>{p ? p.name : a.userId}</div>
-                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
-                    {a.totalCount} reg · ¥{Number(a.totalAmount || 0).toLocaleString()}
-                    {a.kind !== 'original' && <span style={{marginLeft:6,color:'var(--jb-shouwa)'}}>· {a.kind}</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* 申込者一覧 — (Phase 17.N-13) フィルタ + 検索 */}
+      <ApplicationsListSection
+        apps={apps}
+        participantMap={participantMap}
+        regs={regs}
+        sessions={sessions}
+        event={event}
+        onPickApp={setDetailModalApp}
+      />
 
       {/* 詳細モーダル */}
       {detailModalApp && window.ApplicationDetailModal && (() => {
