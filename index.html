@@ -6574,6 +6574,61 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
 // (Phase 17.N-13) ApplicationsListSection — 申込者一覧 (= フィルタ + 検索)
 // =============================================================================
 // =============================================================================
+// (Phase 17.S) EventDetailTabsBar — イベント詳細 タブバー (= 4 タブ)
+// =============================================================================
+function EventDetailTabsBar({ tab, onChange, kpi }) {
+  const tabs = [
+    { k: 'overview',  l: '概要',    badge: null },
+    { k: 'apps',      l: '申込者',   badge: kpi && kpi.totalApps ? kpi.totalApps : null },
+    { k: 'payments',  l: '決済',    badge: kpi && (kpi.activeApps - kpi.paidApps) > 0 ? (kpi.activeApps - kpi.paidApps) : null },
+    { k: 'analytics', l: '分析',    badge: null },
+  ];
+  return (
+    <div style={{
+      position:'sticky',top:0,zIndex:50,
+      background:'var(--jb-bg)',
+      borderBottom:'1px solid var(--jb-line)',
+      marginBottom:18,
+      marginLeft:-28,marginRight:-28,paddingLeft:28,paddingRight:28,
+      display:'flex',gap:0,
+      overflowX:'auto',
+    }}>
+      {tabs.map(t => {
+        const active = tab === t.k;
+        return (
+          <button key={t.k} onClick={() => onChange(t.k)}
+            style={{
+              padding:'14px 18px',
+              fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,letterSpacing:'0.08em',
+              background:'transparent',
+              color: active ? 'var(--jb-blue)' : 'var(--jb-ink-soft)',
+              border:'none',
+              borderBottom: active ? '2px solid var(--jb-blue)' : '2px solid transparent',
+              cursor:'pointer',
+              whiteSpace:'nowrap',
+              display:'inline-flex',alignItems:'center',gap:6,
+              transition:'color 0.15s',
+            }}
+            onMouseEnter={e => { if (!active) e.currentTarget.style.color = 'var(--jb-ink)'; }}
+            onMouseLeave={e => { if (!active) e.currentTarget.style.color = 'var(--jb-ink-soft)'; }}
+          >
+            {t.l}
+            {t.badge != null && (
+              <span style={{
+                padding:'1px 7px',fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:700,
+                background: active ? 'var(--jb-blue)' : 'var(--jb-paper-mist)',
+                color: active ? '#fff' : 'var(--jb-ink-soft)',
+                borderRadius:999,minWidth:18,textAlign:'center',
+              }}>{t.badge}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// =============================================================================
 // (Phase 17.O) EventPromoPanel — 広報 一覧 + 追加 + 編集 + 削除 + ブースト効果
 // =============================================================================
 function EventPromoPanel({ event, promos, regs, onChange }) {
@@ -6581,6 +6636,12 @@ function EventPromoPanel({ event, promos, regs, onChange }) {
 
   // (Phase 17.Q-fix) event が null の場合は何も描画しない
   if (!event) return null;
+
+  // (Phase 17.O-fix) props 監視
+  React.useEffect(() => {
+    console.log('[EventPromoPanel] received promos=' + (promos ? promos.length : 'null'),
+      promos && promos.length > 0 ? { first: promos[0] } : '');
+  }, [promos]);
 
   // (Phase 17.O) ブースト効果計算 — 各広報後 3 日間 と それ以前 3 日間 の 新規申込数 比較
   const boostStats = React.useMemo(() => {
@@ -6621,11 +6682,19 @@ function EventPromoPanel({ event, promos, regs, onChange }) {
 
   const handleSave = async (formData) => {
     try {
-      await window.postData('admin.savePromo', formData);
+      console.log('[handleSavePromo] saving:', formData);
+      const result = await window.postData('admin.savePromo', formData);
+      console.log('[handleSavePromo] result:', result);
       window.toast.success(formData.promoId ? '広報を更新しました' : '広報を追加しました');
       setModal(null);
+      // (Phase 17.O-fix) 明示的に listPromos を 単独 呼んで 確実に 反映
+      try {
+        const fresh = await window.fetchData('admin.listPromos', { eventId: event.id });
+        console.log('[handleSavePromo] re-fetched promos:', fresh);
+      } catch (e) { console.warn('listPromos re-fetch failed:', e); }
       if (onChange) onChange();
     } catch (e) {
+      console.error('[handleSavePromo] failed:', e);
       window.toast.error('失敗: ' + (e.message || e));
     }
   };
@@ -7118,16 +7187,47 @@ function LinkBuilderModal({ event, onClose }) {
 window.LinkBuilderModal = LinkBuilderModal;
 
 function ApplicationsListSection({ apps, participantMap, regs, sessions, event, onPickApp }) {
-  const [statusFilter, setStatusFilter] = useState('all');  // 'all' | '申込済' | '決済済' | '一部キャンセル' | '返金待ち' | 'キャンセル'
+  // (Phase 17.S-fix) ステータスを 9 種に 細分化
+  const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeOnly, setActiveOnly] = useState(false);  // true → キャンセル除外
-  const [dayFilter, setDayFilter] = useState('all');  // 'all' | session.id
-  // (Phase 17.N-13) status 文字列計算
+  const [activeOnly, setActiveOnly] = useState(false);
+  const [dayFilter, setDayFilter] = useState('all');
+
+  // (Phase 17.S-fix) ステータス判定 — 9 種類に 細分化
+  //   apps には regs フィールドが ないため、 props の regs から applicationId で 引く
+  const getRegsForApp = React.useCallback((a) => {
+    return regs.filter(r => {
+      if (r.applicationId && a.applicationId) return r.applicationId === a.applicationId;
+      // ApplicationID 紐付けがない 古いデータの フォールバック
+      return r.userId === a.userId && r.eventId === a.eventId;
+    });
+  }, [regs]);
+
   const getStatus = (a) => {
     if (a.isAllCancelled) return 'キャンセル';
     if (a.hasPendingRefund) return '返金待ち';
     if (a.isPartialCancelled) return '一部キャンセル';
-    if (a.netPaid > 0) return '決済済';
+    const appRegs = getRegsForApp(a);
+    const activeRegs = appRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+    // 全 active reg が チェックイン済?
+    if (activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済')) return 'チェックイン済';
+    // 申込時の方法 (= 備考 + 申込時の支払い方法 から判定)
+    const notes = appRegs.map(r => String(r.note || '') + ' ' + String(r.actualPaymentMethod || '')).join(' ');
+    const isPrepayApp = /PayPay.*事前|事前決済|事前/.test(notes);
+    const isDayPayApp = /現金|当日/.test(notes);
+    // 決済済? (= netPaid > 0 OR どの reg でも paid フラグ ON OR ステータスが「決済済」 系)
+    const isPaid = (a.netPaid > 0)
+      || appRegs.some(r => r.paid === true || r.paid === 'TRUE')
+      || appRegs.some(r => {
+        const s = String(r.status || '');
+        return s === '決済済' || s === '決済済み';
+      });
+    if (isPaid) {
+      if (isPrepayApp) return '前払い済';
+      return '当日決済済';
+    }
+    if (isPrepayApp) return '前払い待ち';
+    if (isDayPayApp) return '当日払い予定';
     return '申込済';
   };
   // (Phase 17.N-13) フィルタリング
@@ -7162,7 +7262,7 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
 
   // ステータス別件数 (= タブ表示用)
   const statusCounts = React.useMemo(() => {
-    const m = { all: apps.length, '申込済': 0, '決済済': 0, '一部キャンセル': 0, '返金待ち': 0, 'キャンセル': 0 };
+    const m = { all: apps.length, '申込済': 0, '当日払い予定': 0, '前払い待ち': 0, '当日決済済': 0, '前払い済': 0, 'チェックイン済': 0, '一部キャンセル': 0, '返金待ち': 0, 'キャンセル': 0 };
     apps.forEach(a => { m[getStatus(a)]++; });
     return m;
   }, [apps]);
@@ -7170,13 +7270,18 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
   const isMulti = event.format === 'multi' && sessions && sessions.length > 0;
   const hasActiveFilter = statusFilter !== 'all' || searchQuery.trim() || activeOnly || dayFilter !== 'all';
 
+  // (Phase 17.S-fix) 9 種類の ステータス + 色分け
   const STATUS_OPTIONS = [
-    { v: 'all',         l: '全て',          c: 'var(--jb-ink-soft)' },
-    { v: '申込済',       l: '申込済',         c: 'var(--jb-blue)' },
-    { v: '決済済',       l: '決済済',         c: 'var(--jb-success)' },
-    { v: '一部キャンセル', l: '一部キャンセル', c: 'var(--jb-blue-deep)' },
-    { v: '返金待ち',     l: '返金待ち',       c: 'var(--jb-shouwa)' },
-    { v: 'キャンセル',   l: 'キャンセル',     c: 'var(--jb-ink-ghost)' },
+    { v: 'all',           l: '全て',           c: 'var(--jb-ink-soft)' },
+    { v: '申込済',         l: '申込済',          c: 'var(--jb-blue)' },
+    { v: '当日払い予定',    l: '当日払い予定',     c: '#0EA5E9' },
+    { v: '前払い待ち',      l: '前払い待ち',      c: '#F59E0B' },
+    { v: '当日決済済',      l: '当日決済済',      c: 'var(--jb-success)' },
+    { v: '前払い済',        l: '前払い済',       c: '#8B5CF6' },
+    { v: 'チェックイン済',   l: 'チェックイン済',  c: '#10B981' },
+    { v: '一部キャンセル',   l: '一部キャンセル',  c: 'var(--jb-blue-deep)' },
+    { v: '返金待ち',       l: '返金待ち',       c: 'var(--jb-shouwa)' },
+    { v: 'キャンセル',     l: 'キャンセル',     c: 'var(--jb-ink-ghost)' },
   ];
 
   return (
@@ -7291,11 +7396,8 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
               {filteredApps.map(a => {
                 const p = participantMap[a.userId];
                 const status = getStatus(a);
-                const stateColor = status === 'キャンセル' ? 'var(--jb-ink-ghost)'
-                                  : status === '返金待ち' ? 'var(--jb-shouwa)'
-                                  : status === '一部キャンセル' ? 'var(--jb-blue-deep)'
-                                  : status === '決済済' ? 'var(--jb-success)'
-                                  : 'var(--jb-blue)';
+                const opt = STATUS_OPTIONS.find(o => o.v === status);
+                const stateColor = opt ? opt.c : 'var(--jb-ink-soft)';
                 return (
                   <div key={a.applicationId}
                     onClick={() => onPickApp(a)}
@@ -7354,6 +7456,14 @@ function PageEventAdminDetail() {
   const [trendPattern, setTrendPattern] = useState(null);  // (Phase 17.N-2) 過去パターン
   const [promos, setPromos] = useState([]);  // (Phase 17.O) 広報イベント
   const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
+  // (Phase 17.S) タブ — 'overview' | 'apps' | 'payments' | 'analytics'
+  const [tab, setTab] = useState(() => {
+    try { return sessionStorage.getItem('event-detail-tab') || 'overview'; } catch (e) { return 'overview'; }
+  });
+  // タブ変更時 sessionStorage に保存 (= リロード後も保持)
+  useEffect(() => {
+    try { sessionStorage.setItem('event-detail-tab', tab); } catch (e) {}
+  }, [tab]);
 
   // hash 変化に追従
   useEffect(() => {
@@ -7619,6 +7729,8 @@ function PageEventAdminDetail() {
 
   return (
     <div style={{padding:'24px 28px',maxWidth:1100,margin:'0 auto'}}>
+      {/* (Phase 17.S) タブ — 概要 / 申込者 / 決済 / 分析 */}
+      <EventDetailTabsBar tab={tab} onChange={setTab} kpi={kpi}/>
 
       {/* ヘッダー */}
       <section style={{marginBottom:24}}>
@@ -7673,6 +7785,9 @@ function PageEventAdminDetail() {
         }
       `}</style>
 
+      {/* (Phase 17.S) 概要タブ — KPI + 基本サマリー + 定員消化率 + タイムテーブル */}
+      {tab === 'overview' && (
+      <>
       {/* KPI サマリー — (Phase 17.Q) 基本 5 + 応用 9 = 14 指標 */}
       <section style={{marginBottom:24}}>
         <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10}}>基本サマリー</div>
@@ -7793,19 +7908,51 @@ function PageEventAdminDetail() {
         )}
       </section>
 
-      {/* (Phase 17.N-7) PayPay 決済管理 — 有料イベントのみ、 window 経由参照 */}
+      </>
+      )}
+
+      {/* (Phase 17.S) 申込者タブ */}
+      {tab === 'apps' && (
+      <>
+      {/* 申込者一覧 — (Phase 17.N-13) フィルタ + 検索 */}
+      <ApplicationsListSection
+        apps={apps}
+        participantMap={participantMap}
+        regs={regs}
+        sessions={sessions}
+        event={event}
+        onPickApp={setDetailModalApp}
+      />
+      </>
+      )}
+
+      {/* (Phase 17.S) 決済タブ */}
+      {tab === 'payments' && (
+      <>
+      {/* PayPay 決済管理 */}
       {window.EventPayPayPanel && (() => {
         const EventPayPayPanelLocal = window.EventPayPayPanel;
         return <EventPayPayPanelLocal event={event} regs={regs} participants={participants} onReload={loadAll}/>;
       })()}
+      </>
+      )}
 
-      {/* (Phase 17.O) 広報計画 — 推移グラフの前に */}
+      {/* (Phase 17.S) 分析タブ */}
+      {tab === 'analytics' && (
+      <>
+      {/* (Phase 17.O) 広報計画 */}
       {window.EventPromoPanel && (() => {
         const EventPromoPanelLocal = window.EventPromoPanel;
-        return <EventPromoPanelLocal event={event} promos={promos} regs={regs} onChange={loadAll}/>;
+        const refreshPromos = async () => {
+          try {
+            const ps = await window.fetchData('admin.listPromos', { eventId: event.id });
+            setPromos(Array.isArray(ps) ? ps : []);
+          } catch (e) { console.warn('refreshPromos failed:', e); }
+        };
+        return <EventPromoPanelLocal event={event} promos={promos} regs={regs} onChange={refreshPromos}/>;
       })()}
 
-      {/* (Phase 17.P) 流入経路 — リンクビルダー + サマリー */}
+      {/* (Phase 17.P) 流入経路 */}
       {window.ReferralPanel && (() => {
         const ReferralPanelLocal = window.ReferralPanel;
         return <ReferralPanelLocal event={event}/>;
@@ -7826,6 +7973,10 @@ function PageEventAdminDetail() {
         <AgeBreakdown regs={regs}/>
       )}
 
+      </>
+      )}
+
+      {/* (Phase 17.S) 全タブ共通 — タイムテーブル + Day セッション (= 決済確認 + 出席者管理) */}
       {/* Day / セッション一覧 (multi) */}
       {event.format === 'multi' && sessions.length > 0 && (
         <>
@@ -7860,16 +8011,6 @@ function PageEventAdminDetail() {
           onEditActivity={(activity) => setActivityModal({ mode: 'edit', activity })}
         />
       )}
-
-      {/* 申込者一覧 — (Phase 17.N-13) フィルタ + 検索 */}
-      <ApplicationsListSection
-        apps={apps}
-        participantMap={participantMap}
-        regs={regs}
-        sessions={sessions}
-        event={event}
-        onPickApp={setDetailModalApp}
-      />
 
       {/* 詳細モーダル */}
       {detailModalApp && window.ApplicationDetailModal && (() => {
