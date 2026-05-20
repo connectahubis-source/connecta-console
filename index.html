@@ -1367,7 +1367,6 @@ svg{display:block}
       <a href="#analytics" class="nav-item" data-nav="analytics">
         <svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
         KPIレポート
-        <span class="badge badge-coral" style="margin-left:auto">SOON</span>
       </a>
       <a href="#participant-analytics" class="nav-item" data-nav="participant-analytics">
         <svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -2656,6 +2655,7 @@ function PageDashboard(){
   const [todos, setTodos] = useState([]);
   const [members, setMembers] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [departments, setDepartments] = useState([]);  // (Phase 17.R-fix) 部署マスタ
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -2665,13 +2665,14 @@ function PageDashboard(){
       setLoading(true);
       setError(null);
       try {
-        const [evs, parts, regs, tds, mems, pays] = await Promise.all([
+        const [evs, parts, regs, tds, mems, pays, depts] = await Promise.all([
           window.fetchData('listEvents'),
           window.fetchData('listParticipants'),
           window.fetchData('listRegistrations'),
           window.fetchData('listTodos'),
           window.fetchData('listMembers'),
           window.fetchData('listPayments'),
+          window.fetchData('listDepartments'),  // (Phase 17.R-fix)
         ]);
         if (cancelled) return;
         setEvents(Array.isArray(evs) ? evs : []);
@@ -2680,6 +2681,7 @@ function PageDashboard(){
         setTodos(Array.isArray(tds) ? tds : []);
         setMembers(Array.isArray(mems) ? mems : []);
         setPayments(Array.isArray(pays) ? pays : []);
+        setDepartments(Array.isArray(depts) ? depts : []);
       } catch (err) {
         if (!cancelled) setError(err.message || String(err));
       } finally {
@@ -2733,13 +2735,26 @@ function PageDashboard(){
   });
   const todayNewApps = todayAppsSet.size;
 
-  // ========== イニシアチブ別申込 ==========
-  const categoryCount = {IFT: 0, community: 0, hub: 0, "order made": 0};
+  // ========== イニシアチブ別申込 — (Phase 17.R-fix) 1 部署 = 1 キー (= abbr 優先) + alias 解決 ==========
+  const splitCats = (s) => String(s || '').split(/[,、\/]/).map(x => x.trim()).filter(Boolean);
+  const aliasToKey = {};
+  const categoryCount = {};
+  departments.forEach(d => {
+    const isActive = String(d.status || '').toLowerCase().trim() === 'active';
+    if (!isActive) return;
+    const key = d.abbr || d.name;
+    if (!key) return;
+    categoryCount[key] = 0;
+    if (d.abbr) aliasToKey[d.abbr] = key;
+    if (d.name) aliasToKey[d.name] = key;
+  });
   activeRegs.forEach(r => {
     const ev = events.find(e => e.id === r.eventId);
-    if (ev && categoryCount[ev.category] !== undefined) {
-      categoryCount[ev.category]++;
-    }
+    if (!ev) return;
+    splitCats(ev.category).forEach(cat => {
+      const k = aliasToKey[cat];
+      if (k && categoryCount[k] !== undefined) categoryCount[k]++;
+    });
   });
   const totalCat = Object.values(categoryCount).reduce((s, v) => s + v, 0);
 
@@ -2788,7 +2803,12 @@ function PageDashboard(){
             <span className="jb-section-number">— 01.</span>
             <h2 className="jb-section-title">今、 動いていること</h2>
           </div>
-          <a href="#analytics" className="jb-section-link">KPI レポートへ →</a>
+          <a href="#analytics" className="jb-section-link" style={{
+            padding:'8px 16px',background:'var(--jb-blue)',color:'#fff',borderRadius:4,
+            fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,letterSpacing:'0.08em',
+            textDecoration:'none',
+            boxShadow:'0 2px 8px rgba(0, 168, 225, 0.25)',
+          }}>KPI レポートへ →</a>
         </div>
         <div className="jb-stat-grid">
           <a href="#applications" className="jb-stat" style={{textDecoration:'none',color:'inherit',display:'block'}}>
@@ -2840,14 +2860,14 @@ function PageDashboard(){
                 <article key={e.id} className="jb-article" style={{position:'relative'}}>
                   <span className="jb-article-tag">№ {String(i+1).padStart(2,'0')} · {e.category || 'EVENT'}</span>
                   <h3 className="jb-article-title">
-                    <a href={`#events/${e.id}`} style={{color:'inherit',textDecoration:'none'}}>{e.title}</a>
+                    <a href={`#event-detail?id=${e.id}`} style={{color:'inherit',textDecoration:'none'}}>{e.title}</a>
                   </h3>
                   <p className="jb-article-body">
                     {e.description ? String(e.description).slice(0, 100) + (e.description.length > 100 ? '…' : '') : ''}
                   </p>
                   <div className="jb-article-meta">
                     <span>{e.date} · {e.location || '—'}</span>
-                    <a href={`#events/${e.id}`} className="jb-card-link" style={{position:'static'}}>詳細 →</a>
+                    <a href={`#event-detail?id=${e.id}`} className="jb-card-link" style={{position:'static'}}>詳細 →</a>
                   </div>
                 </article>
               ))
@@ -5858,30 +5878,38 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
   // (Phase 17.N-6) グルーピング — モードで切替
   let groupedData;
   if (groupMode === 'payment') {
-    // 決済方法別
+    // (Phase 17.S-fix) 申込者一覧と 同じ 9 ステータス分類で 集計
     const classify = (r) => {
-      const m = String(r.actualPaymentMethod || '').trim();
-      if (m) return m;
-      const note = String(r.note || '');
-      const declared = note.match(/\[当日申告\]\s*(現金|PayPay)/);
-      if (declared) return declared[1] + ' (申告)';
-      if (r.paid) return '決済済 (方法不明)';
-      return '未決済';
+      const s = String(r.status || '');
+      if (s === 'キャンセル') return 'キャンセル';
+      if (s === '返金待ち' || s === '返金') return '返金待ち';
+      if (s === 'チェックイン済') return 'チェックイン済';
+      const note = String(r.note || '') + ' ' + String(r.actualPaymentMethod || '');
+      const isPrepay = /PayPay.*事前|事前決済|事前/.test(note);
+      const isDayPay = /現金|当日/.test(note);
+      const isPaid = r.paid === true || r.paid === 'TRUE' || s === '決済済' || s === '決済済み';
+      if (isPaid) {
+        if (isPrepay) return '前払い済';
+        return '当日決済済';
+      }
+      if (isPrepay) return '前払い待ち';
+      if (isDayPay) return '当日払い予定';
+      return '申込済';
     };
+    // 表示順序を 固定 (= 凡例の 順番を 安定させる)
+    const STATUS_ORDER = ['申込済', '当日払い予定', '前払い待ち', '当日決済済', '前払い済', 'チェックイン済', '一部キャンセル', '返金待ち', 'キャンセル'];
     const buckets = {};
     regs.forEach(r => {
       const key = classify(r);
       if (!buckets[key]) buckets[key] = [];
       buckets[key].push(r);
     });
-    const keys = Object.keys(buckets).sort((a, b) => {
-      if (a === '未決済') return 1;
-      if (b === '未決済') return -1;
-      return buckets[b].length - buckets[a].length;
-    });
-    groupedData = keys.map((k, i) => {
-      // (Phase 17.N-8) 「未決済」 系は 短期トレンドのみ、 過去パターン適用しない
-      const isUnpaid = k === '未決済' || k.indexOf('(申告)') >= 0;
+    const keys = STATUS_ORDER.filter(k => buckets[k] && buckets[k].length > 0);
+    // 未収録キーがあれば 末尾に追加 (= 想定外データの 保険)
+    Object.keys(buckets).forEach(k => { if (keys.indexOf(k) < 0) keys.push(k); });
+    groupedData = keys.map((k) => {
+      // 未払い系 (= 当日払い予定 / 前払い待ち / 申込済) は 短期トレンドのみ
+      const isUnpaid = k === '申込済' || k === '当日払い予定' || k === '前払い待ち';
       return {
         key: k,
         label: k,
@@ -6149,6 +6177,22 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
 
   const COLOR_ALL = 'var(--jb-ink)';
   const DAY_COLORS = ['#0EA5E9','#F97316','#10B981','#8B5CF6','#F59E0B','#EC4899'];
+  // (Phase 17.S-fix) ステータス別 色 (= 申込者一覧の STATUS_OPTIONS と統一)
+  const STATUS_COLOR_MAP = {
+    '申込済': 'var(--jb-blue)',
+    '当日払い予定': '#0EA5E9',
+    '前払い待ち': '#F59E0B',
+    '当日決済済': 'var(--jb-success)',
+    '前払い済': '#8B5CF6',
+    'チェックイン済': '#10B981',
+    '一部キャンセル': 'var(--jb-blue-deep)',
+    '返金待ち': 'var(--jb-shouwa)',
+    'キャンセル': 'var(--jb-ink-ghost)',
+  };
+  const colorForGroup = (label, idx) => {
+    if (groupMode === 'payment' && STATUS_COLOR_MAP[label]) return STATUS_COLOR_MAP[label];
+    return DAY_COLORS[idx % DAY_COLORS.length];
+  };
 
   const xLabelStep = totalDays <= 14 ? 2 : totalDays <= 28 ? 4 : 7;
   const fmtDate = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
@@ -6231,7 +6275,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
         </div>
         {/* (Phase 17.N-6) グループ別カード — Day 別 / 決済方法別 で 切替 */}
         {sessionData.map((ss, i) => {
-          const color = DAY_COLORS[i % DAY_COLORS.length];
+          const color = colorForGroup(ss.label || (ss.session && ('Day ' + (ss.session.order || (i+1)))), i);
           const now = ss.data.actual[ss.data.actual.length - 1] || 0;
           const estimated = ss.data.estimatedFinal || 0;
           const cap = ss.session ? (Number(ss.session.capacity) || 0) : 0;
@@ -6316,10 +6360,11 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
             const v = bestIdx <= todayIdx
               ? ss.data.actual[bestIdx]
               : ss.data.predicted[bestIdx - ss.data.actual.length];
+            const lbl = groupMode === 'session' ? `Day ${ss.session ? (ss.session.order || (i+1)) : (i+1)}` : ss.label;
             items.push({
-              label: groupMode === 'session' ? `Day ${ss.session ? (ss.session.order || (i+1)) : (i+1)}` : ss.label,
+              label: lbl,
               value: v,
-              color: DAY_COLORS[i % DAY_COLORS.length],
+              color: colorForGroup(lbl, i),
               isPredicted: bestIdx > todayIdx,
             });
           });
@@ -6443,7 +6488,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
           })()}
           {/* Day 別 折れ線 */}
           {sessionData.map((ss, i) => {
-            const color = DAY_COLORS[i % DAY_COLORS.length];
+            const color = colorForGroup(ss.label || (ss.session && ('Day ' + (ss.session.order || (i+1)))), i);
             const actualPath = buildPath(ss.data.actual);
             const predictedFull = ss.data.actual.length > 0
               ? [ss.data.actual[ss.data.actual.length - 1]].concat(ss.data.predicted)
@@ -7484,27 +7529,27 @@ function PageEventAdminDetail() {
     if (!eventId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [evs, sessAll, allApps, allRegs, parts, acts] = await Promise.all([
-        window.fetchData('listEvents'),
-        window.fetchData('listEventSessions', { eventId }),
-        window.fetchData('listApplications'),
-        window.fetchData('listRegistrations'),
-        window.fetchData('listParticipants'),
-        window.fetchData('listActivities', { eventId }),  // (Phase 17.K)
-      ]);
-      const ev = (Array.isArray(evs) ? evs : []).find(e => e.id === eventId);
-      setEvent(ev || null);
-      setSessions(Array.isArray(sessAll) ? sessAll : []);
-      setApps((Array.isArray(allApps) ? allApps : []).filter(a => a.eventId === eventId));
-      setRegs((Array.isArray(allRegs) ? allRegs : []).filter(r => r.eventId === eventId));
-      setParticipants(Array.isArray(parts) ? parts : []);
-      setActivities(Array.isArray(acts) ? acts : []);
-      // (Phase 17.N-2) 過去パターンを 別途取得 (= 並列だが エラーで本体ロードを止めない)
+      // (Phase 17.S-perf) 1 リクエストで 全データ取得 — 並列 6 本 → 統合 1 本で 大幅高速化
+      const detail = await window.fetchData('loadEventDetail', { eventId });
+      if (!detail || !detail.event) {
+        setEvent(null);
+        setLoading(false);
+        return;
+      }
+      setEvent(detail.event);
+      setSessions(Array.isArray(detail.sessions) ? detail.sessions : []);
+      setApps(Array.isArray(detail.apps) ? detail.apps : []);
+      setRegs(Array.isArray(detail.regs) ? detail.regs : []);
+      setParticipants(Array.isArray(detail.participants) ? detail.participants : []);
+      setActivities(Array.isArray(detail.activities) ? detail.activities : []);
+      setPromos(Array.isArray(detail.promos) ? detail.promos : []);
+      const ev = detail.event;
+      // (Phase 17.N-2) 過去パターンは 別途 取得 (= 遅延 OK、 メイン UI は すぐ表示)
       const dur = ev && ev.regOpenDate && (ev.regCloseDate || ev.date)
         ? (new Date(ev.regCloseDate || ev.date).getTime() - new Date(ev.regOpenDate).getTime()) / (24 * 60 * 60 * 1000)
         : 0;
-      const totalCap = ev && ev.format === 'multi' && Array.isArray(sessAll)
-        ? sessAll.filter(s => s.eventId === eventId).reduce((s, x) => s + (Number(x.capacity) || 0), 0)
+      const totalCap = ev && ev.format === 'multi' && Array.isArray(detail.sessions)
+        ? detail.sessions.reduce((s, x) => s + (Number(x.capacity) || 0), 0)
         : (ev ? Number(ev.capacity) || 0 : 0);
       window.postData('admin.getApplicationTrendPattern', {
         excludeEventId: eventId,
@@ -7512,10 +7557,6 @@ function PageEventAdminDetail() {
         durationDays: dur,
         capacity: totalCap,
       }).then(p => setTrendPattern(p)).catch(e => { console.warn('trendPattern fetch failed:', e); setTrendPattern(null); });
-      // (Phase 17.O) 広報イベント一覧 取得
-      window.fetchData('admin.listPromos', { eventId: eventId })
-        .then(ps => setPromos(Array.isArray(ps) ? ps : []))
-        .catch(e => { console.warn('listPromos failed:', e); setPromos([]); });
     } catch (e) {
       console.error('PageEventAdminDetail load failed', e);
     } finally {
@@ -8093,6 +8134,7 @@ function KpiCard({ label, value, unit, total, color, sub, animate }) {
     </div>
   );
 }
+window.KpiCard = KpiCard;
 
 function DayMetric({ label, value, cap, color }) {
   return (
@@ -10671,7 +10713,27 @@ function ParticipantDetail({p, onEdit, onDelete}){
  * onSave(fields): 保存ハンドラ
  * onCancel(): 閉じるハンドラ
  */
-function ParticipantModal({mode, initialValues, onSave, onCancel}){
+function ParticipantModal({mode, initialValues, onSave, onCancel, departments}){
+  // (Phase 17.R-fix) departments props で 受け取り (= 旧 props 互換: なければ 自前 fetch)
+  const [deptList, setDeptList] = useState([]);
+  useEffect(() => {
+    if (Array.isArray(departments) && departments.length > 0) {
+      const list = departments
+        .filter(d => d.status !== 'archived' && d.status !== 'アーカイブ')
+        .map(d => d.name)
+        .filter(Boolean);
+      setDeptList(['未指定', ...list, '一般参加者']);
+    } else {
+      // フォールバック — 自前 fetch
+      window.fetchData('listDepartments').then(ds => {
+        const list = (Array.isArray(ds) ? ds : [])
+          .filter(d => d.status !== 'archived' && d.status !== 'アーカイブ')
+          .map(d => d.name)
+          .filter(Boolean);
+        setDeptList(['未指定', ...list, '一般参加者']);
+      }).catch(() => setDeptList(['未指定', '一般参加者']));
+    }
+  }, [departments]);
   const init = initialValues || {};
   const [name, setName] = useState(init.name || "");
   const [kana, setKana] = useState(init.kana || "");
@@ -10759,14 +10821,9 @@ function ParticipantModal({mode, initialValues, onSave, onCancel}){
             <label className="field-label">所属</label>
             <div className="select-wrap">
               <select className="input select" value={dept} onChange={e=>setDept(e.target.value)}>
-                <option value="">未指定</option>
-                <option value="運営本部">運営本部</option>
-                <option value="IFT班">IFT班</option>
-                <option value="hub班">hub班</option>
-                <option value="community班">community班</option>
-                <option value="order made班">order made班</option>
-                <option value="広報班">広報班</option>
-                <option value="一般参加者">一般参加者</option>
+                {deptList.map(d => (
+                  <option key={d} value={d === '未指定' ? '' : d}>{d}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -13695,7 +13752,8 @@ function PagePayments(){
  */
 function MemberModal({mode, initialValues, onSave, onCancel, deptList, departments, existingSubRoles}){
   const init = initialValues || {};
-  const safeDeptList = (Array.isArray(deptList) && deptList.length > 0) ? deptList : ["運営本部","IFT班","hub班","community班","order made班","広報班"];
+  // (Phase 17.R-fix) フォールバック削除 — 部署マスタが空なら 空配列
+  const safeDeptList = (Array.isArray(deptList) && deptList.length > 0) ? deptList : [];
   const safeDepts = Array.isArray(departments) ? departments.filter(d => d.status !== 'archived') : [];
   const ROLES = ['代表', '副代表', 'マネージャー', 'アシマネ', 'メンバー'];
 
@@ -16713,7 +16771,7 @@ function PageEventCreate(){
   // フォーム state
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("IFT");
+  const [category, setCategory] = useState("");  // (Phase 17.R-fix) 部署マスタから 選択
   const [summary, setSummary] = useState("");
   // 開催形式 (Phase 2: single / multi)
   const [format, setFormat] = useState("single");
@@ -16806,13 +16864,9 @@ function PageEventCreate(){
       const key = d.abbr || d.name;
       if (key && d.color) map[key] = d.color;
     });
-    // 既存データへのフォールバック
-    if (Object.keys(map).length === 0) {
-      return {"IFT":"indigo","community":"teal","hub":"violet","order made":"amber"};
-    }
-    return map;
+    return map;  // (Phase 17.R-fix) フォールバック削除 — 部署マスタから 取得しなかったキーは デフォルト色
   })();
-  const accent = accentMap[category] || "indigo";
+  const accent = accentMap[category] || "ink";
 
   // 部署マスタ取得 (初回 + 編集前) Phase 6.4
   useEffect(() => {
@@ -16852,7 +16906,7 @@ function PageEventCreate(){
           return;
         }
         setTitle(ev.title || "");
-        setCategory(ev.category || "IFT");
+        setCategory(ev.category || "");
         setSummary(ev.summary || "");
         setDate(ev.date || "");
         setTime(ev.time || "");
@@ -17191,13 +17245,8 @@ function PageEventCreate(){
                           return <option key={d.id} value={key}>{label}</option>;
                         })
                       ) : (
-                        // フォールバック (部署が未取得 or 0件)
-                        <>
-                          <option value="IFT">IFT (International Friendship Tour)</option>
-                          <option value="community">community (コミュニティイベント)</option>
-                          <option value="hub">hub (情報・勉強会)</option>
-                          <option value="order made">order made (オーダーメイド)</option>
-                        </>
+                        // (Phase 17.R-fix) フォールバック削除 — 部署マスタから 選択を 強制
+                        <option value="" disabled>部署を 先に登録してください</option>
                       )}
                     </select>
                     {/* (Phase 7.8) カテゴリの多言語ラベル */}
@@ -19599,6 +19648,325 @@ const EventCard = window.EventCard;
 const EventCalendar = window.EventCalendar;
 const EventMapEmbed = window.EventMapEmbed;
 
+// =============================================================================
+// (Phase 17.R) CrossEventAnalyticsSection — 全イベント横断 KPI + ランキング
+// =============================================================================
+function CrossEventAnalyticsSection({ events, registrations, participants, payments, promos, referralStats }) {
+  const KpiCard = window.KpiCard;
+  if (!KpiCard) return null;  // KpiCard が まだ ロードされていない
+  // 計算
+  const stats = React.useMemo(() => {
+    const now = new Date();
+    const toDate = s => { if (!s) return null; if (s instanceof Date) return s; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+    // 全 reg のうち キャンセル/返金 を 除く active
+    const activeRegs = (registrations || []).filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+    const cancelledRegs = (registrations || []).filter(r => r.status === 'キャンセル');
+    // チェックイン済
+    const checkedInRegs = activeRegs.filter(r => r.status === 'チェックイン済');
+    // 累積 売上
+    const paidPayments = (payments || []).filter(p => String(p.status || '') === '成功');
+    const totalPaid = paidPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const refundPayments = (payments || []).filter(p => String(p.status || '') === '成功' && (String(p.type || '') === 'refund' || String(p.type || '') === '返金'));
+    const totalRefunded = refundPayments.reduce((s, p) => s + Math.abs(Number(p.amount) || 0), 0);
+    // キャンセル率
+    const cancelRate = (registrations && registrations.length > 0) ? cancelledRegs.length / registrations.length : 0;
+    // チェックイン率
+    const checkInRate = activeRegs.length > 0 ? checkedInRegs.length / activeRegs.length : 0;
+    // 平均申込日数 (= 開始 → 申込)
+    const diffs = [];
+    activeRegs.forEach(r => {
+      const ev = (events || []).find(e => e.id === r.eventId);
+      if (!ev || !ev.regOpenDate) return;
+      const od = toDate(ev.regOpenDate);
+      const ad = toDate(r.appliedAt || r.createdAt);
+      if (!od || !ad) return;
+      const d = (ad.getTime() - od.getTime()) / (24 * 60 * 60 * 1000);
+      if (d >= 0) diffs.push(d);
+    });
+    const avgDaysFromOpen = diffs.length > 0 ? (diffs.reduce((s, v) => s + v, 0) / diffs.length) : null;
+    // リピーター率 (= participantCount >= 2 の 参加者の 比率)
+    const activeParticipants = new Set(activeRegs.map(r => r.userId).filter(Boolean));
+    const partMap = {};
+    (participants || []).forEach(p => { partMap[p.id || p.userId] = p; });
+    let repeaters = 0;
+    activeParticipants.forEach(uid => {
+      const p = partMap[uid];
+      if (p && Number(p.participantCount || 0) >= 2) repeaters++;
+    });
+    const repeaterRate = activeParticipants.size > 0 ? repeaters / activeParticipants.size : 0;
+    // 日次申込ペース (= 直近 30 日)
+    const thirtyAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const recentReg = (registrations || []).filter(r => {
+      const ad = toDate(r.appliedAt || r.createdAt);
+      return ad && ad >= thirtyAgo && r.status !== 'キャンセル';
+    });
+    const dailyPace = recentReg.length / 30;
+    // 広報 ROI
+    const executedPromos = (promos || []).filter(p => p.status === '実施済');
+    const totalReach = executedPromos.reduce((s, p) => s + (Number(p.expectedReach) || 0), 0);
+    // 全イベントの 累計 申込増加 (= 広報後 3 日 - 広報前 3 日)
+    let totalLift = 0;
+    executedPromos.forEach(p => {
+      const pd = toDate(p.date);
+      if (!pd) return;
+      pd.setHours(0, 0, 0, 0);
+      const after3 = new Date(pd.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const before3 = new Date(pd.getTime() - 3 * 24 * 60 * 60 * 1000);
+      const beforeUsers = new Set(), afterUsers = new Set();
+      (registrations || []).forEach(r => {
+        if (r.eventId !== p.eventId) return;
+        const ad = toDate(r.appliedAt || r.createdAt);
+        if (!ad || !r.userId) return;
+        if (ad >= before3 && ad < pd) beforeUsers.add(r.userId);
+        if (ad >= pd && ad < after3) afterUsers.add(r.userId);
+      });
+      totalLift += Math.max(0, afterUsers.size - beforeUsers.size);
+    });
+    const promoRoi = totalReach > 0 ? (totalLift / totalReach) * 1000 : null;
+    // 広報チャネル別 ROI
+    const channelStats = {};
+    executedPromos.forEach(p => {
+      const c = p.channel || 'その他';
+      if (!channelStats[c]) channelStats[c] = { reach: 0, lift: 0, count: 0 };
+      channelStats[c].reach += Number(p.expectedReach) || 0;
+      channelStats[c].count++;
+      const pd = toDate(p.date);
+      if (!pd) return;
+      pd.setHours(0, 0, 0, 0);
+      const after3 = new Date(pd.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const before3 = new Date(pd.getTime() - 3 * 24 * 60 * 60 * 1000);
+      const beforeUsers = new Set(), afterUsers = new Set();
+      (registrations || []).forEach(r => {
+        if (r.eventId !== p.eventId) return;
+        const ad = toDate(r.appliedAt || r.createdAt);
+        if (!ad || !r.userId) return;
+        if (ad >= before3 && ad < pd) beforeUsers.add(r.userId);
+        if (ad >= pd && ad < after3) afterUsers.add(r.userId);
+      });
+      channelStats[c].lift += Math.max(0, afterUsers.size - beforeUsers.size);
+    });
+    Object.keys(channelStats).forEach(c => {
+      const s = channelStats[c];
+      s.roi = s.reach > 0 ? (s.lift / s.reach) * 1000 : 0;
+    });
+    // イベント別 ランキング
+    const eventStats = (events || []).map(ev => {
+      const evRegs = (registrations || []).filter(r => r.eventId === ev.id);
+      const evActive = evRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+      const evCancelled = evRegs.filter(r => r.status === 'キャンセル');
+      const evCheckedIn = evActive.filter(r => r.status === 'チェックイン済');
+      const evPay = (payments || []).filter(p => p.eventId === ev.id && String(p.status || '') === '成功');
+      const evRevenue = evPay.reduce((s, p) => {
+        const isRefund = String(p.type || '') === 'refund' || String(p.type || '') === '返金';
+        return s + (isRefund ? -Math.abs(Number(p.amount) || 0) : (Number(p.amount) || 0));
+      }, 0);
+      const evUserIds = new Set(evActive.map(r => r.userId).filter(Boolean));
+      let evRepeaters = 0;
+      evUserIds.forEach(uid => {
+        const p = partMap[uid];
+        if (p && Number(p.participantCount || 0) >= 2) evRepeaters++;
+      });
+      return {
+        event: ev,
+        regCount: evRegs.length,
+        activeCount: evActive.length,
+        cancelledCount: evCancelled.length,
+        revenue: evRevenue,
+        checkInRate: evActive.length > 0 ? evCheckedIn.length / evActive.length : 0,
+        repeaterRate: evUserIds.size > 0 ? evRepeaters / evUserIds.size : 0,
+      };
+    });
+    return {
+      activeRegs, cancelledRegs, checkedInRegs,
+      totalPaid, totalRefunded, netRevenue: totalPaid - totalRefunded,
+      cancelRate, checkInRate, avgDaysFromOpen, repeaterRate,
+      dailyPace, promoRoi, totalReach,
+      channelStats, eventStats,
+    };
+  }, [events, registrations, participants, payments, promos]);
+
+  const CHANNEL_COLORS = {
+    'Instagram': '#E1306C', 'LINE': '#06C755', 'X': '#000000',
+    'Twitter': '#1DA1F2', 'メルマガ': '#0EA5E9', 'チラシ': '#F59E0B',
+    'その他': '#9CA8B2',
+  };
+  const referralColors = {
+    instagram: '#E1306C', line: '#06C755', x: '#000000', twitter: '#1DA1F2',
+    メルマガ: '#0EA5E9', チラシ: '#F59E0B', qr: '#8B5CF6',
+  };
+  const colorForRef = (k) => {
+    const l = String(k).toLowerCase();
+    for (const key in referralColors) {
+      if (l.indexOf(key) >= 0) return referralColors[key];
+    }
+    return '#9CA8B2';
+  };
+
+  // ランキング 5 種類
+  const topByActive = [...stats.eventStats].sort((a, b) => b.activeCount - a.activeCount).slice(0, 5);
+  const topByRevenue = [...stats.eventStats].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  const topByCheckIn = stats.eventStats.filter(s => s.activeCount > 0).sort((a, b) => b.checkInRate - a.checkInRate).slice(0, 5);
+  const topByRepeater = stats.eventStats.filter(s => s.activeCount >= 3).sort((a, b) => b.repeaterRate - a.repeaterRate).slice(0, 5);
+  const refTotal = referralStats ? (referralStats.totalKnown + referralStats.totalDirect) : 0;
+  const refByChannel = referralStats ? Object.entries(referralStats.byChannel || {}).sort((a, b) => b[1] - a[1]) : [];
+  const channelRoiList = Object.entries(stats.channelStats).sort((a, b) => b[1].roi - a[1].roi);
+
+  // 共通スタイル
+  const sectionTitleStyle = {
+    fontFamily: 'var(--jb-mono)', fontSize: 10, letterSpacing: '0.16em',
+    color: 'var(--jb-ink-soft)', textTransform: 'uppercase', fontWeight: 700,
+    marginBottom: 10, marginTop: 32,
+  };
+  const cardStyle = {
+    padding: '14px 16px', background: 'var(--jb-paper)',
+    border: '1px solid var(--jb-line)', borderRadius: 6,
+  };
+
+  return (
+    <section style={{marginTop:40,paddingTop:24,borderTop:'2px solid var(--jb-line)'}}>
+      <div style={{
+        fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.18em',color:'var(--jb-blue)',
+        textTransform:'uppercase',fontWeight:700,marginBottom:6,
+      }}>EXTENDED · CROSS-EVENT</div>
+      <h2 style={{
+        fontFamily:'var(--jb-display)',fontSize:24,fontWeight:800,
+        color:'var(--jb-ink)',marginBottom:6,letterSpacing:'-0.01em',
+      }}>横断 KPI レポート</h2>
+      <p style={{fontFamily:'var(--jb-sans)',fontSize:12,color:'var(--jb-ink-soft)',marginBottom:24,lineHeight:1.6}}>
+        全イベントを 横断した 行動・質・集客効果 を 集計。 イベント単位の詳細は 各 イベント詳細画面の 「分析」 タブで。
+      </p>
+
+      {/* 行動・質・集客効果 KPI */}
+      <div style={sectionTitleStyle}>行動・質・集客効果</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))',gap:10,marginBottom:16}}>
+        <KpiCard label="累計売上" value={`¥${Number(stats.netRevenue).toLocaleString()}`} unit="" color="var(--jb-success)"
+          sub={`入金 ¥${Number(stats.totalPaid).toLocaleString()} / 返金 ¥${Number(stats.totalRefunded).toLocaleString()}`}/>
+        <KpiCard label="キャンセル率" value={`${(stats.cancelRate * 100).toFixed(1)}%`} unit=""
+          color={stats.cancelRate > 0.2 ? 'var(--jb-shouwa)' : stats.cancelRate > 0.1 ? '#F59E0B' : 'var(--jb-success)'}
+          sub={`${stats.cancelledRegs.length} / 全 ${(registrations || []).length}`}/>
+        <KpiCard label="平均申込日数" value={stats.avgDaysFromOpen != null ? stats.avgDaysFromOpen.toFixed(1) : '—'}
+          unit={stats.avgDaysFromOpen != null ? '日' : ''} color="var(--jb-blue-deep)"
+          sub="開始から申込までの平均"/>
+        <KpiCard label="リピーター率" value={`${(stats.repeaterRate * 100).toFixed(0)}%`} unit="" color="#8B5CF6"
+          sub={`過去参加 2 回以上 の 比率`}/>
+        <KpiCard label="チェックイン率" value={`${(stats.checkInRate * 100).toFixed(0)}%`} unit=""
+          color={stats.checkInRate > 0.8 ? 'var(--jb-success)' : stats.checkInRate > 0.5 ? 'var(--jb-blue)' : 'var(--jb-ink-soft)'}
+          sub={`${stats.checkedInRegs.length} / アクティブ ${stats.activeRegs.length}`}/>
+        <KpiCard label="日次申込ペース" value={stats.dailyPace.toFixed(1)} unit="件/日" color="#0EA5E9"
+          sub="直近 30 日 平均"/>
+        <KpiCard label="広報 ROI" value={stats.promoRoi != null ? stats.promoRoi.toFixed(2) : '—'}
+          unit={stats.promoRoi != null ? '名/1000リーチ' : ''} color="#10B981"
+          sub={`総リーチ ${stats.totalReach.toLocaleString()}`}/>
+        <KpiCard label="計測経路" value={referralStats ? Object.keys(referralStats.byChannel || {}).length : 0}
+          unit="経路" color="#EC4899"
+          sub={referralStats ? `${referralStats.totalKnown} 名 計測 / 直接 ${referralStats.totalDirect}` : 'データなし'}/>
+      </div>
+
+      {/* イベント別 ランキング */}
+      <div style={sectionTitleStyle}>イベント別 ランキング</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))',gap:12,marginBottom:16}}>
+        <RankingCard title="申込数 TOP 5" rows={topByActive.map(s => ({ label: s.event.title, value: `${s.activeCount} 名`, sub: s.cancelledCount > 0 ? `キャンセル ${s.cancelledCount}` : '' }))}/>
+        <RankingCard title="売上 TOP 5" rows={topByRevenue.map(s => ({ label: s.event.title, value: `¥${s.revenue.toLocaleString()}`, sub: `${s.activeCount} 名` }))}/>
+        <RankingCard title="出席率 TOP 5" rows={topByCheckIn.map(s => ({ label: s.event.title, value: `${(s.checkInRate * 100).toFixed(0)}%`, sub: `${s.activeCount} 名中` }))}/>
+        <RankingCard title="リピーター率 TOP 5" rows={topByRepeater.map(s => ({ label: s.event.title, value: `${(s.repeaterRate * 100).toFixed(0)}%`, sub: `${s.activeCount} 名中` }))}/>
+      </div>
+
+      {/* 流入経路 全体 */}
+      {refByChannel.length > 0 && (
+        <>
+          <div style={sectionTitleStyle}>流入経路 全体集計 ({refTotal} 名)</div>
+          <div style={cardStyle}>
+            {refByChannel.map(([k, v]) => {
+              const pct = (v / refTotal) * 100;
+              return (
+                <div key={k} style={{display:'grid',gridTemplateColumns:'140px 1fr 60px',gap:'8px 12px',alignItems:'center',marginBottom:6}}>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink)',textAlign:'right',wordBreak:'break-all'}}>{k}</div>
+                  <div style={{position:'relative',height:18,background:'var(--jb-paper-mist)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{position:'absolute',top:0,left:0,bottom:0,background:colorForRef(k),width:`${pct}%`,transition:'width 1.2s'}}/>
+                  </div>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink)'}}>
+                    {v} <span style={{fontSize:8,color:'var(--jb-ink-ghost)'}}>({pct.toFixed(0)}%)</span>
+                  </div>
+                </div>
+              );
+            })}
+            {referralStats && referralStats.totalDirect > 0 && (
+              <div style={{display:'grid',gridTemplateColumns:'140px 1fr 60px',gap:'8px 12px',alignItems:'center'}}>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink-soft)',textAlign:'right'}}>直接 (= ref なし)</div>
+                <div style={{position:'relative',height:18,background:'var(--jb-paper-mist)',borderRadius:3,overflow:'hidden'}}>
+                  <div style={{position:'absolute',top:0,left:0,bottom:0,background:'#9CA8B2',width:`${(referralStats.totalDirect / refTotal) * 100}%`,transition:'width 1.2s'}}/>
+                </div>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink)'}}>
+                  {referralStats.totalDirect} <span style={{fontSize:8,color:'var(--jb-ink-ghost)'}}>({((referralStats.totalDirect / refTotal) * 100).toFixed(0)}%)</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 広報 ROI チャネル別 */}
+      {channelRoiList.length > 0 && (
+        <>
+          <div style={sectionTitleStyle}>広報 ROI チャネル別 (= 1000 リーチあたり 申込数)</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',gap:10}}>
+            {channelRoiList.map(([ch, s]) => {
+              const color = CHANNEL_COLORS[ch] || '#9CA8B2';
+              return (
+                <div key={ch} style={{
+                  padding:'12px 14px',background:'var(--jb-paper)',
+                  border:'1px solid var(--jb-line)',borderLeft:`3px solid ${color}`,borderRadius:6,
+                }}>
+                  <div style={{fontFamily:'var(--jb-display)',fontSize:14,fontWeight:800,color:color,marginBottom:4,letterSpacing:'-0.01em'}}>{ch}</div>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:18,fontWeight:800,color:'var(--jb-ink)',marginBottom:2}}>
+                    {s.roi.toFixed(2)}
+                    <span style={{fontSize:10,color:'var(--jb-ink-soft)',marginLeft:4}}>名/1000R</span>
+                  </div>
+                  <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
+                    {s.count} 投稿 · リーチ {s.reach.toLocaleString()} · 申込増 {s.lift}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+// (Phase 17.R) RankingCard — TOP 5 リスト 表示
+function RankingCard({ title, rows }) {
+  return (
+    <div style={{
+      padding:'14px 16px',background:'var(--jb-paper)',
+      border:'1px solid var(--jb-line)',borderRadius:6,
+    }}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.12em',color:'var(--jb-blue)',fontWeight:700,marginBottom:10,textTransform:'uppercase'}}>{title}</div>
+      {rows.length === 0 ? (
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',textAlign:'center',padding:'8px 0'}}>データなし</div>
+      ) : (
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {rows.map((r, i) => (
+            <div key={i} style={{display:'flex',alignItems:'baseline',gap:8}}>
+              <span style={{
+                fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:800,
+                color: i === 0 ? '#F59E0B' : i === 1 ? '#9CA8B2' : i === 2 ? '#CD7F32' : 'var(--jb-ink-ghost)',
+                minWidth:18,
+              }}>{i + 1}.</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:'var(--jb-sans)',fontSize:12,fontWeight:600,color:'var(--jb-ink)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.label}</div>
+                {r.sub && <div style={{fontFamily:'var(--jb-mono)',fontSize:8,color:'var(--jb-ink-ghost)',letterSpacing:'0.04em'}}>{r.sub}</div>}
+              </div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:800,color:'var(--jb-ink)'}}>{r.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // -------------------- PageAnalytics --------------------
 
 /**
@@ -19642,6 +20010,29 @@ function PageAnalytics(){
       }
     }
     load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // (Phase 17.R) 全体版 — 広報 + 流入経路 を 追加 fetch
+  const [allPromos, setAllPromos] = useState([]);
+  const [referralStats, setReferralStats] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExtras() {
+      try {
+        const [ps, rs] = await Promise.all([
+          window.fetchData('admin.listPromos', {}),  // eventId なし → 全件
+          window.fetchData('admin.getReferralStats', {}),  // 同上
+        ]);
+        if (!cancelled) {
+          setAllPromos(Array.isArray(ps) ? ps : []);
+          setReferralStats(rs || null);
+        }
+      } catch (e) {
+        console.warn('analytics extras failed:', e);
+      }
+    }
+    loadExtras();
     return () => { cancelled = true; };
   }, []);
 
@@ -19704,44 +20095,87 @@ function PageAnalytics(){
 
   // ========== カテゴリ別 (Phase 15.S141 + S142 + S143: アクティブ部署マスタのみ) ==========
   // 部署マスタからアクティブ / アーカイブを分離
-  const activeDeptNames = new Set();
-  const archivedDeptNames = new Set();
+  // (Phase 17.R-fix) 1 部署 = 1 キー (= abbr 優先) + alias で マッチング
+  //   イベントの category 列が "IFT" でも "IF Tokyo" でも 同じ キー (= IFT) に カウント
+  const activeDeptKeys = new Set();        // 表示用キー (= abbr 優先)
+  const archivedDeptAliases = new Set();    // archived の abbr + name 両方
+  const aliasToKey = {};                    // alias → 表示キー
   departments.forEach(d => {
-    const isArchived = d.status === 'archived' || d.status === 'アーカイブ';
-    if (d.abbr) (isArchived ? archivedDeptNames : activeDeptNames).add(d.abbr);
-    if (d.name) (isArchived ? archivedDeptNames : activeDeptNames).add(d.name);
+    const status = String(d.status || '').toLowerCase().trim();
+    const isActive = status === 'active';
+    if (!isActive) {
+      if (d.abbr) archivedDeptAliases.add(d.abbr);
+      if (d.name) archivedDeptAliases.add(d.name);
+      return;
+    }
+    const key = d.abbr || d.name;
+    if (!key) return;
+    activeDeptKeys.add(key);
+    if (d.abbr) aliasToKey[d.abbr] = key;
+    if (d.name) aliasToKey[d.name] = key;
+  });
+  // (Phase 17.R-fix) 全部署の生データ をログ
+  console.log('[Departments raw]', departments.map(d => ({
+    id: d.id, name: d.name, abbr: d.abbr, status: d.status,
+    判定: String(d.status || '').toLowerCase().trim() === 'active' ? 'active' : 'archived扱い',
+  })));
+  console.log('[Departments resolved]', {
+    activeDeptKeys: [...activeDeptKeys],
+    archivedDeptAliases: [...archivedDeptAliases],
+    aliasToKey,
   });
 
   const categoryStats = {};
-  // (S143) アクティブ部署のみカテゴリとして表示 (動的に events から拾うのを撤回)
-  if (activeDeptNames.size > 0) {
-    activeDeptNames.forEach(name => { categoryStats[name] = { regs: 0, rev: 0, ev: 0 }; });
-  } else {
-    // フォールバック (部署マスタが空の環境): 既知 4 つ
-    ['IFT', 'community', 'hub', 'order made'].forEach(c => { categoryStats[c] = { regs: 0, rev: 0, ev: 0 }; });
-  }
+  // (Phase 17.R-fix) アクティブ部署 のみ 表示キー で 初期化 (= 1 部署 = 1 キー)
+  activeDeptKeys.forEach(k => { categoryStats[k] = { regs: 0, rev: 0, ev: 0 }; });
+
+  // (Phase 17.R-fix) 複数カテゴリ対応 — "IFT" / "IFT,community" / "IFT、 hub" / "IFT/community" 全て対応
+  const splitCats = (s) => String(s || '').split(/[,、\/]/).map(x => x.trim()).filter(Boolean);
+  // alias (= abbr or name) を 表示キー に 解決
+  const resolveKey = (cat) => aliasToKey[cat] || null;
+
+  // (Phase 17.R-fix) デバッグ — イニシアチブ別が 0 のままの 切り分け
+  const allCatsFromEvents = new Set();
+  periodEvents.forEach(e => {
+    splitCats(e.category).forEach(c => allCatsFromEvents.add(c));
+  });
+  console.log('[KPIReport イニシアチブ別]', {
+    catsInEvents: [...allCatsFromEvents],
+    knownCats: Object.keys(categoryStats),
+    eventCount: periodEvents.length,
+    sample_event: periodEvents[0] && { id: periodEvents[0].id, title: periodEvents[0].title, category: periodEvents[0].category },
+  });
 
   periodEvents.forEach(e => {
-    const cat = (e.category || '').trim();
-    if (cat && categoryStats[cat]) categoryStats[cat].ev++;
+    splitCats(e.category).forEach(cat => {
+      const k = resolveKey(cat);
+      if (k && categoryStats[k]) categoryStats[k].ev++;
+    });
   });
   // (S143) 申込数も 申込操作単位
-  const categoryOpSeen = {};  // cat → Set<opKey>
+  const categoryOpSeen = {};  // 表示キー → Set<opKey>
   periodRegs.forEach(r => {
     const ev = events.find(e => e.id === r.eventId);
-    const cat = ev ? (ev.category || '').trim() : '';
-    if (!cat || !categoryStats[cat]) return;
+    if (!ev) return;
     const dateKey = r.appliedAt ? String(r.appliedAt).slice(0, 19) : 'no-date';
     const opKey = (r.userId || '') + '::' + (r.eventId || '') + '::' + dateKey;
-    if (!categoryOpSeen[cat]) categoryOpSeen[cat] = new Set();
-    categoryOpSeen[cat].add(opKey);
+    splitCats(ev.category).forEach(cat => {
+      const k = resolveKey(cat);
+      if (!k || !categoryStats[k]) return;
+      if (!categoryOpSeen[k]) categoryOpSeen[k] = new Set();
+      categoryOpSeen[k].add(opKey);
+    });
   });
-  Object.entries(categoryOpSeen).forEach(([cat, set]) => { categoryStats[cat].regs = set.size; });
+  Object.entries(categoryOpSeen).forEach(([k, set]) => { categoryStats[k].regs = set.size; });
   periodPaidRegs.forEach(r => {
     const ev = events.find(e => e.id === r.eventId);
-    const cat = ev ? (ev.category || '').trim() : '';
+    if (!ev) return;
     const eff = Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0));
-    if (cat && categoryStats[cat]) categoryStats[cat].rev += eff;
+    splitCats(ev.category).forEach(cat => {
+      const k = resolveKey(cat);
+      if (!k || !categoryStats[k]) return;
+      categoryStats[k].rev += eff;
+    });
   });
 
   // ========== イベント別パフォーマンス (S140 Registrations ベース + S143 申込操作単位) ==========
@@ -19859,17 +20293,29 @@ function PageAnalytics(){
           <div className="card">
             <div className="card-head"><div className="card-title"><Icon n="tag" s={16}/> イニシアチブ別</div></div>
             <div className="card-body stack" style={{gap:12}}>
-              {Object.entries(categoryStats)
+              {Object.keys(categoryStats).length === 0 ? (
+                <div style={{fontSize:11,color:'var(--ink4)',textAlign:'center',padding:'12px 0'}}>
+                  アクティブな部署が ありません<br/>
+                  <span style={{fontSize:10}}>(= 部署管理から アクティブな 部署を 追加してください)</span>
+                </div>
+              ) : Object.entries(categoryStats)
                 .sort(([, a], [, b]) => (b.regs - a.regs) || (b.ev - a.ev) || (b.rev - a.rev))
                 .map(([cat, s]) => {
-                const accentMap = {"IFT":"indigo","community":"teal","hub":"violet","order made":"amber"};
-                const c = accentMap[cat] || 'ink';
                 const isEmpty = s.ev === 0 && s.regs === 0 && s.rev === 0;
+                // (Phase 17.R-fix) 部署マスタの color を 使う / 不明なら ink
+                const deptColor = (function() {
+                  const d = (departments || []).find(d => {
+                    const isActive = String(d.status || '').toLowerCase().trim() === 'active';
+                    if (!isActive) return false;
+                    return d.abbr === cat || d.name === cat;
+                  });
+                  return d && d.color ? d.color : null;
+                })();
                 return (
                   <div key={cat} style={{opacity: isEmpty ? 0.45 : 1}}>
                     <div className="row between" style={{fontSize:12,marginBottom:4}}>
                       <div style={{display:'flex',alignItems:'center',gap:6}}>
-                        <span style={{width:8,height:8,borderRadius:2,background:`var(--${c})`}}></span>
+                        <span style={{width:8,height:8,borderRadius:2,background: deptColor || 'var(--ink)'}}></span>
                         <span style={{fontWeight:600}}>{cat}</span>
                       </div>
                       <span className="mono" style={{fontSize:11,color:isEmpty?'var(--ink4)':'var(--ink2)'}}>{s.ev} イベント</span>
@@ -19886,6 +20332,16 @@ function PageAnalytics(){
         </div>
 
       </div>
+
+      {/* (Phase 17.R) 横断 KPI — 全期間 全イベント版 */}
+      <CrossEventAnalyticsSection
+        events={periodEvents}
+        registrations={periodRegs}
+        participants={participants}
+        payments={payments.filter(p => inPeriod(p.paidAt || p.createdAt))}
+        promos={allPromos}
+        referralStats={referralStats}
+      />
     </div>
   );
 }
@@ -20913,6 +21369,7 @@ function PagePhotos(){
           onCancel={()=>setEditing(null)}
         />
       )}
+
     </div>
   );
 }
