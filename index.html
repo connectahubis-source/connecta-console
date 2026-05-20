@@ -83,6 +83,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Kalam:wght@400;700&family=Permanent+Marker&family=Yuji+Mai&family=Yuji+Boku&family=Klee+One:wght@400;600&family=Zen+Kurenaido&family=Hachi+Maru+Pop&family=Fraunces:ital,wght@0,400;1,400&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<!-- (Phase 17.N-10) 世界地図 choropleth 用 d3 + topojson-client -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
 <style>
 /* =========================================================
@@ -5263,7 +5266,383 @@ function getPatternRatio(progress, pattern, percentile) {
   return points[points.length - 1][1];
 }
 
+// =============================================================================
+// (Phase 17.N-10) NationalityWorldMap — 世界地図 choropleth
+//   国別の参加者数を 色の濃さで 可視化
+//   d3-geo + topojson-client + world-atlas を 使用 (= CDN ロード)
+// =============================================================================
+// 参加者の nationality → ISO 数値コード (= world-atlas で 使う ID)
+const COUNTRY_NAME_TO_ISO_NUM = {
+  // 主要国の 名前 / 英語名 / Alpha-2 → ISO 数値コード
+  '日本':'392','Japan':'392','JP':'392',
+  '中国':'156','China':'156','CN':'156',
+  '韓国':'410','Korea':'410','South Korea':'410','KR':'410','大韓民国':'410',
+  '台湾':'158','Taiwan':'158','TW':'158',
+  '香港':'344','Hong Kong':'344','HK':'344',
+  'ベトナム':'704','Vietnam':'704','VN':'704',
+  'タイ':'764','Thailand':'764','TH':'764',
+  'インド':'356','India':'356','IN':'356',
+  'インドネシア':'360','Indonesia':'360','ID':'360',
+  'フィリピン':'608','Philippines':'608','PH':'608',
+  'マレーシア':'458','Malaysia':'458','MY':'458',
+  'シンガポール':'702','Singapore':'702','SG':'702',
+  'モンゴル':'496','Mongolia':'496','MN':'496',
+  'ネパール':'524','Nepal':'524','NP':'524',
+  'バングラデシュ':'050','Bangladesh':'050','BD':'050',
+  'パキスタン':'586','Pakistan':'586','PK':'586',
+  'スリランカ':'144','Sri Lanka':'144','LK':'144',
+  'カンボジア':'116','Cambodia':'116','KH':'116',
+  'ミャンマー':'104','Myanmar':'104','MM':'104',
+  'ラオス':'418','Laos':'418','LA':'418',
+  'ブルネイ':'096','Brunei':'096','BN':'096',
+  'イギリス':'826','United Kingdom':'826','UK':'826','GB':'826','英国':'826',
+  'フランス':'250','France':'250','FR':'250',
+  'ドイツ':'276','Germany':'276','DE':'276',
+  'イタリア':'380','Italy':'380','IT':'380',
+  'スペイン':'724','Spain':'724','ES':'724',
+  'ポルトガル':'620','Portugal':'620','PT':'620',
+  'オランダ':'528','Netherlands':'528','NL':'528',
+  'ベルギー':'056','Belgium':'056','BE':'056',
+  'スイス':'756','Switzerland':'756','CH':'756',
+  'オーストリア':'040','Austria':'040','AT':'040',
+  'スウェーデン':'752','Sweden':'752','SE':'752',
+  'ノルウェー':'578','Norway':'578','NO':'578',
+  'デンマーク':'208','Denmark':'208','DK':'208',
+  'フィンランド':'246','Finland':'246','FI':'246',
+  'アイスランド':'352','Iceland':'352','IS':'352',
+  'アイルランド':'372','Ireland':'372','IE':'372',
+  'ポーランド':'616','Poland':'616','PL':'616',
+  'チェコ':'203','Czech':'203','Czech Republic':'203','CZ':'203',
+  'ハンガリー':'348','Hungary':'348','HU':'348',
+  'ギリシャ':'300','Greece':'300','GR':'300',
+  'ロシア':'643','Russia':'643','RU':'643',
+  'ウクライナ':'804','Ukraine':'804','UA':'804',
+  'ルーマニア':'642','Romania':'642','RO':'642',
+  'アメリカ':'840','アメリカ合衆国':'840','United States':'840','USA':'840','US':'840','米国':'840',
+  'カナダ':'124','Canada':'124','CA':'124',
+  'メキシコ':'484','Mexico':'484','MX':'484',
+  'ブラジル':'076','Brazil':'076','BR':'076',
+  'アルゼンチン':'032','Argentina':'032','AR':'032',
+  'チリ':'152','Chile':'152','CL':'152',
+  'ペルー':'604','Peru':'604','PE':'604',
+  'コロンビア':'170','Colombia':'170','CO':'170',
+  'ベネズエラ':'862','Venezuela':'862','VE':'862',
+  'エクアドル':'218','Ecuador':'218','EC':'218',
+  'ボリビア':'068','Bolivia':'068','BO':'068',
+  'ウルグアイ':'858','Uruguay':'858','UY':'858',
+  'エジプト':'818','Egypt':'818','EG':'818',
+  'ナイジェリア':'566','Nigeria':'566','NG':'566',
+  '南アフリカ':'710','South Africa':'710','ZA':'710',
+  'ケニア':'404','Kenya':'404','KE':'404',
+  'モロッコ':'504','Morocco':'504','MA':'504',
+  'エチオピア':'231','Ethiopia':'231','ET':'231',
+  'ガーナ':'288','Ghana':'288','GH':'288',
+  'アルジェリア':'012','Algeria':'012','DZ':'012',
+  'オーストラリア':'036','Australia':'036','AU':'036',
+  'ニュージーランド':'554','New Zealand':'554','NZ':'554',
+  'フィジー':'242','Fiji':'242','FJ':'242',
+  'サウジアラビア':'682','Saudi Arabia':'682','SA':'682',
+  'イラン':'364','Iran':'364','IR':'364',
+  'イラク':'368','Iraq':'368','IQ':'368',
+  'アラブ首長国連邦':'784','UAE':'784','AE':'784','United Arab Emirates':'784',
+  'トルコ':'792','Turkey':'792','TR':'792',
+  'イスラエル':'376','Israel':'376','IL':'376',
+  'ヨルダン':'400','Jordan':'400','JO':'400',
+};
+
+// =============================================================================
+// (Phase 17.N-12) AgeBreakdown — 年齢別 内訳 (= 推移ではなく 現在の構成、 横棒グラフ)
+// =============================================================================
+function AgeBreakdown({ regs }) {
+  // ユニーク userId × 年齢区分
+  const buckets = React.useMemo(() => {
+    const ageOf = (r) => {
+      if (typeof r.age === 'number' && r.age > 0) return r.age;
+      const p = r.participant;
+      if (!p) return null;
+      let age = Number(p.age);
+      if (!age && p.birthdate) {
+        const b = new Date(p.birthdate);
+        if (!isNaN(b.getTime())) {
+          const now = new Date();
+          age = now.getFullYear() - b.getFullYear();
+          if (now.getMonth() < b.getMonth() || (now.getMonth() === b.getMonth() && now.getDate() < b.getDate())) age--;
+        }
+      }
+      return age || null;
+    };
+    const bucketOf = (age) => {
+      if (age == null) return '不明';
+      if (age < 10) return '10代未満';
+      if (age < 20) return '10代';
+      if (age < 30) return '20代';
+      if (age < 40) return '30代';
+      return '40代以上';
+    };
+    const ORDER = ['10代未満','10代','20代','30代','40代以上','不明'];
+    const m = {};
+    ORDER.forEach(k => m[k] = new Set());
+    (regs || []).forEach(r => {
+      const s = String(r.status || '');
+      if (s === 'キャンセル' || s === '返金' || s === '返金待ち') return;
+      if (!r.userId) return;
+      const k = bucketOf(ageOf(r));
+      m[k].add(r.userId);
+    });
+    return ORDER
+      .map(k => ({ key: k, count: m[k].size }))
+      .filter(e => e.count > 0);
+  }, [regs]);
+
+  const total = buckets.reduce((s, b) => s + b.count, 0);
+  if (total === 0) return null;
+  const max = Math.max(1, ...buckets.map(b => b.count));
+  const COLORS = ['#94a3b8','#0EA5E9','#10B981','#F59E0B','#EC4899','#9CA8B2'];
+  const ORDER_COLORS = {
+    '10代未満':'#94a3b8','10代':'#0EA5E9','20代':'#10B981',
+    '30代':'#F59E0B','40代以上':'#EC4899','不明':'#9CA8B2',
+  };
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10}}>
+        年齢構成 ({total} 名)
+      </div>
+      <div style={{padding:'16px 18px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:8}}>
+        <div style={{display:'grid',gridTemplateColumns:'80px 1fr 60px',gap:'8px 14px',alignItems:'center'}}>
+          {buckets.map(b => {
+            const pct = (b.count / total) * 100;
+            const barW = (b.count / max) * 100;
+            const color = ORDER_COLORS[b.key] || '#9CA8B2';
+            return (
+              <React.Fragment key={b.key}>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.06em',color:'var(--jb-ink-soft)',fontWeight:700,textAlign:'right'}}>
+                  {b.key}
+                </div>
+                <div style={{position:'relative',height:18,background:'var(--jb-paper-mist)',borderRadius:3,overflow:'hidden'}}>
+                  <div style={{
+                    position:'absolute',top:0,left:0,bottom:0,
+                    background: color,
+                    width:`${barW}%`,
+                    transition:'width 1.2s cubic-bezier(0.22, 1, 0.36, 1)',
+                    borderRadius:3,
+                  }}/>
+                </div>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,color:'var(--jb-ink)',display:'flex',gap:4,alignItems:'baseline'}}>
+                  <span>{b.count}</span>
+                  <span style={{fontSize:9,color:'var(--jb-ink-ghost)'}}>({pct.toFixed(0)}%)</span>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NationalityWorldMap({ regs }) {
+  const svgRef = React.useRef(null);
+  const wrapRef = React.useRef(null);
+  const [topology, setTopology] = useState(null);
+  const [hoverCountry, setHoverCountry] = useState(null);
+
+  // (Phase 17.N-10/11/12) 国別人数 集計 — userId ユニーク化 (= reg 数ではない)
+  const countryCounts = React.useMemo(() => {
+    const m = {};
+    let totalKnown = 0, totalUnknown = 0;
+    const countedByCountry = {};  // iso → Set(userId)
+    const unknownUsers = new Set();
+    (regs || []).forEach(r => {
+      if (!r || !r.userId) return;
+      const nat = String(
+        r.nationality ||
+        (r.participant && r.participant.nationality) ||
+        ''
+      ).trim();
+      if (!nat) { unknownUsers.add(r.userId); return; }
+      let iso = COUNTRY_NAME_TO_ISO_NUM[nat];
+      if (!iso) {
+        for (const key in COUNTRY_NAME_TO_ISO_NUM) {
+          if (nat.indexOf(key) >= 0) { iso = COUNTRY_NAME_TO_ISO_NUM[key]; break; }
+        }
+      }
+      if (!iso) { unknownUsers.add(r.userId); return; }
+      const k = String(parseInt(iso, 10));
+      if (!countedByCountry[k]) countedByCountry[k] = new Set();
+      countedByCountry[k].add(r.userId);
+    });
+    Object.keys(countedByCountry).forEach(k => {
+      m[k] = countedByCountry[k].size;
+      totalKnown += m[k];
+    });
+    totalUnknown = unknownUsers.size;
+    if (regs && regs.length > 0) {
+      console.log('[NationalityWorldMap]', {
+        regs: regs.length,
+        users_with_nat: totalKnown,
+        users_unknown: totalUnknown,
+        sample: regs[0] && {
+          nationality_root: regs[0].nationality,
+          nationality_participant: regs[0].participant && regs[0].participant.nationality,
+        },
+      });
+    }
+    return { map: m, totalKnown, totalUnknown, maxCount: Math.max(1, ...Object.values(m)) };
+  }, [regs]);
+
+  // (Phase 17.N-10) world-atlas を CDN から fetch (= 110m 解像度、軽い)
+  React.useEffect(() => {
+    if (typeof window.topojson === 'undefined' || typeof window.d3 === 'undefined') {
+      console.warn('d3 / topojson not loaded yet');
+      return;
+    }
+    let cancelled = false;
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
+      .then(r => r.json())
+      .then(topo => { if (!cancelled) setTopology(topo); })
+      .catch(e => console.warn('world map fetch failed:', e));
+    return () => { cancelled = true; };
+  }, []);
+
+  // (Phase 17.N-10) 地図描画
+  React.useEffect(() => {
+    if (!topology || !svgRef.current) return;
+    const svg = window.d3.select(svgRef.current);
+    svg.selectAll('*').remove();
+    const W = 800, H = 380;
+    const countries = window.topojson.feature(topology, topology.objects.countries);
+    const projection = window.d3.geoNaturalEarth1()
+      .fitSize([W, H], countries);
+    const path = window.d3.geoPath(projection);
+
+    // 色スケール (= 0 → 薄い灰、 最大 → 濃い青)
+    const maxC = countryCounts.maxCount;
+    const colorScale = window.d3.scaleSequential()
+      .domain([0, maxC])
+      .interpolator(window.d3.interpolateBlues);
+
+    // 海 / 背景
+    svg.append('rect')
+      .attr('width', W).attr('height', H)
+      .attr('fill', '#F2F7FB');
+
+    // 各国
+    svg.selectAll('path.country')
+      .data(countries.features)
+      .enter()
+      .append('path')
+      .attr('class', 'country')
+      .attr('d', path)
+      .attr('fill', d => {
+        const id = String(d.id);
+        const count = countryCounts.map[id] || 0;
+        return count > 0 ? colorScale(count) : '#E5EEF5';
+      })
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 0.5)
+      .style('cursor', 'pointer')
+      .on('mouseover', function(e, d) {
+        const id = String(d.id);
+        const count = countryCounts.map[id] || 0;
+        const name = (d.properties && d.properties.name) || ('Country ' + id);
+        const rect = wrapRef.current.getBoundingClientRect();
+        setHoverCountry({
+          name: name,
+          count: count,
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        });
+        window.d3.select(this).attr('stroke', '#00A8E1').attr('stroke-width', 1.5).raise();
+      })
+      .on('mousemove', function(e) {
+        const rect = wrapRef.current.getBoundingClientRect();
+        setHoverCountry(prev => prev ? { ...prev, x: e.clientX - rect.left, y: e.clientY - rect.top } : prev);
+      })
+      .on('mouseout', function() {
+        setHoverCountry(null);
+        window.d3.select(this).attr('stroke', '#ffffff').attr('stroke-width', 0.5);
+      });
+  }, [topology, countryCounts]);
+
+  if (regs.length === 0) return null;
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
+        <span>国別 参加者分布 ({countryCounts.totalKnown} 名 / 不明 {countryCounts.totalUnknown} 名)</span>
+        <div style={{display:'flex',alignItems:'center',gap:6,fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.04em',textTransform:'none',color:'var(--jb-ink-soft)'}}>
+          <span>少</span>
+          <div style={{display:'flex'}}>
+            {[0.1, 0.3, 0.5, 0.7, 0.9].map(t => (
+              <span key={t} style={{
+                width:14, height:10,
+                background: window.d3 ? window.d3.interpolateBlues(t) : '#E5EEF5',
+                borderRight:'1px solid #fff',
+              }}/>
+            ))}
+          </div>
+          <span>多</span>
+          {countryCounts.maxCount > 0 && <span style={{marginLeft:6}}>(最大 {countryCounts.maxCount})</span>}
+        </div>
+      </div>
+      <div ref={wrapRef} style={{position:'relative',padding:'10px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:8,overflow:'hidden'}}>
+        {!topology ? (
+          <div style={{padding:'80px 0',textAlign:'center',fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',letterSpacing:'0.06em'}}>
+            世界地図 読み込み中…
+          </div>
+        ) : (
+          <svg ref={svgRef} viewBox="0 0 800 380" style={{width:'100%',height:'auto',display:'block'}}/>
+        )}
+        {hoverCountry && (
+          <div style={{
+            position:'absolute',
+            left: Math.min(hoverCountry.x + 14, (wrapRef.current ? wrapRef.current.clientWidth : 800) - 180),
+            top: Math.max(8, hoverCountry.y - 50),
+            padding:'8px 12px',
+            background:'rgba(30, 50, 71, 0.96)',
+            color:'#fff',
+            borderRadius:6,
+            boxShadow:'0 4px 12px rgba(0,0,0,0.25)',
+            pointerEvents:'none',
+            fontFamily:'var(--jb-mono)',
+            fontSize:10,
+            letterSpacing:'0.04em',
+            zIndex:10,
+          }}>
+            <div style={{fontFamily:'var(--jb-display)',fontSize:13,fontWeight:800,letterSpacing:'-0.01em'}}>{hoverCountry.name}</div>
+            <div style={{marginTop:3,color:'#94a3b8'}}>{hoverCountry.count} 名</div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+window.NationalityWorldMap = NationalityWorldMap;
+
 function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats }) {
+  // (Phase 17.N-6) グルーピングモード切替: 'session' (= Day 別) / 'payment' (= 決済方法別)
+  const [groupMode, setGroupMode] = useState('session');
+  // (Phase 17.N-6) hover state
+  const [hover, setHover] = useState(null);  // { x, y, dayIdx, day, items: [{label, value, color, isPredicted}] }
+  const svgWrapRef = React.useRef(null);
+
+  // (Phase 17.N-12.5) デバッグ: regs に nationality が 入っているか 表示
+  React.useEffect(() => {
+    if (!regs || regs.length === 0) return;
+    const sample = regs[0];
+    const totalWithNat = regs.filter(r => r && (r.nationality || (r.participant && r.participant.nationality))).length;
+    console.log('[ApplicationTrendChart] regs=' + regs.length + ' withNat=' + totalWithNat, {
+      sample0: {
+        userId: sample.userId,
+        nationality_root: sample.nationality,
+        nationality_participant: sample.participant && sample.participant.nationality,
+        all_keys: Object.keys(sample),
+      },
+      missing_sample: regs.find(r => !r.nationality && !(r.participant && r.participant.nationality)) || null,
+    });
+  }, [regs]);
   const startDate = event.regOpenDate || event.createdAt || (regs[0] && (regs[0].appliedAt || regs[0].createdAt));
   const endDate = event.regCloseDate || event.date;
   if (!startDate || !endDate || regs.length === 0) {
@@ -5311,30 +5690,35 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
   // 各日の進捗% (= 0..1)
   const progressAt = (i) => Math.max(0, Math.min(1, i / (days.length - 1)));
 
-  // (Phase 17.N-5) buildSeries — 精度向上版
-  //   1. 過去パターンの中央値で 推定最終 (= 既存)
-  //   2. 直近 7 日の傾きから 短期推定最終
-  //   3. 進捗% に応じて 加重平均 (= 序盤はパターン、 終盤は直近、 中盤は中央)
-  //   4. 信頼区間: p10 / p25 / p50 / p75 / p90 で 上下バンド生成
-  //   5. キャンセル考慮 + 定員クリップ + 一部キャンセル対応
-  const buildSeries = (regSubset, capacity) => {
+  // (Phase 17.N-6) buildSeries 引数拡張
+  //   capacity: 定員 (上限クリップ用、 ハードリミットでなくソフトに)
+  //   options: { groupType: 'cumulative' | 'unpaid' | 'unknown' }
+  //     - 'cumulative' = 累積で増える系 (= Day別, 決済済方法別, 年齢別, 出身別) → 過去パターン適用
+  //     - 'unpaid'     = 未決済系 (= 一時的に貯まる、 当日決済で消える) → 短期トレンドのみ + 上限緩
+  //     - 'unknown'    = 不明 → デフォルト 'cumulative'
+  const buildSeries = (regSubset, capacity, options) => {
+    const opts = options || {};
+    const groupType = opts.groupType || 'cumulative';
+    // (Phase 17.N-12) 「人数」 = ユニーク userId 数で カウント (= reg 数ではない)
+    //   1 人が multi で 3 Day 申込 → 1 人としてカウント
     const actual = days.map((d) => {
       const cutoff = new Date(d.getTime() + 24 * 60 * 60 * 1000);
-      const count = regSubset.filter(r => {
+      const ids = new Set();
+      regSubset.forEach(r => {
         const ad = toDate(r.appliedAt || r.createdAt);
-        if (!ad || ad > cutoff) return false;
+        if (!ad || ad > cutoff) return;
         const cd = toDate(r.cancelledAt);
-        if (cd && cd <= cutoff) return false;
-        return true;
-      }).length;
-      return count;
+        if (cd && cd <= cutoff) return;
+        if (r.userId) ids.add(r.userId);
+      });
+      return ids.size;
     });
     const actualToToday = actual.slice(0, todayIdx + 1);
     const lastActual = actualToToday[actualToToday.length - 1] || 0;
     const progressNow = progressAt(todayIdx);
     const ratioNow = getPatternRatio(progressNow, pattern, 'p50');
 
-    // 推定最終 — パターンベース
+    // 推定最終 — パターンベース (= 累積系のみ意味あり)
     let patternFinal;
     if (ratioNow < 0.05 || lastActual === 0) {
       patternFinal = lastActual;
@@ -5342,25 +5726,49 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
       patternFinal = lastActual / ratioNow;
     }
 
-    // 推定最終 — 直近 7 日トレンドベース
+    // 推定最終 — 直近 7 日トレンド (= 累積系も未決済系も 使う)
     let shortFinal = lastActual;
+    let rate = 0;
     if (todayIdx >= 2) {
       const lookback = Math.min(7, todayIdx);
       const recent = actualToToday.slice(-lookback - 1);
-      const rate = lookback > 0 ? Math.max(0, (recent[recent.length - 1] - recent[0]) / lookback) : 0;
+      rate = lookback > 0 ? Math.max(0, (recent[recent.length - 1] - recent[0]) / lookback) : 0;
       shortFinal = lastActual + rate * (days.length - 1 - todayIdx);
     }
 
-    // (Phase 17.N-5) 加重平均: 進捗% が高いほど 直近を 重視
-    //   weight_short = 0.2 + 0.6 * progressNow  (序盤 20%, 終盤 80%)
-    //   weight_pattern = 1 - weight_short
-    const wShort = 0.2 + 0.6 * Math.max(0, Math.min(1, progressNow));
-    const wPattern = 1 - wShort;
-    let estimatedFinal = wShort * shortFinal + wPattern * patternFinal;
-    if (capacity && capacity > 0) {
-      estimatedFinal = Math.min(estimatedFinal, capacity);
+    let estimatedFinal;
+    if (groupType === 'unpaid') {
+      // (Phase 17.N-8) 未決済系 — 過去パターン適用しない
+      //   理由: 未決済は 一時的に貯まる + 当日決済 / キャンセル で 消える
+      //   予測: 短期ペースを そのまま線形外挿、 ただし 大幅減衰 (= 急に減ることが多い)
+      //   ただし 直近ペースが速い → 一時的にピークを過ぎる前提で 0.6 倍に
+      estimatedFinal = lastActual + Math.max(0, shortFinal - lastActual) * 0.5;
+      // 上限: 全体定員 (= capacity 渡さない場合は緩い)
+    } else {
+      // (Phase 17.N-8) 累積系 — 加重平均 (= 既存)
+      //   ただし、 短期トレンドが過大評価しないように patternFinal を上限抑制要素として使う
+      const wShort = 0.2 + 0.6 * Math.max(0, Math.min(1, progressNow));
+      const wPattern = 1 - wShort;
+      estimatedFinal = wShort * shortFinal + wPattern * patternFinal;
+
+      // (Phase 17.N-8) 「定員必達」 を避ける — 短期トレンドより 1.5 倍超えない
+      //   shortFinal は 「現ペース継続」 = 現実的上限
+      //   patternFinal が それを 大きく超えるなら 緩める
+      const realisticUpper = lastActual + rate * (days.length - 1 - todayIdx) * 1.5;
+      if (rate > 0 && estimatedFinal > realisticUpper) {
+        estimatedFinal = realisticUpper;
+      }
     }
-    estimatedFinal = Math.max(lastActual, estimatedFinal);  // 現在値を下回らない
+
+    // 定員クリップ — 累積系のみハード、 未決済系はソフト (= 50% 超過まで許容)
+    if (capacity && capacity > 0) {
+      if (groupType === 'unpaid') {
+        estimatedFinal = Math.min(estimatedFinal, capacity * 1.5);
+      } else {
+        estimatedFinal = Math.min(estimatedFinal, capacity);
+      }
+    }
+    estimatedFinal = Math.max(lastActual, estimatedFinal);
 
     // 信頼区間用の推定最終 (= p25 / p75 経由)
     const ratioNow25 = getPatternRatio(progressNow, pattern, 'p25');
@@ -5375,21 +5783,34 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
 
     // 予測曲線生成
     const predicted = [];
-    const predictedUpper = [];  // 楽観
-    const predictedLower = [];  // 悲観
+    const predictedUpper = [];
+    const predictedLower = [];
     for (let i = todayIdx + 1; i < days.length; i++) {
       const r = progressAt(i);
-      const ratio = getPatternRatio(r, pattern, 'p50');
-      let v = estimatedFinal * ratio;
+      let v;
+      if (groupType === 'unpaid') {
+        // 未決済系 — 短期ペースで 線形外挿 + 上限緩め
+        v = lastActual + (estimatedFinal - lastActual) * ((i - todayIdx) / (days.length - 1 - todayIdx));
+      } else {
+        // 累積系 — 過去パターン適用
+        const ratio = getPatternRatio(r, pattern, 'p50');
+        v = estimatedFinal * ratio;
+      }
       const prev = i === todayIdx + 1 ? lastActual : predicted[predicted.length - 1];
       if (v < prev) v = prev;
-      if (capacity && capacity > 0) v = Math.min(v, capacity);
+      if (capacity && capacity > 0 && groupType !== 'unpaid') v = Math.min(v, capacity);
       predicted.push(Math.round(v));
 
-      // 上下バンド (= 楽観/悲観の パーセンタイルカーブ)
-      let upper = optimisticFinal * getPatternRatio(r, pattern, 'p25');
-      let lower = pessimisticFinal * getPatternRatio(r, pattern, 'p75');
-      if (capacity && capacity > 0) {
+      let upper, lower;
+      if (groupType === 'unpaid') {
+        // 未決済 — 単純線形 ± 30%
+        upper = v * 1.3;
+        lower = v * 0.7;
+      } else {
+        upper = optimisticFinal * getPatternRatio(r, pattern, 'p25');
+        lower = pessimisticFinal * getPatternRatio(r, pattern, 'p75');
+      }
+      if (capacity && capacity > 0 && groupType !== 'unpaid') {
         upper = Math.min(upper, capacity);
         lower = Math.min(lower, capacity);
       }
@@ -5420,14 +5841,272 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
     totalCapacity = Number(event.capacity);
   }
 
-  const allData = buildSeries(regs, totalCapacity || null);
-  const sessionData = sessions.map(s => ({
-    session: s,
-    data: buildSeries(regs.filter(r => r.sessionId === s.id), Number(s.capacity) || null),
-  }));
+  const allData = buildSeries(regs, totalCapacity || null, { groupType: 'cumulative' });
+
+  // (Phase 17.N-6/8) participantMap (= userId → participant)
+  const participantMap = React.useMemo(() => {
+    const m = {};
+    (regs || []).forEach(r => {
+      if (r.participant) m[r.userId] = r.participant;
+    });
+    return m;
+  }, [regs]);
+  // 親から participants が来ない場合は r.participant を使う (= rowToFrontRegistration で 一部入る)
+
+  // (Phase 17.N-6) グルーピング — モードで切替
+  let groupedData;
+  if (groupMode === 'payment') {
+    // 決済方法別
+    const classify = (r) => {
+      const m = String(r.actualPaymentMethod || '').trim();
+      if (m) return m;
+      const note = String(r.note || '');
+      const declared = note.match(/\[当日申告\]\s*(現金|PayPay)/);
+      if (declared) return declared[1] + ' (申告)';
+      if (r.paid) return '決済済 (方法不明)';
+      return '未決済';
+    };
+    const buckets = {};
+    regs.forEach(r => {
+      const key = classify(r);
+      if (!buckets[key]) buckets[key] = [];
+      buckets[key].push(r);
+    });
+    const keys = Object.keys(buckets).sort((a, b) => {
+      if (a === '未決済') return 1;
+      if (b === '未決済') return -1;
+      return buckets[b].length - buckets[a].length;
+    });
+    groupedData = keys.map((k, i) => {
+      // (Phase 17.N-8) 「未決済」 系は 短期トレンドのみ、 過去パターン適用しない
+      const isUnpaid = k === '未決済' || k.indexOf('(申告)') >= 0;
+      return {
+        key: k,
+        label: k,
+        data: buildSeries(buckets[k], null, { groupType: isUnpaid ? 'unpaid' : 'cumulative' }),
+      };
+    });
+  } else if (groupMode === 'age') {
+    // (Phase 17.N-8/11) 年齢別 — 10 代未満 / 10 代 / 20 代 / 30 代 / 40 代以上
+    const ageOf = (r) => {
+      // root レベル age 優先
+      if (typeof r.age === 'number' && r.age > 0) return r.age;
+      const p = r.participant || participantMap[r.userId];
+      if (!p) return null;
+      let age = Number(p.age);
+      if (!age && p.birthdate) {
+        const b = new Date(p.birthdate);
+        if (!isNaN(b.getTime())) {
+          const now = new Date();
+          age = now.getFullYear() - b.getFullYear();
+          if (now.getMonth() < b.getMonth() || (now.getMonth() === b.getMonth() && now.getDate() < b.getDate())) age--;
+        }
+      }
+      return age || null;
+    };
+    const ageBucket = (age) => {
+      if (age == null) return '不明';
+      if (age < 10) return '10代未満';
+      if (age < 20) return '10代';
+      if (age < 30) return '20代';
+      if (age < 40) return '30代';
+      return '40代以上';
+    };
+    const ORDER = ['10代未満','10代','20代','30代','40代以上','不明'];
+    const buckets = {};
+    regs.forEach(r => {
+      const k = ageBucket(ageOf(r));
+      if (!buckets[k]) buckets[k] = [];
+      buckets[k].push(r);
+    });
+    groupedData = ORDER.filter(k => buckets[k]).map(k => ({
+      key: k,
+      label: k,
+      data: buildSeries(buckets[k], null, { groupType: 'cumulative' }),
+    }));
+  } else if (groupMode === 'region') {
+    // (Phase 17.N-9/11) 地域別 — 国籍 → 地域マッピング
+    //   r.nationality (root) → r.participant.nationality の 順に フォールバック
+    const REGION_MAP = {
+      // ASIA
+      '日本':'アジア','Japan':'アジア','JP':'アジア',
+      '中国':'アジア','China':'アジア','CN':'アジア',
+      '韓国':'アジア','Korea':'アジア','South Korea':'アジア','KR':'アジア','大韓民国':'アジア',
+      '台湾':'アジア','Taiwan':'アジア','TW':'アジア',
+      '香港':'アジア','Hong Kong':'アジア','HK':'アジア',
+      'ベトナム':'アジア','Vietnam':'アジア','VN':'アジア',
+      'タイ':'アジア','Thailand':'アジア','TH':'アジア',
+      'インド':'アジア','India':'アジア','IN':'アジア',
+      'インドネシア':'アジア','Indonesia':'アジア','ID':'アジア',
+      'フィリピン':'アジア','Philippines':'アジア','PH':'アジア',
+      'マレーシア':'アジア','Malaysia':'アジア','MY':'アジア',
+      'シンガポール':'アジア','Singapore':'アジア','SG':'アジア',
+      'モンゴル':'アジア','Mongolia':'アジア','MN':'アジア',
+      'ネパール':'アジア','Nepal':'アジア','NP':'アジア',
+      'バングラデシュ':'アジア','Bangladesh':'アジア','BD':'アジア',
+      'パキスタン':'アジア','Pakistan':'アジア','PK':'アジア',
+      'スリランカ':'アジア','Sri Lanka':'アジア','LK':'アジア',
+      'カンボジア':'アジア','Cambodia':'アジア','KH':'アジア',
+      'ミャンマー':'アジア','Myanmar':'アジア','MM':'アジア',
+      'ラオス':'アジア','Laos':'アジア','LA':'アジア',
+      'ブルネイ':'アジア','Brunei':'アジア','BN':'アジア',
+      // EUROPE
+      'イギリス':'ヨーロッパ','United Kingdom':'ヨーロッパ','UK':'ヨーロッパ','GB':'ヨーロッパ','英国':'ヨーロッパ',
+      'フランス':'ヨーロッパ','France':'ヨーロッパ','FR':'ヨーロッパ',
+      'ドイツ':'ヨーロッパ','Germany':'ヨーロッパ','DE':'ヨーロッパ',
+      'イタリア':'ヨーロッパ','Italy':'ヨーロッパ','IT':'ヨーロッパ',
+      'スペイン':'ヨーロッパ','Spain':'ヨーロッパ','ES':'ヨーロッパ',
+      'ポルトガル':'ヨーロッパ','Portugal':'ヨーロッパ','PT':'ヨーロッパ',
+      'オランダ':'ヨーロッパ','Netherlands':'ヨーロッパ','NL':'ヨーロッパ',
+      'ベルギー':'ヨーロッパ','Belgium':'ヨーロッパ','BE':'ヨーロッパ',
+      'スイス':'ヨーロッパ','Switzerland':'ヨーロッパ','CH':'ヨーロッパ',
+      'オーストリア':'ヨーロッパ','Austria':'ヨーロッパ','AT':'ヨーロッパ',
+      'スウェーデン':'ヨーロッパ','Sweden':'ヨーロッパ','SE':'ヨーロッパ',
+      'ノルウェー':'ヨーロッパ','Norway':'ヨーロッパ','NO':'ヨーロッパ',
+      'デンマーク':'ヨーロッパ','Denmark':'ヨーロッパ','DK':'ヨーロッパ',
+      'フィンランド':'ヨーロッパ','Finland':'ヨーロッパ','FI':'ヨーロッパ',
+      'アイスランド':'ヨーロッパ','Iceland':'ヨーロッパ','IS':'ヨーロッパ',
+      'アイルランド':'ヨーロッパ','Ireland':'ヨーロッパ','IE':'ヨーロッパ',
+      'ポーランド':'ヨーロッパ','Poland':'ヨーロッパ','PL':'ヨーロッパ',
+      'チェコ':'ヨーロッパ','Czech':'ヨーロッパ','Czech Republic':'ヨーロッパ','CZ':'ヨーロッパ',
+      'ハンガリー':'ヨーロッパ','Hungary':'ヨーロッパ','HU':'ヨーロッパ',
+      'ギリシャ':'ヨーロッパ','Greece':'ヨーロッパ','GR':'ヨーロッパ',
+      'ロシア':'ヨーロッパ','Russia':'ヨーロッパ','RU':'ヨーロッパ',
+      'ウクライナ':'ヨーロッパ','Ukraine':'ヨーロッパ','UA':'ヨーロッパ',
+      'ルーマニア':'ヨーロッパ','Romania':'ヨーロッパ','RO':'ヨーロッパ',
+      // NORTH AMERICA
+      'アメリカ':'北米','アメリカ合衆国':'北米','United States':'北米','USA':'北米','US':'北米','米国':'北米',
+      'カナダ':'北米','Canada':'北米','CA':'北米',
+      'メキシコ':'北米','Mexico':'北米','MX':'北米',
+      // SOUTH AMERICA
+      'ブラジル':'南米','Brazil':'南米','BR':'南米',
+      'アルゼンチン':'南米','Argentina':'南米','AR':'南米',
+      'チリ':'南米','Chile':'南米','CL':'南米',
+      'ペルー':'南米','Peru':'南米','PE':'南米',
+      'コロンビア':'南米','Colombia':'南米','CO':'南米',
+      'ベネズエラ':'南米','Venezuela':'南米','VE':'南米',
+      'エクアドル':'南米','Ecuador':'南米','EC':'南米',
+      'ボリビア':'南米','Bolivia':'南米','BO':'南米',
+      'ウルグアイ':'南米','Uruguay':'南米','UY':'南米',
+      // AFRICA
+      'エジプト':'アフリカ','Egypt':'アフリカ','EG':'アフリカ',
+      'ナイジェリア':'アフリカ','Nigeria':'アフリカ','NG':'アフリカ',
+      '南アフリカ':'アフリカ','South Africa':'アフリカ','ZA':'アフリカ',
+      'ケニア':'アフリカ','Kenya':'アフリカ','KE':'アフリカ',
+      'モロッコ':'アフリカ','Morocco':'アフリカ','MA':'アフリカ',
+      'エチオピア':'アフリカ','Ethiopia':'アフリカ','ET':'アフリカ',
+      'ガーナ':'アフリカ','Ghana':'アフリカ','GH':'アフリカ',
+      'アルジェリア':'アフリカ','Algeria':'アフリカ','DZ':'アフリカ',
+      // OCEANIA
+      'オーストラリア':'オセアニア','Australia':'オセアニア','AU':'オセアニア',
+      'ニュージーランド':'オセアニア','New Zealand':'オセアニア','NZ':'オセアニア',
+      'フィジー':'オセアニア','Fiji':'オセアニア','FJ':'オセアニア',
+      // MIDDLE EAST
+      'サウジアラビア':'中東','Saudi Arabia':'中東','SA':'中東',
+      'イラン':'中東','Iran':'中東','IR':'中東',
+      'イラク':'中東','Iraq':'中東','IQ':'中東',
+      'アラブ首長国連邦':'中東','UAE':'中東','AE':'中東','United Arab Emirates':'中東',
+      'トルコ':'中東','Turkey':'中東','TR':'中東',
+      'イスラエル':'中東','Israel':'中東','IL':'中東',
+      'ヨルダン':'中東','Jordan':'中東','JO':'中東',
+    };
+    const regionOf = (r) => {
+      // (Phase 17.N-11) root レベル → participant → 不明 の 順
+      const nat = String(
+        (r && r.nationality) ||
+        (r && r.participant && r.participant.nationality) ||
+        (participantMap[r.userId] && participantMap[r.userId].nationality) ||
+        ''
+      ).trim();
+      if (!nat) return '不明';
+      if (REGION_MAP[nat]) return REGION_MAP[nat];
+      for (const key in REGION_MAP) {
+        if (nat.indexOf(key) >= 0) return REGION_MAP[key];
+      }
+      return 'その他';
+    };
+    const ORDER = ['アジア','ヨーロッパ','北米','南米','アフリカ','オセアニア','中東','その他','不明'];
+    const buckets = {};
+    regs.forEach(r => {
+      const k = regionOf(r);
+      if (!buckets[k]) buckets[k] = [];
+      buckets[k].push(r);
+    });
+    groupedData = ORDER.filter(k => buckets[k] && buckets[k].length > 0).map(k => ({
+      key: k,
+      label: k,
+      data: buildSeries(buckets[k], null, { groupType: 'cumulative' }),
+    }));
+  } else if (groupMode === 'origin') {
+    // (Phase 17.N-9/11) 日本人 / 在留外国人 / 不明
+    const originOf = (r) => {
+      const nat = String(
+        (r && r.nationality) ||
+        (r && r.participant && r.participant.nationality) ||
+        (participantMap[r.userId] && participantMap[r.userId].nationality) ||
+        ''
+      ).trim();
+      if (!nat) return '不明';
+      if (nat === '日本' || nat === 'Japan' || nat === 'JP' || nat.indexOf('日本') >= 0) return '日本人';
+      return '在留外国人';
+    };
+    const ORDER = ['日本人','在留外国人','不明'];
+    const buckets = {};
+    regs.forEach(r => {
+      const k = originOf(r);
+      if (!buckets[k]) buckets[k] = [];
+      buckets[k].push(r);
+    });
+    groupedData = ORDER.filter(k => buckets[k] && buckets[k].length > 0).map(k => ({
+      key: k,
+      label: k,
+      data: buildSeries(buckets[k], null, { groupType: 'cumulative' }),
+    }));
+  } else if (groupMode === 'country') {
+    // (Phase 17.N-10/11) 国別 — 上位 6 ヵ国 + その他
+    const countryOf = (r) => {
+      const nat = String(
+        (r && r.nationality) ||
+        (r && r.participant && r.participant.nationality) ||
+        (participantMap[r.userId] && participantMap[r.userId].nationality) ||
+        ''
+      ).trim();
+      return nat || '不明';
+    };
+    const buckets = {};
+    regs.forEach(r => {
+      const k = countryOf(r);
+      if (!buckets[k]) buckets[k] = [];
+      buckets[k].push(r);
+    });
+    // 件数で sort + 上位 6 ヵ国 + 残りを「その他」 にまとめる
+    const sortedKeys = Object.keys(buckets).sort((a, b) => buckets[b].length - buckets[a].length);
+    const topKeys = sortedKeys.slice(0, 6);
+    const rest = sortedKeys.slice(6);
+    const orderedBuckets = {};
+    topKeys.forEach(k => { orderedBuckets[k] = buckets[k]; });
+    if (rest.length > 0) {
+      orderedBuckets['その他 (' + rest.length + ' ヵ国)'] = rest.reduce((acc, k) => acc.concat(buckets[k]), []);
+    }
+    groupedData = Object.keys(orderedBuckets).map(k => ({
+      key: k,
+      label: k,
+      data: buildSeries(orderedBuckets[k], null, { groupType: 'cumulative' }),
+    }));
+  } else {
+    groupedData = sessions.map(s => ({
+      key: s.id,
+      label: `Day ${s.order || ''}`,
+      session: s,
+      data: buildSeries(regs.filter(r => r.sessionId === s.id), Number(s.capacity) || null, { groupType: 'cumulative' }),
+    }));
+  }
+
+  const sessionData = groupedData;
 
   // SVG 描画パラメータ
-  const W = 800, H = 280, padL = 40, padR = 60, padT = 20, padB = 30;
+  //   (Phase 17.N-8) padR を 80 に拡大 — 「定員 60」 ラベル + Day 別終端ラベル の重なり対策
+  const W = 800, H = 280, padL = 40, padR = 80, padT = 20, padB = 30;
   const maxY = Math.max(1, allData.full[allData.full.length - 1], totalCapacity || 5, 5);
   const xStep = (W - padL - padR) / Math.max(1, days.length - 1);
   const yScale = (H - padT - padB) / maxY;
@@ -5451,6 +6130,26 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
     <section style={{marginBottom:24}}>
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
         <span>登録推移 · {fmtDate(sd)} 〜 {fmtDate(ed)} ({totalDays} 日間){isPredicted && <span style={{marginLeft:8,color:'var(--jb-ink-ghost)'}}>(点線 = 予測 · {predictionSource})</span>}</span>
+        {/* (Phase 17.N-6/8/9/10) グループモード トグル */}
+        <div style={{display:'flex',gap:4,fontFamily:'var(--jb-mono)',flexWrap:'wrap'}}>
+          {[
+            {k:'session',l:'Day 別'},
+            {k:'payment',l:'決済方法'},
+            {k:'region',l:'地域'},
+            {k:'country',l:'国別'},
+            {k:'origin',l:'日本人/在留'},
+          ].map(opt => (
+            <button key={opt.k} type="button" onClick={() => setGroupMode(opt.k)}
+              style={{
+                padding:'3px 9px',
+                background: groupMode === opt.k ? 'var(--jb-blue)' : 'var(--jb-paper)',
+                color: groupMode === opt.k ? '#fff' : 'var(--jb-ink-soft)',
+                border: `1px solid ${groupMode === opt.k ? 'var(--jb-blue)' : 'var(--jb-line)'}`,
+                fontSize:9,fontWeight:700,letterSpacing:'0.06em',
+                borderRadius:3,cursor:'pointer',textTransform:'none',
+              }}>{opt.l}</button>
+          ))}
+        </div>
       </div>
       {/* (Phase 17.N-4) Day 別予測カード — 各 Day の 現在 / 予測 / 定員 を 一覧 */}
       <div style={{
@@ -5496,14 +6195,15 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
             </div>
           )}
         </div>
-        {/* Day 別 */}
+        {/* (Phase 17.N-6) グループ別カード — Day 別 / 決済方法別 で 切替 */}
         {sessionData.map((ss, i) => {
           const color = DAY_COLORS[i % DAY_COLORS.length];
           const now = ss.data.actual[ss.data.actual.length - 1] || 0;
           const estimated = ss.data.estimatedFinal || 0;
-          const cap = Number(ss.session.capacity) || 0;
+          const cap = ss.session ? (Number(ss.session.capacity) || 0) : 0;
+          const labelText = groupMode === 'session' ? `Day ${ss.session ? (ss.session.order || (i+1)) : (i+1)}` : ss.label;
           return (
-            <div key={ss.session.id} style={{
+            <div key={ss.key || i} style={{
               padding:'10px 12px',
               background:'var(--jb-paper)',
               border:'1px solid var(--jb-line)',
@@ -5511,7 +6211,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
               borderRadius:4,
             }}>
               <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.12em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:3}}>
-                Day {ss.session.order || (i+1)}
+                {labelText}
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:4}}>
                 <span style={{fontFamily:'var(--jb-display)',fontSize:18,fontWeight:800,color:color,letterSpacing:'-0.01em'}}>{now}</span>
@@ -5535,7 +6235,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
                   }}/>
                 </div>
               )}
-              {/* 充足診断 (= 定員到達予測) */}
+              {/* 充足診断 — Day 別 + capacity あり 時のみ */}
               {cap > 0 && isPredicted && (
                 <div style={{
                   fontFamily:'var(--jb-mono)',fontSize:8,
@@ -5550,7 +6250,56 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
           );
         })}
       </div>
-      <div style={{padding:'16px 18px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:8,overflow:'auto'}}>
+      <div ref={svgWrapRef} style={{position:'relative',padding:'16px 18px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:8,overflow:'hidden'}}
+        onMouseMove={(e) => {
+          const rect = svgWrapRef.current.getBoundingClientRect();
+          const svgEl = svgWrapRef.current.querySelector('svg');
+          if (!svgEl) return;
+          const svgRect = svgEl.getBoundingClientRect();
+          // svg 内 px → viewBox 座標へ
+          const xInSvg = ((e.clientX - svgRect.left) / svgRect.width) * W;
+          // どの日に最も近いか
+          let bestIdx = -1, bestDx = Infinity;
+          for (let i = 0; i < days.length; i++) {
+            const dx = Math.abs(padL + i * xStep - xInSvg);
+            if (dx < bestDx) { bestDx = dx; bestIdx = i; }
+          }
+          if (bestIdx < 0 || xInSvg < padL - 10 || xInSvg > W - padR + 10) {
+            setHover(null);
+            return;
+          }
+          // 該当日の 全 line 値を 取得
+          const allVal = bestIdx <= todayIdx
+            ? allData.actual[bestIdx]
+            : allData.predicted[bestIdx - allData.actual.length];
+          const items = [{
+            label: '全体',
+            value: allVal,
+            color: 'var(--jb-ink)',
+            isPredicted: bestIdx > todayIdx,
+          }];
+          sessionData.forEach((ss, i) => {
+            const v = bestIdx <= todayIdx
+              ? ss.data.actual[bestIdx]
+              : ss.data.predicted[bestIdx - ss.data.actual.length];
+            items.push({
+              label: groupMode === 'session' ? `Day ${ss.session ? (ss.session.order || (i+1)) : (i+1)}` : ss.label,
+              value: v,
+              color: DAY_COLORS[i % DAY_COLORS.length],
+              isPredicted: bestIdx > todayIdx,
+            });
+          });
+          setHover({
+            dayIdx: bestIdx,
+            day: days[bestIdx],
+            items: items,
+            xInSvg: padL + bestIdx * xStep,
+            xPx: ((padL + bestIdx * xStep) / W) * svgRect.width,
+            isPredicted: bestIdx > todayIdx,
+          });
+        }}
+        onMouseLeave={() => setHover(null)}
+      >
         <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',minWidth:520,display:'block'}}>
           {/* Y 軸 グリッド */}
           {[0, 0.25, 0.5, 0.75, 1].map(t => {
@@ -5567,12 +6316,12 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
           {totalCapacity > 0 && totalCapacity <= maxY && (
             <g>
               <line
-                x1={padL} x2={W - padR}
+                x1={padL} x2={W - padR + 6}
                 y1={H - padB - totalCapacity * yScale}
                 y2={H - padB - totalCapacity * yScale}
                 stroke="var(--jb-success)" strokeWidth="1" strokeDasharray="6,3" opacity="0.6"
               />
-              <text x={W - padR + 2} y={H - padB - totalCapacity * yScale + 3}
+              <text x={W - padR + 10} y={H - padB - totalCapacity * yScale + 3}
                 fontSize="9" fill="var(--jb-success)" fontFamily="var(--jb-mono)" fontWeight="700">
                 定員 {totalCapacity}
               </text>
@@ -5631,7 +6380,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
             const predictedPath = buildPath(predictedFull, ss.data.actual.length - 1);
             const lastVal = ss.data.full[ss.data.full.length - 1];
             return (
-              <g key={ss.session.id}>
+              <g key={ss.key || i}>
                 <path d={actualPath}
                   stroke={color} strokeWidth="2.5" fill="none" opacity="0.95" strokeLinejoin="round" strokeLinecap="round"
                   style={{strokeDasharray:2000,strokeDashoffset:2000,animation:`jbDrawLine 1.8s ease-out ${0.3 + i * 0.12}s forwards`}}/>
@@ -5683,7 +6432,62 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats })
               r="4" fill="#ffffff" stroke={COLOR_ALL} strokeWidth="2.5"
               style={{animation:'jbPopIn 0.4s ease-out 1.6s both'}}/>
           )}
+          {/* (Phase 17.N-6) hover 縦線 */}
+          {hover && (
+            <line
+              x1={hover.xInSvg} y1={padT}
+              x2={hover.xInSvg} y2={H - padB}
+              stroke="var(--jb-ink)" strokeWidth="1" opacity="0.35"
+              pointerEvents="none"
+            />
+          )}
         </svg>
+        {/* (Phase 17.N-6) ツールチップ */}
+        {hover && (() => {
+          const tooltipWidth = 180;
+          const wrapWidth = svgWrapRef.current ? svgWrapRef.current.clientWidth : 600;
+          const leftBase = hover.xPx + 14;
+          const flipLeft = leftBase + tooltipWidth > wrapWidth ? hover.xPx - tooltipWidth - 14 : leftBase;
+          return (
+            <div style={{
+              position:'absolute',
+              left: Math.max(8, flipLeft),
+              top: 24,
+              width: tooltipWidth,
+              padding:'10px 12px',
+              background:'rgba(30, 50, 71, 0.96)',
+              color:'#fff',
+              borderRadius:6,
+              boxShadow:'0 8px 24px rgba(0,0,0,0.25)',
+              pointerEvents:'none',
+              zIndex:10,
+              fontFamily:'var(--jb-mono)',
+              fontSize:10,
+              letterSpacing:'0.04em',
+            }}>
+              <div style={{
+                fontFamily:'var(--jb-display)',
+                fontSize:13,
+                fontWeight:800,
+                marginBottom:6,
+                letterSpacing:'-0.01em',
+                display:'flex',
+                justifyContent:'space-between',
+                alignItems:'baseline',
+              }}>
+                <span>{fmtDate(hover.day)}</span>
+                {hover.isPredicted && <span style={{fontSize:9,fontFamily:'var(--jb-mono)',color:'#94a3b8',letterSpacing:'0.08em'}}>予測</span>}
+              </div>
+              {hover.items.map((it, i) => (
+                <div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                  <span style={{width:8,height:8,borderRadius:2,background:it.color,flexShrink:0,opacity: i === 0 ? 1 : 0.85}}/>
+                  <span style={{flex:1,fontWeight: i === 0 ? 700 : 500}}>{it.label}</span>
+                  <span style={{fontWeight:800,fontSize:11}}>{it.isPredicted ? '≈' : ''}{it.value}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <style>{`
           @keyframes jbDrawLine { to { stroke-dashoffset: 0; } }
           @keyframes jbPopIn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
@@ -5931,9 +6735,25 @@ function PageEventAdminDetail() {
         )}
       </section>
 
+      {/* (Phase 17.N-7) PayPay 決済管理 — 有料イベントのみ、 window 経由参照 */}
+      {window.EventPayPayPanel && (() => {
+        const EventPayPayPanelLocal = window.EventPayPayPanel;
+        return <EventPayPayPanelLocal event={event} regs={regs} participants={participants} onReload={loadAll}/>;
+      })()}
+
       {/* (Phase 17.N) 登録推移 折れ線グラフ */}
       {regs.length > 0 && (
         <ApplicationTrendChart event={event} sessions={sessions} regs={regs} pattern={trendPattern} sessionStats={sessionStats}/>
+      )}
+
+      {/* (Phase 17.N-10) 国別 参加者分布 — 世界地図 choropleth */}
+      {regs.length > 0 && (
+        <NationalityWorldMap regs={regs}/>
+      )}
+
+      {/* (Phase 17.N-12) 年齢構成 — 推移ではなく現在のスナップショット */}
+      {regs.length > 0 && (
+        <AgeBreakdown regs={regs}/>
       )}
 
       {/* Day / セッション一覧 (multi) */}
@@ -9428,6 +10248,188 @@ function PaymentModal({events, participants, onSave, onCancel}){
 // - 全イベントの 決済リンク状態 一覧
 // - イベント別 リンク履歴 + 新規発行
 // - 申込済み参加者の 決済済み手動マーク + メール送信
+// =============================================================================
+// (Phase 17.N-7) EventPayPayPanel — イベント詳細ページに 統合される PayPay 決済管理
+//   - アクティブ決済リンクの状態 (= 期限残り / 件数)
+//   - 未決済 reg リスト + 一括処理
+//   - 詳細操作は #paypay ページへ
+// =============================================================================
+function EventPayPayPanel({ event, regs, participants, onReload }) {
+  const [links, setLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (!event || !event.id) return;
+    setLoading(true);
+    const adminId = (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '';
+    window.fetchData('listPaymentLinks', { eventId: event.id, adminMemberId: adminId })
+      .then(ls => { setLinks(Array.isArray(ls) ? ls : []); })
+      .catch(() => setLinks([]))
+      .finally(() => setLoading(false));
+  }, [event && event.id]);
+
+  if (!event) return null;
+  const fee = Number(event.fee) || 0;
+  if (fee <= 0 || event.feeType !== 'paid') {
+    // 無料イベント → 表示不要
+    return null;
+  }
+
+  const partMap = {};
+  (participants || []).forEach(p => { partMap[p.id || p.userId] = p; });
+
+  // 未決済 reg の抽出
+  const pendingRegs = (regs || []).filter(r => {
+    const s = String(r.status || '');
+    if (s === 'キャンセル' || s === '返金' || s === '返金待ち') return false;
+    return !r.paid && s !== '決済済み';
+  });
+  // 決済済 reg
+  const paidRegs = (regs || []).filter(r => r.paid || r.status === '決済済み');
+
+  // アクティブリンク
+  const activeLink = links.find(l => l.isActive);
+  const expiredLinks = links.filter(l => !l.isActive);
+
+  const handleMarkPaid = async (reg) => {
+    const p = partMap[reg.userId];
+    const ok = await window.confirmDialog({
+      title: `${p ? p.name : reg.userId} を 決済済 にしますか?`,
+      body: `Reg ID: ${reg.id}\n金額: ¥${Number(reg.amount || 0).toLocaleString()}`,
+      confirmLabel: '決済済にする',
+    });
+    if (!ok) return;
+    try {
+      await window.postData('updateRegistration', { regId: reg.id, fields: { paid: true, status: '決済済み' } });
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      window.toast.success('決済済にしました');
+      if (onReload) onReload();
+    } catch (e) {
+      window.toast.error('失敗: ' + (e.message || e));
+    }
+  };
+
+  return (
+    <section style={{marginBottom:24}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
+        <span>PayPay 決済管理 (= ¥{fee.toLocaleString()}/名)</span>
+        <a href="#paypay" className="jb-btn" style={{padding:'3px 9px',fontSize:9,letterSpacing:'0.04em',textTransform:'none'}}>
+          詳細ページへ →
+        </a>
+      </div>
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))',
+        gap:10,marginBottom:10,
+      }}>
+        {/* 決済リンク 状態 */}
+        <div style={{
+          padding:'12px 14px',
+          background:'var(--jb-paper)',
+          border:'1px solid var(--jb-line)',
+          borderTop: '3px solid ' + (activeLink ? (activeLink.daysLeft <= 1 ? 'var(--jb-shouwa)' : 'var(--jb-blue)') : 'var(--jb-ink-soft)'),
+          borderRadius:6,
+        }}>
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:4}}>決済リンク</div>
+          {loading ? (
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-ghost)'}}>読み込み中…</div>
+          ) : activeLink ? (
+            <>
+              <div style={{fontFamily:'var(--jb-display)',fontSize:18,fontWeight:800,color:activeLink.daysLeft <= 1 ? 'var(--jb-shouwa)' : 'var(--jb-blue)',letterSpacing:'-0.01em',lineHeight:1}}>
+                残 {activeLink.daysLeft} 日
+              </div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',letterSpacing:'0.04em',marginTop:4,wordBreak:'break-all'}}>
+                ID: {activeLink.linkId ? activeLink.linkId.substring(0, 16) : '—'}
+              </div>
+            </>
+          ) : (
+            <div style={{fontFamily:'var(--jb-display)',fontSize:14,fontWeight:700,color:'var(--jb-shouwa)'}}>未発行</div>
+          )}
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginTop:4}}>
+            履歴 {links.length} 件
+          </div>
+        </div>
+        {/* 決済済 */}
+        <div style={{
+          padding:'12px 14px',
+          background:'var(--jb-paper)',
+          border:'1px solid var(--jb-line)',
+          borderTop:'3px solid var(--jb-success)',
+          borderRadius:6,
+        }}>
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:4}}>決済済</div>
+          <div style={{fontFamily:'var(--jb-display)',fontSize:22,fontWeight:800,color:'var(--jb-success)',letterSpacing:'-0.01em',lineHeight:1}}>{paidRegs.length}</div>
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginTop:4}}>
+            ¥{(paidRegs.reduce((s, r) => s + (Number(r.amount) || 0), 0)).toLocaleString()} 入金済
+          </div>
+        </div>
+        {/* 未決済 */}
+        <div style={{
+          padding:'12px 14px',
+          background:'var(--jb-paper)',
+          border:'1px solid var(--jb-line)',
+          borderTop:`3px solid ${pendingRegs.length > 0 ? 'var(--jb-shouwa)' : 'var(--jb-ink-ghost)'}`,
+          borderRadius:6,
+        }}>
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:4}}>未決済</div>
+          <div style={{fontFamily:'var(--jb-display)',fontSize:22,fontWeight:800,color:pendingRegs.length > 0 ? 'var(--jb-shouwa)' : 'var(--jb-ink-ghost)',letterSpacing:'-0.01em',lineHeight:1}}>{pendingRegs.length}</div>
+          <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginTop:4}}>
+            ¥{(pendingRegs.reduce((s, r) => s + (Number(r.amount) || 0), 0)).toLocaleString()} 未入金
+          </div>
+        </div>
+      </div>
+      {/* 未決済 reg リスト (= 最大 8 件、 多ければ 詳細ページへ) */}
+      {pendingRegs.length > 0 && (
+        <div style={{
+          padding:'12px 14px',
+          background:'var(--jb-paper)',
+          border:'1px solid var(--jb-line)',
+          borderRadius:6,
+        }}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+            <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.12em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600}}>未決済 一覧 {pendingRegs.length > 8 ? `(先頭 8 / 全 ${pendingRegs.length})` : `(${pendingRegs.length})`}</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',gap:6}}>
+            {pendingRegs.slice(0, 8).map(r => {
+              const p = partMap[r.userId];
+              const declared = String(r.note || '').match(/\[当日申告\]\s*(現金|PayPay)/);
+              return (
+                <div key={r.id} style={{
+                  padding:'7px 10px',
+                  background:'var(--jb-paper-mist)',
+                  border:'1px solid var(--jb-line)',
+                  borderLeft:'3px solid var(--jb-shouwa)',
+                  borderRadius:4,
+                  display:'flex',
+                  justifyContent:'space-between',
+                  alignItems:'center',
+                  gap:6,
+                }}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:'var(--jb-sans)',fontSize:11,fontWeight:700,color:'var(--jb-ink)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p ? p.name : r.userId}</div>
+                    <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',letterSpacing:'0.04em',marginTop:1}}>¥{Number(r.amount || 0).toLocaleString()}{declared ? ` · 申告: ${declared[1]}` : ''}</div>
+                  </div>
+                  <button onClick={() => handleMarkPaid(r)} style={{
+                    padding:'3px 8px',
+                    fontSize:9,fontWeight:700,letterSpacing:'0.04em',
+                    background:'var(--jb-success)',color:'#fff',
+                    border:'1px solid var(--jb-success)',
+                    borderRadius:3,cursor:'pointer',
+                    flexShrink:0,
+                  }}>決済済</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// (Phase 17.N-7) PageEventAdminDetail (= 別 script ブロック) から参照するために export
+window.EventPayPayPanel = EventPayPayPanel;
+
 function PagePayPay() {
   const [events, setEvents] = useState([]);
   const [registrations, setRegistrations] = useState([]);
