@@ -5644,6 +5644,8 @@ window.NationalityWorldMap = NationalityWorldMap;
 function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, promos }) {
   // (Phase 17.N-6) グルーピングモード切替: 'session' (= Day 別) / 'payment' (= 決済方法別)
   const [groupMode, setGroupMode] = useState('session');
+  // (Phase 17.S-fix) 時間粒度切替: 'all' (= 全期間 日次) / '3d' (= 直近 3 日、 6 時間刻み) / '1d' (= 直近 1 日、 1 時間刻み)
+  const [timeRange, setTimeRange] = useState('all');
   // (Phase 17.N-6) hover state
   const [hover, setHover] = useState(null);  // { x, y, dayIdx, day, items: [{label, value, color, isPredicted}] }
   const svgWrapRef = React.useRef(null);
@@ -5665,7 +5667,9 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
   }, [regs]);
   // (Phase 17.Q-fix) event が null の場合は何も描画しない (= 初回ロード中)
   if (!event) return null;
-  const startDate = event.regOpenDate || event.createdAt || (regs[0] && (regs[0].appliedAt || regs[0].createdAt));
+  // (Phase 17.S-fix) 申込開始日 が 未設定なら グラフは 描画しない
+  //   開始日より前の reg は 集計しない (= regOpenDate 必須)
+  const startDate = event.regOpenDate;
   const endDate = event.regCloseDate || event.date;
   if (!startDate || !endDate || regs.length === 0) {
     return (
@@ -5683,20 +5687,42 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
   const sd = toDate(startDate);
   const ed = toDate(endDate);
   if (!sd || !ed || ed <= sd) return null;
-  sd.setHours(0, 0, 0, 0);
-  ed.setHours(0, 0, 0, 0);
+  // (Phase 17.S-fix) 粒度切替 — all (= 日次) / 3d (= 6時間刻み 直近3日) / 1d (= 1時間刻み 直近1日)
+  const now = new Date();
+  let stepMs, rangeStartMs, rangeEndMs;
+  if (timeRange === '1d') {
+    stepMs = 60 * 60 * 1000;  // 1 時間
+    rangeEndMs = now.getTime();
+    rangeStartMs = rangeEndMs - 24 * 60 * 60 * 1000;
+  } else if (timeRange === '3d') {
+    stepMs = 6 * 60 * 60 * 1000;  // 6 時間
+    rangeEndMs = now.getTime();
+    rangeStartMs = rangeEndMs - 3 * 24 * 60 * 60 * 1000;
+  } else {
+    stepMs = 24 * 60 * 60 * 1000;  // 1 日
+    sd.setHours(0, 0, 0, 0);
+    ed.setHours(0, 0, 0, 0);
+    rangeStartMs = sd.getTime();
+    rangeEndMs = ed.getTime();
+  }
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const totalMs = ed.getTime() - sd.getTime();
-  const totalDays = Math.max(1, Math.ceil(totalMs / (24 * 60 * 60 * 1000)));
+  if (timeRange === 'all') today.setHours(0, 0, 0, 0);
+  const totalMs = rangeEndMs - rangeStartMs;
+  const totalSteps = Math.max(1, Math.ceil(totalMs / stepMs));
   const days = [];
-  for (let i = 0; i <= totalDays; i++) {
-    const d = new Date(sd.getTime() + i * 24 * 60 * 60 * 1000);
+  for (let i = 0; i <= totalSteps; i++) {
+    const d = new Date(rangeStartMs + i * stepMs);
     days.push(d);
   }
   let todayIdx = -1;
-  for (let i = 0; i < days.length; i++) {
-    if (days[i].getTime() === today.getTime()) { todayIdx = i; break; }
+  // (Phase 17.S-fix) 粒度に応じて 「今」 の判定
+  if (timeRange === 'all') {
+    for (let i = 0; i < days.length; i++) {
+      if (days[i].getTime() === today.getTime()) { todayIdx = i; break; }
+    }
+  } else {
+    // 時間粒度 — 「最新ステップ」 を today
+    todayIdx = days.length - 1;
   }
   if (todayIdx < 0) {
     if (today < days[0]) todayIdx = 0;
@@ -5724,13 +5750,20 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
     // (Phase 17.N-12) 「人数」 = ユニーク userId 数で カウント (= reg 数ではない)
     //   1 人が multi で 3 Day 申込 → 1 人としてカウント
     const actual = days.map((d) => {
-      const cutoff = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+      const cutoff = new Date(d.getTime() + stepMs);
       const ids = new Set();
       regSubset.forEach(r => {
         const ad = toDate(r.appliedAt || r.createdAt);
         if (!ad || ad > cutoff) return;
+        // (Phase 17.S-fix) 申込開始日より前の reg は 集計しない
+        if (ad < sd) return;
+        // (Phase 17.S-fix) キャンセル ハイブリッド処理
+        //   cancelledAt あり → その時点 以降は 除外 (= 線が下がる)
+        //   cancelledAt なし + status='キャンセル' → 全期間 除外 (= 最初から なかった扱い)
+        const isCancelled = /キャンセル|中止|cancel/i.test(String(r.status || ''));
         const cd = toDate(r.cancelledAt);
         if (cd && cd <= cutoff) return;
+        if (isCancelled && !cd) return;  // cancelledAt 不明 + キャンセル なら 完全除外
         if (r.userId) ids.add(r.userId);
       });
       return ids.size;
@@ -6194,8 +6227,13 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
     return DAY_COLORS[idx % DAY_COLORS.length];
   };
 
-  const xLabelStep = totalDays <= 14 ? 2 : totalDays <= 28 ? 4 : 7;
-  const fmtDate = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const xLabelStep = totalSteps <= 14 ? 2 : totalSteps <= 28 ? 4 : 7;
+  // (Phase 17.S-fix) 粒度別の ラベルフォーマット
+  const fmtDate = (d) => {
+    if (timeRange === '1d') return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    if (timeRange === '3d') return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  };
   const isPredicted = todayIdx < days.length - 1;
 
   // 予測ソース表示
@@ -6206,9 +6244,26 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
   return (
     <section style={{marginBottom:24}}>
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
-        <span>登録推移 · {fmtDate(sd)} 〜 {fmtDate(ed)} ({totalDays} 日間){isPredicted && <span style={{marginLeft:8,color:'var(--jb-ink-ghost)'}}>(点線 = 予測 · {predictionSource})</span>}</span>
-        {/* (Phase 17.N-6/8/9/10) グループモード トグル */}
-        <div style={{display:'flex',gap:4,fontFamily:'var(--jb-mono)',flexWrap:'wrap'}}>
+        <span>登録推移 · {timeRange === 'all' ? `${fmtDate(sd)} 〜 ${fmtDate(ed)} (${totalSteps} 日間)` : timeRange === '3d' ? '直近 3 日間 (= 6 時間刻み)' : '直近 24 時間 (= 1 時間刻み)'}{isPredicted && <span style={{marginLeft:8,color:'var(--jb-ink-ghost)'}}>(点線 = 予測 · {predictionSource})</span>}</span>
+        {/* (Phase 17.S-fix) 時間粒度切替 — 全期間 / 直近 3 日 (= 6 時間刻み) / 直近 1 日 (= 1 時間刻み) */}
+        <div style={{display:'flex',gap:4,fontFamily:'var(--jb-mono)',flexWrap:'wrap',alignItems:'center'}}>
+          <span style={{fontSize:9,color:'var(--jb-ink-ghost)',marginRight:4}}>期間</span>
+          {[
+            {k:'all',l:'全期間'},
+            {k:'3d',l:'直近3日'},
+            {k:'1d',l:'直近1日'},
+          ].map(opt => (
+            <button key={opt.k} type="button" onClick={() => setTimeRange(opt.k)}
+              style={{
+                padding:'3px 9px',
+                background: timeRange === opt.k ? 'var(--jb-shouwa)' : 'var(--jb-paper)',
+                color: timeRange === opt.k ? '#fff' : 'var(--jb-ink-soft)',
+                border: `1px solid ${timeRange === opt.k ? 'var(--jb-shouwa)' : 'var(--jb-line)'}`,
+                fontSize:9,fontWeight:700,letterSpacing:'0.06em',
+                borderRadius:3,cursor:'pointer',textTransform:'none',
+              }}>{opt.l}</button>
+          ))}
+          <span style={{fontSize:9,color:'var(--jb-ink-ghost)',marginLeft:8,marginRight:4}}>表示</span>
           {[
             {k:'session',l:'Day 別'},
             {k:'payment',l:'決済方法'},
@@ -6414,7 +6469,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
             promoDate.setHours(0, 0, 0, 0);
             // days 内 何番目か
             const dayIdx = Math.floor((promoDate.getTime() - sd.getTime()) / (24 * 60 * 60 * 1000));
-            if (dayIdx < 0 || dayIdx > totalDays) return null;
+            if (dayIdx < 0 || dayIdx > totalSteps) return null;
             const x = padL + dayIdx * xStep;
             const isPast = promo.status === '実施済' || (promo.status !== '中止' && promoDate <= today);
             const color = promo.status === '中止' ? 'var(--jb-ink-ghost)'
@@ -7530,11 +7585,33 @@ function PageEventAdminDetail() {
     setLoading(true);
     try {
       // (Phase 17.S-perf) 1 リクエストで 全データ取得 — 並列 6 本 → 統合 1 本で 大幅高速化
-      const detail = await window.fetchData('loadEventDetail', { eventId });
+      let detail = null;
+      try {
+        detail = await window.fetchData('loadEventDetail', { eventId });
+      } catch (e) {
+        console.warn('loadEventDetail failed, fallback to legacy:', e);
+      }
+      // (Phase 17.S-perf) フォールバック — backend が 新 API 未対応 or detail.event が null なら 旧 API
       if (!detail || !detail.event) {
-        setEvent(null);
-        setLoading(false);
-        return;
+        console.warn('loadEventDetail returned null, falling back to legacy fetch');
+        const [evs, sessAll, allApps, allRegs, parts, acts] = await Promise.all([
+          window.fetchData('listEvents'),
+          window.fetchData('listEventSessions', { eventId }),
+          window.fetchData('listApplications'),
+          window.fetchData('listRegistrations'),
+          window.fetchData('listParticipants'),
+          window.fetchData('listActivities', { eventId }),
+        ]);
+        const ev = (Array.isArray(evs) ? evs : []).find(e => e.id === eventId);
+        detail = {
+          event: ev || null,
+          sessions: Array.isArray(sessAll) ? sessAll : [],
+          apps: (Array.isArray(allApps) ? allApps : []).filter(a => a.eventId === eventId),
+          regs: (Array.isArray(allRegs) ? allRegs : []).filter(r => r.eventId === eventId),
+          participants: Array.isArray(parts) ? parts : [],
+          activities: Array.isArray(acts) ? acts : [],
+          promos: [],
+        };
       }
       setEvent(detail.event);
       setSessions(Array.isArray(detail.sessions) ? detail.sessions : []);
@@ -7544,19 +7621,26 @@ function PageEventAdminDetail() {
       setActivities(Array.isArray(detail.activities) ? detail.activities : []);
       setPromos(Array.isArray(detail.promos) ? detail.promos : []);
       const ev = detail.event;
-      // (Phase 17.N-2) 過去パターンは 別途 取得 (= 遅延 OK、 メイン UI は すぐ表示)
-      const dur = ev && ev.regOpenDate && (ev.regCloseDate || ev.date)
+      if (!ev) { setLoading(false); return; }
+      // (Phase 17.N-2) 過去パターンは 別途 取得 (= 遅延 OK)
+      const dur = ev.regOpenDate && (ev.regCloseDate || ev.date)
         ? (new Date(ev.regCloseDate || ev.date).getTime() - new Date(ev.regOpenDate).getTime()) / (24 * 60 * 60 * 1000)
         : 0;
-      const totalCap = ev && ev.format === 'multi' && Array.isArray(detail.sessions)
+      const totalCap = ev.format === 'multi' && Array.isArray(detail.sessions)
         ? detail.sessions.reduce((s, x) => s + (Number(x.capacity) || 0), 0)
-        : (ev ? Number(ev.capacity) || 0 : 0);
+        : (Number(ev.capacity) || 0);
       window.postData('admin.getApplicationTrendPattern', {
         excludeEventId: eventId,
-        format: ev ? (ev.format || 'all') : 'all',
+        format: ev.format || 'all',
         durationDays: dur,
         capacity: totalCap,
       }).then(p => setTrendPattern(p)).catch(e => { console.warn('trendPattern fetch failed:', e); setTrendPattern(null); });
+      // (Phase 17.O) promos が 統合 API で 取れていなければ 追加 fetch
+      if (!Array.isArray(detail.promos) || detail.promos.length === 0) {
+        window.fetchData('admin.listPromos', { eventId })
+          .then(ps => setPromos(Array.isArray(ps) ? ps : []))
+          .catch(() => {});
+      }
     } catch (e) {
       console.error('PageEventAdminDetail load failed', e);
     } finally {
@@ -7647,18 +7731,36 @@ function PageEventAdminDetail() {
       return ad && ad >= sevenAgo && r.status !== 'キャンセル';
     });
     const dailyPace = recentReg.length / 7;
-    // (6) 満員予測達成日 — sessionStats から定員ベース計算
-    //   簡易版: 全体定員 / dailyPace から 残り日数推定
+    // (6) 満員予測達成日 — グラフ の dailyPace + remaining ロジックと 一致
+    //   グラフは 「(現時点の登録数 → estimatedFinal) 」 を 表示
+    //   ここは 「定員に いつ到達するか?」 を 直近 7 日ペース で 計算
     let projectedSoldOutDate = null;
     const totalCap = event.format === 'multi' && sessions
       ? sessions.reduce((s, x) => s + (Number(x.capacity) || 0), 0)
       : Number(event.capacity) || 0;
-    if (totalCap > 0 && dailyPace > 0) {
-      const remaining = Math.max(0, totalCap - activeRegs.length);
-      const daysToFill = remaining / dailyPace;
-      if (daysToFill < 365) {
-        const d = new Date(now.getTime() + daysToFill * 24 * 60 * 60 * 1000);
-        projectedSoldOutDate = `${d.getMonth() + 1}/${d.getDate()}`;
+    // (Phase 17.S-fix) 申込開始日 が ある場合は、 開始日 以降の reg のみ で 直近ペース計算
+    const sd = event.regOpenDate ? toDate(event.regOpenDate) : null;
+    if (sd) sd.setHours(0, 0, 0, 0);
+    const validRegs = regs.filter(r => {
+      const ad = toDate(r.appliedAt || r.createdAt);
+      return ad && (!sd || ad >= sd) && r.status !== 'キャンセル';
+    });
+    const recent7 = validRegs.filter(r => {
+      const ad = toDate(r.appliedAt || r.createdAt);
+      return ad && ad >= sevenAgo;
+    });
+    const pace7 = recent7.length / 7;
+    if (totalCap > 0 && pace7 > 0) {
+      const activeUserIds = new Set(activeRegs.map(r => r.userId).filter(Boolean));
+      const remaining = Math.max(0, totalCap - activeUserIds.size);
+      if (remaining === 0) {
+        projectedSoldOutDate = '達成済';
+      } else {
+        const daysToFill = remaining / pace7;
+        if (daysToFill < 365) {
+          const d = new Date(now.getTime() + daysToFill * 24 * 60 * 60 * 1000);
+          projectedSoldOutDate = `${d.getMonth() + 1}/${d.getDate()}`;
+        }
       }
     }
     // (7) 流入経路統計 — reg から referralRef を 集計
@@ -19871,6 +19973,10 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
         <RankingCard title="リピーター率 TOP 5" rows={topByRepeater.map(s => ({ label: s.event.title, value: `${(s.repeaterRate * 100).toFixed(0)}%`, sub: `${s.activeCount} 名中` }))}/>
       </div>
 
+      {/* (Phase 17.S-fix) 期間切替トレンド — これでもか というほど */}
+      <div style={sectionTitleStyle}>戦略ダッシュボード — 期間切替トレンド</div>
+      <MonthlyTrendCharts events={events} registrations={registrations} payments={payments} promos={promos}/>
+
       {/* 流入経路 全体 */}
       {refByChannel.length > 0 && (
         <>
@@ -19933,6 +20039,825 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
       )}
     </section>
   );
+}
+
+// (Phase 17.S-fix) MonthlyTrendCharts — 期間切替対応 + 戦略系 グラフ 多数
+function MonthlyTrendCharts({ events, registrations, payments, promos }) {
+  // (Phase 17.S-fix) 期間切替: 3d / week / month / quarter / year / all / monthly
+  const [range, setRange] = useState('month');
+  const RANGES = [
+    { k: '3d', l: '3日間' },
+    { k: 'week', l: '今週' },
+    { k: 'month', l: '今月' },
+    { k: 'quarter', l: '今四半期' },
+    { k: 'year', l: '今年' },
+    { k: 'all', l: '全期間' },
+    { k: 'monthly', l: '月次 (12ヶ月)' },
+  ];
+  const buckets = React.useMemo(() => {
+    const now = new Date();
+    const list = [];
+    const pushDay = (offset) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+      list.push({
+        label: `${d.getMonth() + 1}/${d.getDate()}`,
+        startMs: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(),
+        endMs: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime(),
+      });
+    };
+    const pushMonth = (yearOffset, monthOffset) => {
+      const d = new Date(now.getFullYear() + yearOffset, now.getMonth() + monthOffset, 1);
+      list.push({
+        label: `${d.getFullYear().toString().slice(2)}/${(d.getMonth() + 1).toString().padStart(2, '0')}`,
+        startMs: d.getTime(),
+        endMs: new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime(),
+      });
+    };
+    if (range === '3d') {
+      for (let i = 2; i >= 0; i--) pushDay(i);
+    } else if (range === 'week') {
+      for (let i = 6; i >= 0; i--) pushDay(i);
+    } else if (range === 'month') {
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      for (let i = daysInMonth - 1; i >= 0; i--) pushDay(now.getDate() - 1 - (daysInMonth - 1 - i));
+      // 今月の 1 日から 今日まで
+      list.length = 0;
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dayDiff = Math.floor((today.getTime() - firstDay.getTime()) / (24 * 60 * 60 * 1000));
+      for (let i = 0; i <= dayDiff; i++) {
+        const d = new Date(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate() + i);
+        list.push({
+          label: `${d.getMonth() + 1}/${d.getDate()}`,
+          startMs: d.getTime(),
+          endMs: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime(),
+        });
+      }
+    } else if (range === 'quarter') {
+      // 今四半期 (= 3 ヶ月) を 週次で 13 ポイント
+      const qStartMonth = Math.floor(now.getMonth() / 3) * 3;
+      const qStart = new Date(now.getFullYear(), qStartMonth, 1);
+      let weekStart = new Date(qStart);
+      while (weekStart <= now) {
+        const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+        list.push({
+          label: `${weekStart.getMonth() + 1}/${weekStart.getDate()}`,
+          startMs: weekStart.getTime(),
+          endMs: weekEnd.getTime(),
+        });
+        weekStart = weekEnd;
+      }
+    } else if (range === 'year') {
+      // 今年 1-12 月
+      for (let m = 0; m <= now.getMonth(); m++) {
+        const d = new Date(now.getFullYear(), m, 1);
+        list.push({
+          label: `${(m + 1).toString().padStart(2, '0')}月`,
+          startMs: d.getTime(),
+          endMs: new Date(now.getFullYear(), m + 1, 1).getTime(),
+        });
+      }
+    } else if (range === 'all') {
+      // 全期間 — 最古の reg から 月次
+      const allDates = [];
+      (registrations || []).forEach(r => {
+        const d = new Date(r.appliedAt || r.createdAt);
+        if (!isNaN(d.getTime())) allDates.push(d);
+      });
+      if (allDates.length === 0) {
+        for (let i = 11; i >= 0; i--) pushMonth(0, -i);
+      } else {
+        const oldest = new Date(Math.min(...allDates.map(d => d.getTime())));
+        let cur = new Date(oldest.getFullYear(), oldest.getMonth(), 1);
+        while (cur <= now) {
+          list.push({
+            label: `${cur.getFullYear().toString().slice(2)}/${(cur.getMonth() + 1).toString().padStart(2, '0')}`,
+            startMs: cur.getTime(),
+            endMs: new Date(cur.getFullYear(), cur.getMonth() + 1, 1).getTime(),
+          });
+          cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+        }
+      }
+    } else {  // monthly (= 既存 12 ヶ月)
+      for (let i = 11; i >= 0; i--) pushMonth(0, -i);
+    }
+    return list;
+  }, [range, registrations]);
+
+  // 集計
+  const trends = React.useMemo(() => {
+    const toDate = s => { if (!s) return null; if (s instanceof Date) return s; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+    const inBucket = (date, b) => {
+      if (!date) return false;
+      const t = date.getTime();
+      return t >= b.startMs && t < b.endMs;
+    };
+
+    // 1. 申込数
+    const apps = buckets.map(b => (registrations || []).filter(r => {
+      if (r.status === 'キャンセル' || r.status === '返金' || r.status === '返金待ち') return false;
+      return inBucket(toDate(r.appliedAt || r.createdAt), b);
+    }).length);
+    // 2. 売上
+    const revenue = buckets.map(b => {
+      let total = 0;
+      (payments || []).forEach(p => {
+        if (String(p.status || '') !== '成功') return;
+        if (!inBucket(toDate(p.paidAt || p.createdAt), b)) return;
+        const type = String(p.type || '').toLowerCase();
+        if (type === 'refund' || type === '返金') total -= Math.abs(Number(p.amount) || 0);
+        else total += Number(p.amount) || 0;
+      });
+      return total;
+    });
+    // 3. キャンセル率
+    const cancelRate = buckets.map(b => {
+      const monthly = (registrations || []).filter(r => inBucket(toDate(r.appliedAt || r.createdAt), b));
+      if (monthly.length === 0) return 0;
+      const c = monthly.filter(r => r.status === 'キャンセル').length;
+      return Math.round((c / monthly.length) * 100);
+    });
+    // 4. チェックイン率
+    const checkInRate = buckets.map(b => {
+      const monthly = (registrations || []).filter(r => {
+        if (r.status === 'キャンセル' || r.status === '返金' || r.status === '返金待ち') return false;
+        return inBucket(toDate(r.appliedAt || r.createdAt), b);
+      });
+      if (monthly.length === 0) return 0;
+      const ci = monthly.filter(r => r.status === 'チェックイン済').length;
+      return Math.round((ci / monthly.length) * 100);
+    });
+    // 5. イベント数
+    const eventCount = buckets.map(b => (events || []).filter(e => inBucket(toDate(e.date), b)).length);
+    // 6. 新規参加者 (= ユニーク userId)
+    const newUsers = buckets.map(b => {
+      const ids = new Set();
+      (registrations || []).forEach(r => {
+        if (r.status === 'キャンセル' || !r.userId) return;
+        if (inBucket(toDate(r.appliedAt || r.createdAt), b)) ids.add(r.userId);
+      });
+      return ids.size;
+    });
+    // 7. 広報投稿数
+    const promoCount = buckets.map(b => (promos || []).filter(p => p.status === '実施済' && inBucket(toDate(p.date), b)).length);
+    // 8. (戦略) 平均客単価
+    const avgPrice = buckets.map(b => {
+      const userTotals = {};
+      (registrations || []).forEach(r => {
+        if (r.status === 'キャンセル' || !r.userId) return;
+        if (!inBucket(toDate(r.appliedAt || r.createdAt), b)) return;
+        userTotals[r.userId] = (userTotals[r.userId] || 0) + (Number(r.amount) || 0) - (Number(r.refundAmount) || 0);
+      });
+      const vals = Object.values(userTotals);
+      return vals.length > 0 ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : 0;
+    });
+    // 9. (戦略) リピーター比率 (= 過去参加 ≥2)
+    const repeaterRate = buckets.map(b => {
+      const monthlyRegs = (registrations || []).filter(r => {
+        if (r.status === 'キャンセル' || !r.userId) return false;
+        return inBucket(toDate(r.appliedAt || r.createdAt), b);
+      });
+      const uids = new Set(monthlyRegs.map(r => r.userId));
+      if (uids.size === 0) return 0;
+      // 各 userId が この bucket 以前に 何回 申込んだか
+      let repeaters = 0;
+      uids.forEach(uid => {
+        const past = (registrations || []).filter(r => {
+          if (r.userId !== uid || r.status === 'キャンセル') return false;
+          const ad = toDate(r.appliedAt || r.createdAt);
+          return ad && ad.getTime() < b.startMs;
+        });
+        if (past.length > 0) repeaters++;
+      });
+      return Math.round((repeaters / uids.size) * 100);
+    });
+    // 10. (戦略) 入金 / 申込 比率 (= キャッシュフロー指標)
+    const paidRatio = buckets.map(b => {
+      const monthlyApps = (registrations || []).filter(r => {
+        if (r.status === 'キャンセル') return false;
+        return inBucket(toDate(r.appliedAt || r.createdAt), b);
+      });
+      if (monthlyApps.length === 0) return 0;
+      const paid = monthlyApps.filter(r => r.paid === true || r.paid === 'TRUE').length;
+      return Math.round((paid / monthlyApps.length) * 100);
+    });
+    return { apps, revenue, cancelRate, checkInRate, eventCount, newUsers, promoCount, avgPrice, repeaterRate, paidRatio };
+  }, [buckets, events, registrations, payments, promos]);
+
+  // 戦略 — 曜日 × 時刻 ヒートマップ
+  const heatmap = React.useMemo(() => {
+    const grid = Array.from({length: 7}, () => Array(24).fill(0));
+    (registrations || []).forEach(r => {
+      if (r.status === 'キャンセル') return;
+      const d = new Date(r.appliedAt || r.createdAt);
+      if (isNaN(d.getTime())) return;
+      grid[d.getDay()][d.getHours()]++;
+    });
+    return grid;
+  }, [registrations]);
+
+  // 戦略 — リードタイム分布 (= 申込開始 → 申込まで)
+  const leadTime = React.useMemo(() => {
+    const bins = [0, 0, 0, 0, 0, 0];  // [0-1, 2-3, 4-7, 8-14, 15-30, 30+]
+    const labels = ['0-1日', '2-3日', '4-7日', '8-14日', '15-30日', '30日+'];
+    (registrations || []).forEach(r => {
+      if (r.status === 'キャンセル') return;
+      const ev = (events || []).find(e => e.id === r.eventId);
+      if (!ev || !ev.regOpenDate) return;
+      const od = new Date(ev.regOpenDate);
+      const ad = new Date(r.appliedAt || r.createdAt);
+      if (isNaN(od.getTime()) || isNaN(ad.getTime())) return;
+      const days = (ad.getTime() - od.getTime()) / (24 * 60 * 60 * 1000);
+      if (days < 0) return;
+      if (days <= 1) bins[0]++;
+      else if (days <= 3) bins[1]++;
+      else if (days <= 7) bins[2]++;
+      else if (days <= 14) bins[3]++;
+      else if (days <= 30) bins[4]++;
+      else bins[5]++;
+    });
+    return { bins, labels };
+  }, [registrations, events]);
+
+  // 戦略 — ファネル
+  const funnel = React.useMemo(() => {
+    const total = (registrations || []).length;
+    const active = (registrations || []).filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち').length;
+    const paid = (registrations || []).filter(r => (r.paid === true || r.paid === 'TRUE') && r.status !== 'キャンセル').length;
+    const checked = (registrations || []).filter(r => r.status === 'チェックイン済').length;
+    return [
+      { label: '申込', count: total, color: 'var(--jb-blue)' },
+      { label: 'アクティブ', count: active, color: '#0EA5E9' },
+      { label: '決済済', count: paid, color: 'var(--jb-success)' },
+      { label: 'チェックイン', count: checked, color: '#10B981' },
+    ];
+  }, [registrations]);
+
+  const sliderStyle = {
+    display: 'flex', gap: 0, marginBottom: 14,
+    background: 'var(--jb-paper-mist)', borderRadius: 4, padding: 2,
+    overflowX: 'auto',
+  };
+  const segBtn = (active) => ({
+    padding: '6px 12px', fontFamily: 'var(--jb-mono)', fontSize: 10, fontWeight: 700,
+    letterSpacing: '0.04em',
+    background: active ? 'var(--jb-blue)' : 'transparent',
+    color: active ? '#fff' : 'var(--jb-ink-soft)',
+    border: 'none', borderRadius: 3, cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  });
+
+  return (
+    <div>
+      {/* 期間切替 */}
+      <div style={sliderStyle}>
+        {RANGES.map(r => (
+          <button key={r.k} onClick={() => setRange(r.k)} style={segBtn(range === r.k)}>{r.l}</button>
+        ))}
+      </div>
+
+      {/* 7 つの 基本 折れ線 */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))',gap:12,marginBottom:16}}>
+        <LineChart title="申込数" labels={buckets.map(b=>b.label)} data={trends.apps} color="var(--jb-blue)" unit="件"/>
+        <LineChart title="売上" labels={buckets.map(b=>b.label)} data={trends.revenue} color="var(--jb-success)" unit="¥" isCurrency/>
+        <LineChart title="キャンセル率" labels={buckets.map(b=>b.label)} data={trends.cancelRate} color="var(--jb-shouwa)" unit="%" max={100}/>
+        <LineChart title="チェックイン率" labels={buckets.map(b=>b.label)} data={trends.checkInRate} color="#10B981" unit="%" max={100}/>
+        <LineChart title="イベント開催数" labels={buckets.map(b=>b.label)} data={trends.eventCount} color="#8B5CF6" unit="件"/>
+        <LineChart title="新規参加者" labels={buckets.map(b=>b.label)} data={trends.newUsers} color="#0EA5E9" unit="名"/>
+        <LineChart title="広報投稿数" labels={buckets.map(b=>b.label)} data={trends.promoCount} color="#F59E0B" unit="投稿"/>
+      </div>
+
+      {/* 戦略 KPI 折れ線 — 3 種 */}
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.12em',color:'var(--jb-shouwa)',fontWeight:700,marginBottom:10,marginTop:18,textTransform:'uppercase'}}>戦略 — 質的 指標</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))',gap:12,marginBottom:16}}>
+        <LineChart title="平均客単価 (= 1 名 あたり)" labels={buckets.map(b=>b.label)} data={trends.avgPrice} color="#8B5CF6" unit="¥" isCurrency/>
+        <LineChart title="リピーター比率 (= 過去参加者)" labels={buckets.map(b=>b.label)} data={trends.repeaterRate} color="var(--jb-blue-deep)" unit="%" max={100}/>
+        <LineChart title="決済済率 (= 入金 / 申込)" labels={buckets.map(b=>b.label)} data={trends.paidRatio} color="var(--jb-success)" unit="%" max={100}/>
+      </div>
+
+      {/* 戦略 — ファネル */}
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.12em',color:'var(--jb-shouwa)',fontWeight:700,marginBottom:10,marginTop:18,textTransform:'uppercase'}}>戦略 — ファネル分析</div>
+      <FunnelChart stages={funnel}/>
+
+      {/* 戦略 — リードタイム + ヒートマップ */}
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.12em',color:'var(--jb-shouwa)',fontWeight:700,marginBottom:10,marginTop:18,textTransform:'uppercase'}}>戦略 — 申込行動</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(400px, 1fr))',gap:12,marginBottom:16}}>
+        <BarChart title="リードタイム分布 (= 申込開始 → 申込日)" labels={leadTime.labels} data={leadTime.bins} color="#0EA5E9" unit="件"/>
+        <HeatmapChart title="曜日 × 時刻 申込ヒートマップ" grid={heatmap}/>
+      </div>
+
+      {/* 戦略 — 深い分析 */}
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.12em',color:'var(--jb-shouwa)',fontWeight:700,marginBottom:10,marginTop:18,textTransform:'uppercase'}}>戦略 — セグメント深掘り</div>
+      <StrategicAnalytics events={events} registrations={registrations} payments={payments} promos={promos}/>
+    </div>
+  );
+}
+
+// (Phase 17.S-fix) StrategicAnalytics — 戦略的 深掘り分析 5 種
+function StrategicAnalytics({ events, registrations, payments, promos }) {
+  const analytics = React.useMemo(() => {
+    const toDate = s => { if (!s) return null; if (s instanceof Date) return s; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+
+    // (Phase 17.S-fix デバッグ) — props 確認
+    console.log('[StrategicAnalytics]', {
+      events: events && events.length,
+      registrations: registrations && registrations.length,
+      cancelledRegs: (registrations || []).filter(r => r.status === 'キャンセル').length,
+      sample_event: events && events[0] && { id: events[0].id, title: events[0].title, date: events[0].date },
+      sample_reg: registrations && registrations[0] && { id: registrations[0].id, eventId: registrations[0].eventId, status: registrations[0].status, appliedAt: registrations[0].appliedAt },
+      uniqueStatuses: [...new Set((registrations || []).map(r => r.status))],
+    });
+
+    // ① イベント開催 曜日別 平均申込数
+    //    どの曜日に開催すると 集客が 良いか
+    const dayOfWeekStats = [0, 1, 2, 3, 4, 5, 6].map(dow => {
+      const evs = (events || []).filter(e => {
+        const d = toDate(e.date);
+        return d && d.getDay() === dow;
+      });
+      if (evs.length === 0) return 0;
+      const totalApps = evs.reduce((s, e) => {
+        const evRegs = (registrations || []).filter(r => r.eventId === e.id && r.status !== 'キャンセル');
+        return s + evRegs.length;
+      }, 0);
+      return Math.round(totalApps / evs.length);
+    });
+
+    // ② 広報タイミング別 効果
+    //    イベント X 日前の広報が どれくらい申込増を生む?
+    const promoTimingBins = [0, 0, 0, 0, 0];  // [≤3日前, 4-7, 8-14, 15-30, 31+]
+    const promoTimingLabels = ['≤3日前', '4-7日前', '8-14日前', '15-30日前', '31日+'];
+    const promoTimingCount = [0, 0, 0, 0, 0];
+    (promos || []).filter(p => p.status === '実施済').forEach(p => {
+      const ev = (events || []).find(e => e.id === p.eventId);
+      if (!ev) return;
+      const evDate = toDate(ev.date);
+      const promoDate = toDate(p.date);
+      if (!evDate || !promoDate) return;
+      const daysBefore = (evDate.getTime() - promoDate.getTime()) / (24 * 60 * 60 * 1000);
+      if (daysBefore < 0) return;
+      // この広報 直後 3 日の 申込増
+      const after3 = new Date(promoDate.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const before3 = new Date(promoDate.getTime() - 3 * 24 * 60 * 60 * 1000);
+      const beforeUsers = new Set(), afterUsers = new Set();
+      (registrations || []).forEach(r => {
+        if (r.eventId !== p.eventId || !r.userId) return;
+        const ad = toDate(r.appliedAt || r.createdAt);
+        if (!ad) return;
+        if (ad >= before3 && ad < promoDate) beforeUsers.add(r.userId);
+        if (ad >= promoDate && ad < after3) afterUsers.add(r.userId);
+      });
+      const lift = Math.max(0, afterUsers.size - beforeUsers.size);
+      let idx;
+      if (daysBefore <= 3) idx = 0;
+      else if (daysBefore <= 7) idx = 1;
+      else if (daysBefore <= 14) idx = 2;
+      else if (daysBefore <= 30) idx = 3;
+      else idx = 4;
+      promoTimingBins[idx] += lift;
+      promoTimingCount[idx]++;
+    });
+    const promoTimingAvg = promoTimingBins.map((b, i) =>
+      promoTimingCount[i] > 0 ? Math.round(b / promoTimingCount[i]) : 0
+    );
+
+    // ③ キャンセル タイミング分布 (= イベント X 日前にキャンセル)
+    //    キャンセル の 表記揺れ: 'キャンセル' / 'キャンセル済' / '中止' / 'cancelled'
+    const isCancel = (s) => /キャンセル|中止|cancel/i.test(String(s || ''));
+    const cancelBins = [0, 0, 0, 0, 0];
+    const cancelLabels = ['当日', '1-3日前', '4-7日前', '8-14日前', '15日前+'];
+    (registrations || []).filter(r => isCancel(r.status)).forEach(r => {
+      const ev = (events || []).find(e => e.id === r.eventId);
+      if (!ev) return;
+      const evDate = toDate(ev.date);
+      const cd = toDate(r.cancelledAt) || toDate(r.updatedAt) || toDate(r.appliedAt || r.createdAt);
+      if (!evDate || !cd) return;
+      const daysBefore = (evDate.getTime() - cd.getTime()) / (24 * 60 * 60 * 1000);
+      if (daysBefore < 1) cancelBins[0]++;
+      else if (daysBefore <= 3) cancelBins[1]++;
+      else if (daysBefore <= 7) cancelBins[2]++;
+      else if (daysBefore <= 14) cancelBins[3]++;
+      else cancelBins[4]++;
+    });
+
+    // ④ 流入経路別 客単価 + リピート率
+    const referralStats = {};
+    (registrations || []).forEach(r => {
+      if (r.status === 'キャンセル' || !r.userId) return;
+      const ref = String(r.referralRef || '直接').trim() || '直接';
+      const ch = ref.split(/[_\-]/)[0];  // "instagram_story" → "instagram"
+      const key = ch.toLowerCase();
+      if (!referralStats[key]) referralStats[key] = { users: new Set(), revenue: 0, totalRegs: 0 };
+      referralStats[key].users.add(r.userId);
+      referralStats[key].revenue += Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0));
+      referralStats[key].totalRegs++;
+    });
+    const refLabels = [], refAvgPrice = [], refRepeatRate = [];
+    Object.entries(referralStats).forEach(([k, s]) => {
+      if (s.users.size < 1) return;
+      refLabels.push(k);
+      refAvgPrice.push(Math.round(s.revenue / s.users.size));
+      refRepeatRate.push(Math.round((s.totalRegs / s.users.size) * 100) / 100);  // 1 人あたり申込回数
+    });
+
+    // ⑤ 新規 vs リピーター 月次比率 (= 過去 12 ヶ月)
+    const now = new Date();
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        label: `${d.getFullYear().toString().slice(2)}/${(d.getMonth() + 1).toString().padStart(2, '0')}`,
+        startMs: d.getTime(),
+        endMs: new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime(),
+      });
+    }
+    const newVsRepeat = months.map(m => {
+      const monthRegs = (registrations || []).filter(r => {
+        if (r.status === 'キャンセル' || !r.userId) return false;
+        const ad = toDate(r.appliedAt || r.createdAt);
+        return ad && ad.getTime() >= m.startMs && ad.getTime() < m.endMs;
+      });
+      const uids = new Set(monthRegs.map(r => r.userId));
+      let newCount = 0, repeatCount = 0;
+      uids.forEach(uid => {
+        const earlier = (registrations || []).some(r => {
+          if (r.userId !== uid || r.status === 'キャンセル') return false;
+          const ad = toDate(r.appliedAt || r.createdAt);
+          return ad && ad.getTime() < m.startMs;
+        });
+        if (earlier) repeatCount++;
+        else newCount++;
+      });
+      return { newCount, repeatCount, total: uids.size };
+    });
+
+    return { dayOfWeekStats, promoTimingAvg, promoTimingLabels, cancelBins, cancelLabels, refLabels, refAvgPrice, refRepeatRate, newVsRepeat, months };
+  }, [events, registrations, payments, promos]);
+
+  const dayLabels = ['日', '月', '火', '水', '木', '金', '土'];
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(400px, 1fr))',gap:12,marginBottom:16}}>
+      <BarChart title="① 曜日別 平均申込数 (= 開催日基準)" labels={dayLabels} data={analytics.dayOfWeekStats} color="var(--jb-blue)" unit="件"/>
+      <BarChart title="② 広報タイミング別 平均申込増 (= 投稿〜イベントまでの 日数)" labels={analytics.promoTimingLabels} data={analytics.promoTimingAvg} color="#F59E0B" unit="名"/>
+      <BarChart title="③ キャンセル タイミング (= イベント X 日前)" labels={analytics.cancelLabels} data={analytics.cancelBins} color="var(--jb-shouwa)" unit="件"/>
+      {analytics.refLabels.length > 0 && (
+        <BarChart title="④ 流入経路別 客単価" labels={analytics.refLabels} data={analytics.refAvgPrice} color="#8B5CF6" unit="¥" />
+      )}
+      <NewVsRepeatChart data={analytics.newVsRepeat} labels={analytics.months.map(m => m.label)}/>
+    </div>
+  );
+}
+
+// (Phase 17.S-fix) NewVsRepeatChart — 新規 vs リピーター 積み上げ折れ線
+function NewVsRepeatChart({ data, labels }) {
+  const W = 360, H = 160, padL = 36, padR = 12, padT = 16, padB = 28;
+  const [hoverIdx, setHoverIdx] = React.useState(null);
+  const svgRef = React.useRef(null);
+  const max = Math.max(1, ...data.map(d => d.total));
+  const xStep = data.length > 1 ? (W - padL - padR) / (data.length - 1) : 0;
+  const yFor = v => padT + (H - padT - padB) * (1 - v / max);
+  const newPoints = data.map((d, i) => [padL + i * xStep, yFor(d.newCount)]);
+  const totalPoints = data.map((d, i) => [padL + i * xStep, yFor(d.total)]);
+  const pathFor = pts => pts.length > 0 ? pts.reduce((acc, p, i) => i === 0 ? `M ${p[0]} ${p[1]}` : `${acc} L ${p[0]} ${p[1]}`, '') : '';
+  const totalArea = totalPoints.length > 0 ? `${pathFor(totalPoints)} L ${totalPoints[totalPoints.length-1][0]} ${yFor(0)} L ${totalPoints[0][0]} ${yFor(0)} Z` : '';
+  const newArea = newPoints.length > 0 ? `${pathFor(newPoints)} L ${newPoints[newPoints.length-1][0]} ${yFor(0)} L ${newPoints[0][0]} ${yFor(0)} Z` : '';
+  const onMove = e => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * W;
+    if (x < padL || x > W - padR) { setHoverIdx(null); return; }
+    const idx = Math.round((x - padL) / (xStep || 1));
+    if (idx >= 0 && idx < data.length) setHoverIdx(idx);
+  };
+  return (
+    <div style={{padding:'14px 16px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:6,position:'relative'}} onMouseLeave={() => setHoverIdx(null)}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink-soft)',letterSpacing:'0.08em',textTransform:'uppercase'}}>⑤ 新規 vs リピーター 月次</div>
+        <div style={{display:'flex',gap:10,fontFamily:'var(--jb-mono)',fontSize:9}}>
+          <span style={{color:'var(--jb-blue)'}}>■ 新規</span>
+          <span style={{color:'#8B5CF6'}}>■ リピーター</span>
+        </div>
+      </div>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block',cursor:'crosshair'}} onMouseMove={onMove}>
+        {[0.25, 0.5, 0.75].map(r => (
+          <line key={r} x1={padL} x2={W - padR} y1={padT + (H - padT - padB) * r} y2={padT + (H - padT - padB) * r}
+            stroke="var(--jb-line)" strokeDasharray="2,3" strokeWidth="0.5"/>
+        ))}
+        {totalArea && <path d={totalArea} fill="#8B5CF6" opacity="0.15"/>}
+        {newArea && <path d={newArea} fill="var(--jb-blue)" opacity="0.25"/>}
+        <path d={pathFor(totalPoints)} fill="none" stroke="#8B5CF6" strokeWidth="1.5"/>
+        <path d={pathFor(newPoints)} fill="none" stroke="var(--jb-blue)" strokeWidth="1.5"/>
+        {hoverIdx != null && (
+          <line x1={padL + hoverIdx * xStep} x2={padL + hoverIdx * xStep} y1={padT} y2={H - padB}
+            stroke="var(--jb-ink)" strokeWidth="0.5" strokeDasharray="2,2" opacity="0.5"/>
+        )}
+        {labels.map((l, i) => i % 2 === 0 && (
+          <text key={i} x={padL + i * xStep} y={H - 6} textAnchor="middle" fontFamily="var(--jb-mono)" fontSize="8" fill="var(--jb-ink-ghost)">{l}</text>
+        ))}
+        <text x={padL - 4} y={yFor(max) + 3} textAnchor="end" fontFamily="var(--jb-mono)" fontSize="8" fill="var(--jb-ink-ghost)">{max}</text>
+      </svg>
+      {hoverIdx != null && data[hoverIdx] && (
+        <div style={{
+          position:'absolute',
+          left: `${(padL + hoverIdx * xStep) / W * 100}%`,
+          top: 40,marginLeft:8,
+          background:'var(--jb-ink)',color:'#fff',padding:'6px 10px',borderRadius:4,
+          fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,whiteSpace:'nowrap',pointerEvents:'none',zIndex:10,
+        }}>
+          <div style={{fontSize:8,color:'var(--jb-ink-ghost)',marginBottom:2}}>{labels[hoverIdx]}</div>
+          <div style={{color:'var(--jb-blue)'}}>新規 {data[hoverIdx].newCount}</div>
+          <div style={{color:'#8B5CF6'}}>リピーター {data[hoverIdx].repeatCount}</div>
+          <div style={{color:'#fff',marginTop:2}}>合計 {data[hoverIdx].total}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// (Phase 17.S-fix) FunnelChart — ファネル
+function FunnelChart({ stages }) {
+  if (!stages || stages.length === 0) return null;
+  const maxCount = Math.max(...stages.map(s => s.count), 1);
+  const firstCount = stages[0].count || 1;
+  return (
+    <div style={{padding:'14px 16px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:6}}>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {stages.map((s, i) => {
+          const w = (s.count / maxCount) * 100;
+          const pct = firstCount > 0 ? ((s.count / firstCount) * 100).toFixed(0) : 0;
+          const prevCount = i > 0 ? stages[i - 1].count : firstCount;
+          const dropRate = prevCount > 0 ? (((prevCount - s.count) / prevCount) * 100).toFixed(0) : 0;
+          return (
+            <div key={s.label} style={{display:'grid',gridTemplateColumns:'100px 1fr 90px',gap:'8px 12px',alignItems:'center'}}>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,color:'var(--jb-ink)',textAlign:'right'}}>{s.label}</div>
+              <div style={{position:'relative',height:32,background:'var(--jb-paper-mist)',borderRadius:4,overflow:'hidden'}}>
+                <div style={{
+                  position:'absolute',top:0,left:0,bottom:0,
+                  width:`${w}%`,background:s.color,
+                  transition:'width 1.2s', borderRadius:4,
+                  display:'flex',alignItems:'center',paddingLeft:10,
+                  color:'#fff',fontFamily:'var(--jb-mono)',fontSize:11,fontWeight:700,
+                }}>{s.count}</div>
+              </div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)',textAlign:'left'}}>
+                <div>{pct}% <span style={{color:'var(--jb-ink-ghost)'}}>of 申込</span></div>
+                {i > 0 && <div style={{color: Number(dropRate) > 30 ? 'var(--jb-shouwa)' : 'var(--jb-ink-ghost)'}}>↓ {dropRate}% 離脱</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// (Phase 17.S-fix) BarChart — 縦棒
+function BarChart({ title, labels, data, color, unit }) {
+  const W = 360, H = 160, padL = 36, padR = 12, padT = 14, padB = 28;
+  const total = data.reduce((s, v) => s + v, 0);
+  const maxVal = Math.max(1, ...data);
+  const barWidth = (W - padL - padR) / data.length * 0.7;
+  const barGap = (W - padL - padR) / data.length * 0.3;
+  return (
+    <div style={{padding:'14px 16px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:6,position:'relative'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink-soft)',letterSpacing:'0.08em',textTransform:'uppercase'}}>{title}</div>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)'}}>合計 <b style={{color:'var(--jb-ink)'}}>{total.toLocaleString()}{unit||''}</b></div>
+      </div>
+      {total === 0 ? (
+        <div style={{height:140,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-ghost)'}}>
+          データなし (= まだ 集計できる レコードが ありません)
+        </div>
+      ) : (
+        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}}>
+          {data.map((v, i) => {
+            const x = padL + i * ((W - padL - padR) / data.length) + barGap / 2;
+            const h = ((H - padT - padB) * v) / maxVal;
+            const y = H - padB - h;
+            return (
+              <g key={i}>
+                <rect x={x} y={y} width={barWidth} height={h} fill={color} rx="2"/>
+                <text x={x + barWidth / 2} y={y - 4} textAnchor="middle" fontFamily="var(--jb-mono)" fontSize="8" fill="var(--jb-ink)" fontWeight="700">{v}</text>
+                <text x={x + barWidth / 2} y={H - 10} textAnchor="middle" fontFamily="var(--jb-mono)" fontSize="8" fill="var(--jb-ink-ghost)">{labels[i]}</text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
+    </div>
+  );
+}
+
+// (Phase 17.S-fix) HeatmapChart — 曜日 × 時刻 ヒートマップ
+function HeatmapChart({ title, grid }) {
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const maxVal = Math.max(1, ...grid.flat());
+  return (
+    <div style={{padding:'14px 16px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:6}}>
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink-soft)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>{title}</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{borderSpacing:1, fontFamily:'var(--jb-mono)', fontSize:8}}>
+          <thead>
+            <tr>
+              <th></th>
+              {Array.from({length: 24}, (_, h) => (
+                h % 3 === 0 ? <th key={h} style={{color:'var(--jb-ink-ghost)',fontWeight:'normal',padding:'0 1px'}}>{h}</th> : <th key={h}></th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {grid.map((row, i) => (
+              <tr key={i}>
+                <td style={{color:'var(--jb-ink-soft)',padding:'0 4px 0 0',fontWeight:700}}>{days[i]}</td>
+                {row.map((v, h) => {
+                  const intensity = v / maxVal;
+                  const bg = intensity === 0 ? 'var(--jb-paper-mist)' :
+                            `rgba(0, 168, 225, ${0.15 + intensity * 0.85})`;
+                  return (
+                    <td key={h} title={`${days[i]} ${h}時: ${v}件`} style={{
+                      width: 12, height: 18, background: bg, borderRadius: 1,
+                      color: intensity > 0.5 ? '#fff' : 'var(--jb-ink)',
+                      textAlign: 'center', fontWeight: 700,
+                    }}>{v > 0 ? v : ''}</td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// (Phase 17.S-fix) LineChart — ホバー対応 + 描画アニメ + グラデーション
+function LineChart({ title, labels, data, color, unit, max, isCurrency }) {
+  const W = 360, H = 160, padL = 40, padR = 16, padT = 16, padB = 28;
+  const [hoverIdx, setHoverIdx] = React.useState(null);
+  const [animProgress, setAnimProgress] = React.useState(0);
+  const svgRef = React.useRef(null);
+  const gradientId = React.useMemo(() => 'grad-' + Math.random().toString(36).substr(2, 9), []);
+
+  React.useEffect(() => {
+    let raf;
+    const start = performance.now();
+    const tick = () => {
+      const elapsed = performance.now() - start;
+      const p = Math.min(1, elapsed / 900);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setAnimProgress(eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => raf && cancelAnimationFrame(raf);
+  }, [data.join(',')]);
+
+  const maxVal = max != null ? max : Math.max(1, ...data.map(v => Math.abs(v)));
+  const minVal = Math.min(0, ...data);
+  const range = maxVal - minVal || 1;
+  const xStep = data.length > 1 ? (W - padL - padR) / (data.length - 1) : 0;
+  const yFor = (v) => padT + (H - padT - padB) * (1 - (v - minVal) / range);
+  const points = data.map((v, i) => [padL + i * xStep, yFor(v)]);
+  // smooth bezier
+  const smoothPath = points.length > 0
+    ? points.reduce((acc, p, i) => {
+        if (i === 0) return `M ${p[0]} ${p[1]}`;
+        const prev = points[i - 1];
+        const cx = (prev[0] + p[0]) / 2;
+        return `${acc} C ${cx} ${prev[1]}, ${cx} ${p[1]}, ${p[0]} ${p[1]}`;
+      }, '')
+    : '';
+  const areaPath = points.length > 0
+    ? `${smoothPath} L ${points[points.length - 1][0]} ${yFor(minVal)} L ${points[0][0]} ${yFor(minVal)} Z`
+    : '';
+
+  const total = data.reduce((s, v) => s + v, 0);
+  const avg = data.length > 0 ? total / data.length : 0;
+  const last = data[data.length - 1] || 0;
+  const prev = data[data.length - 2] || 0;
+  const trend = prev !== 0 ? ((last - prev) / Math.abs(prev)) * 100 : (last > 0 ? 100 : 0);
+  const fmtVal = (v) => isCurrency ? `¥${Math.round(v).toLocaleString()}` : `${Math.round(v).toLocaleString()}${unit || ''}`;
+
+  const onMove = (e) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * W;
+    if (x < padL || x > W - padR) { setHoverIdx(null); return; }
+    const idx = Math.round((x - padL) / (xStep || 1));
+    if (idx >= 0 && idx < data.length) setHoverIdx(idx);
+  };
+
+  const pathLength = points.length > 1
+    ? points.reduce((s, p, i) => i === 0 ? 0 : s + Math.sqrt(Math.pow(p[0] - points[i-1][0], 2) + Math.pow(p[1] - points[i-1][1], 2)), 0)
+    : 0;
+
+  return (
+    <div style={{padding:'14px 16px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:6,position:'relative'}}
+      onMouseLeave={() => setHoverIdx(null)}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+        <div style={{fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,color:'var(--jb-ink-soft)',letterSpacing:'0.08em',textTransform:'uppercase'}}>{title}</div>
+        <div style={{
+          fontFamily:'var(--jb-mono)',fontSize:9,fontWeight:700,
+          color: trend > 0 ? 'var(--jb-success)' : trend < 0 ? 'var(--jb-shouwa)' : 'var(--jb-ink-ghost)',
+        }}>
+          {trend > 0 ? '↑' : trend < 0 ? '↓' : '—'} {Math.abs(trend).toFixed(0)}%
+        </div>
+      </div>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block',cursor:'crosshair'}} onMouseMove={onMove}>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.4"/>
+            <stop offset="100%" stopColor={color} stopOpacity="0.02"/>
+          </linearGradient>
+        </defs>
+        {[0.25, 0.5, 0.75].map(r => (
+          <line key={r} x1={padL} x2={W - padR} y1={padT + (H - padT - padB) * r} y2={padT + (H - padT - padB) * r}
+            stroke="var(--jb-line)" strokeDasharray="2,3" strokeWidth="0.5"/>
+        ))}
+        {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} opacity={animProgress}/>}
+        <path d={smoothPath} fill="none" stroke={color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round"
+          strokeDasharray={pathLength} strokeDashoffset={pathLength * (1 - animProgress)}/>
+        {points.map((p, i) => {
+          const showProgress = (i + 1) / data.length;
+          if (showProgress > animProgress + 0.05) return null;
+          const isHover = hoverIdx === i;
+          return (
+            <g key={i}>
+              <circle cx={p[0]} cy={p[1]} r={isHover ? 5 : 2.5} fill={color} stroke="#fff" strokeWidth={isHover ? 2 : 1.5}
+                style={{transition:'r 0.15s'}}/>
+              {isHover && (
+                <circle cx={p[0]} cy={p[1]} r="5" fill={color} opacity="0.3">
+                  <animate attributeName="r" from="5" to="14" dur="1.2s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" from="0.4" to="0" dur="1.2s" repeatCount="indefinite"/>
+                </circle>
+              )}
+            </g>
+          );
+        })}
+        {hoverIdx != null && points[hoverIdx] && (
+          <line x1={points[hoverIdx][0]} x2={points[hoverIdx][0]} y1={padT} y2={H - padB}
+            stroke={color} strokeWidth="0.8" strokeDasharray="2,2" opacity="0.5"/>
+        )}
+        {labels.map((l, i) => {
+          const showCount = Math.max(1, Math.floor(labels.length / 8));
+          if (i % showCount !== 0 && i !== labels.length - 1) return null;
+          return (
+            <text key={i} x={padL + i * xStep} y={H - 6} textAnchor="middle"
+              fontFamily="var(--jb-mono)" fontSize="8" fill="var(--jb-ink-ghost)">{l}</text>
+          );
+        })}
+        <text x={padL - 4} y={yFor(maxVal) + 3} textAnchor="end" fontFamily="var(--jb-mono)" fontSize="8" fill="var(--jb-ink-ghost)">{fmtVal(maxVal)}</text>
+        {minVal < 0 && <text x={padL - 4} y={yFor(0) + 3} textAnchor="end" fontFamily="var(--jb-mono)" fontSize="8" fill="var(--jb-ink-ghost)">0</text>}
+      </svg>
+      {hoverIdx != null && points[hoverIdx] && (() => {
+        const px = (points[hoverIdx][0] / W) * 100;
+        const flipLeft = px > 60;
+        return (
+          <div style={{
+            position:'absolute',
+            left: flipLeft ? 'auto' : `${px}%`,
+            right: flipLeft ? `${100 - px}%` : 'auto',
+            top: 36, marginLeft: flipLeft ? 0 : 10, marginRight: flipLeft ? 10 : 0,
+            background:'var(--jb-ink)',color:'#fff',padding:'6px 10px',borderRadius:4,
+            fontFamily:'var(--jb-mono)',fontSize:10,fontWeight:700,
+            whiteSpace:'nowrap',pointerEvents:'none',
+            boxShadow:'0 4px 16px rgba(0,0,0,0.18)',zIndex:10,
+          }}>
+            <div style={{fontSize:8,color:'var(--jb-ink-ghost)',letterSpacing:'0.04em',marginBottom:2}}>{labels[hoverIdx]}</div>
+            <div style={{color:color,fontSize:14}}>{fmtVal(data[hoverIdx])}</div>
+          </div>
+        );
+      })()}
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)'}}>
+        <span>直近: <b style={{color:'var(--jb-ink)'}}><AnimatedNumber value={last} isCurrency={isCurrency} unit={unit}/></b></span>
+        <span>平均: <b style={{color:'var(--jb-ink)'}}><AnimatedNumber value={avg} isCurrency={isCurrency} unit={unit}/></b></span>
+        <span>合計: <b style={{color:'var(--jb-ink)'}}><AnimatedNumber value={total} isCurrency={isCurrency} unit={unit}/></b></span>
+      </div>
+    </div>
+  );
+}
+
+// (Phase 17.S-fix) AnimatedNumber — カウントアップ アニメ数値
+function AnimatedNumber({ value, isCurrency, unit }) {
+  const [display, setDisplay] = React.useState(0);
+  const prevRef = React.useRef(0);
+  React.useEffect(() => {
+    const start = performance.now();
+    const startVal = prevRef.current;
+    let raf;
+    const tick = () => {
+      const elapsed = performance.now() - start;
+      const p = Math.min(1, elapsed / 800);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const v = startVal + (value - startVal) * eased;
+      setDisplay(v);
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else prevRef.current = value;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => raf && cancelAnimationFrame(raf);
+  }, [value]);
+  return isCurrency ? `¥${Math.round(display).toLocaleString()}` : `${Math.round(display).toLocaleString()}${unit || ''}`;
 }
 
 // (Phase 17.R) RankingCard — TOP 5 リスト 表示
@@ -20334,11 +21259,12 @@ function PageAnalytics(){
       </div>
 
       {/* (Phase 17.R) 横断 KPI — 全期間 全イベント版 */}
+      {/* (Phase 17.S-fix) events / registrations は フィルタなし で 渡す — 内部の期間切替が 独立して 制御 */}
       <CrossEventAnalyticsSection
-        events={periodEvents}
-        registrations={periodRegs}
+        events={events}
+        registrations={registrations}
         participants={participants}
-        payments={payments.filter(p => inPeriod(p.paidAt || p.createdAt))}
+        payments={payments}
         promos={allPromos}
         referralStats={referralStats}
       />
