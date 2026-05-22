@@ -5758,12 +5758,18 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
         // (Phase 17.S-fix) 申込開始日より前の reg は 集計しない
         if (ad < sd) return;
         // (Phase 17.S-fix) キャンセル ハイブリッド処理
-        //   cancelledAt あり → その時点 以降は 除外 (= 線が下がる)
-        //   cancelledAt なし + status='キャンセル' → 全期間 除外 (= 最初から なかった扱い)
+        //   keepCancelled (= キャンセル系列の グラフ) なら キャンセルでも カウント
+        //   通常: cancelledAt あり → その時点 以降は 除外 (= 線が下がる)
+        //         cancelledAt なし + status=キャンセル → 完全除外
+        const keepCancelled = options && options.keepCancelled;
         const isCancelled = /キャンセル|中止|cancel/i.test(String(r.status || ''));
-        const cd = toDate(r.cancelledAt);
-        if (cd && cd <= cutoff) return;
-        if (isCancelled && !cd) return;  // cancelledAt 不明 + キャンセル なら 完全除外
+        const isPendingRefund = /返金待ち/.test(String(r.status || ''));
+        // (Phase 17.S-fix) cancelledAt が ない場合は updatedAt を 代用 — グラフが 右肩下がりになる
+        const cd = toDate(r.cancelledAt) || (isCancelled ? toDate(r.updatedAt) : null);
+        if (!keepCancelled) {
+          if (cd && cd <= cutoff) return;
+          if (isCancelled && !cd) return;
+        }
         if (r.userId) ids.add(r.userId);
       });
       return ids.size;
@@ -5937,16 +5943,25 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
       if (!buckets[key]) buckets[key] = [];
       buckets[key].push(r);
     });
+    // (Phase 17.S-fix) 分類結果ログ
+    const bucketCounts = {};
+    Object.keys(buckets).forEach(k => { bucketCounts[k] = buckets[k].length; });
+    console.log('[ApplicationTrendChart payment分類]', bucketCounts);
     const keys = STATUS_ORDER.filter(k => buckets[k] && buckets[k].length > 0);
     // 未収録キーがあれば 末尾に追加 (= 想定外データの 保険)
     Object.keys(buckets).forEach(k => { if (keys.indexOf(k) < 0) keys.push(k); });
     groupedData = keys.map((k) => {
       // 未払い系 (= 当日払い予定 / 前払い待ち / 申込済) は 短期トレンドのみ
       const isUnpaid = k === '申込済' || k === '当日払い予定' || k === '前払い待ち';
+      // (Phase 17.S-fix) キャンセル / 返金待ち 系列は keepCancelled で 表示
+      const isCancelSeries = k === 'キャンセル' || k === '返金待ち' || k === '一部キャンセル';
       return {
         key: k,
         label: k,
-        data: buildSeries(buckets[k], null, { groupType: isUnpaid ? 'unpaid' : 'cumulative' }),
+        data: buildSeries(buckets[k], null, {
+          groupType: isUnpaid ? 'unpaid' : 'cumulative',
+          keepCancelled: isCancelSeries,
+        }),
       };
     });
   } else if (groupMode === 'age') {
