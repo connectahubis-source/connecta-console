@@ -5687,21 +5687,35 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
   const sd = toDate(startDate);
   const ed = toDate(endDate);
   if (!sd || !ed || ed <= sd) return null;
-  // (Phase 17.S-fix) 粒度切替 — all (= 日次) / 3d (= 6時間刻み 直近3日) / 1d (= 1時間刻み 直近1日)
+  // (Phase 17.S-fix) 粒度切替 — 5 段階 で ズームイン
+  //   all  = 全期間、 1 時間刻み (= 内部高解像度、 1 日表示でも 時刻 精密)
+  //   1w   = 直近 7 日、 6 時間刻み
+  //   3d   = 直近 3 日、 3 時間刻み
+  //   1d   = 直近 24 時間、 30 分刻み
+  //   6h   = 直近 6 時間、 10 分刻み
   const now = new Date();
   let stepMs, rangeStartMs, rangeEndMs;
-  if (timeRange === '1d') {
-    stepMs = 60 * 60 * 1000;  // 1 時間
+  if (timeRange === '6h') {
+    stepMs = 10 * 60 * 1000;
+    rangeEndMs = now.getTime();
+    rangeStartMs = rangeEndMs - 6 * 60 * 60 * 1000;
+  } else if (timeRange === '1d') {
+    stepMs = 30 * 60 * 1000;
     rangeEndMs = now.getTime();
     rangeStartMs = rangeEndMs - 24 * 60 * 60 * 1000;
   } else if (timeRange === '3d') {
-    stepMs = 6 * 60 * 60 * 1000;  // 6 時間
+    stepMs = 3 * 60 * 60 * 1000;
     rangeEndMs = now.getTime();
     rangeStartMs = rangeEndMs - 3 * 24 * 60 * 60 * 1000;
-  } else {
-    stepMs = 24 * 60 * 60 * 1000;  // 1 日
+  } else if (timeRange === '1w') {
+    stepMs = 6 * 60 * 60 * 1000;
+    rangeEndMs = now.getTime();
+    rangeStartMs = rangeEndMs - 7 * 24 * 60 * 60 * 1000;
+  } else {  // 'all' = 全期間
+    // (Phase 17.S-fix) 1 日 表示でも 1 時間 精度で 計算 → 時刻に 応じた 位置で 上下する
+    stepMs = 60 * 60 * 1000;  // 1 時間
     sd.setHours(0, 0, 0, 0);
-    ed.setHours(0, 0, 0, 0);
+    ed.setHours(23, 59, 59, 999);
     rangeStartMs = sd.getTime();
     rangeEndMs = ed.getTime();
   }
@@ -5751,28 +5765,35 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
     //   1 人が multi で 3 Day 申込 → 1 人としてカウント
     const actual = days.map((d) => {
       const cutoff = new Date(d.getTime() + stepMs);
-      const ids = new Set();
+      // (Phase 17.S-fix) reg 単位で カウント — userId ユニーク化を 止める
+      //   理由: multi イベントで 1 ユーザー = 複数 reg のとき、 ユニーク化すると
+      //   「1 Day だけキャンセル」 で 全体 -0 / キャンセル系列 +0 (= 重複) の Bug
+      //   reg 単位なら 申込 +1 / キャンセル -1 が 全系列で 整合する
+      let count = 0;
       regSubset.forEach(r => {
         const ad = toDate(r.appliedAt || r.createdAt);
         if (!ad || ad > cutoff) return;
-        // (Phase 17.S-fix) 申込開始日より前の reg は 集計しない
         if (ad < sd) return;
-        // (Phase 17.S-fix) キャンセル ハイブリッド処理
-        //   keepCancelled (= キャンセル系列の グラフ) なら キャンセルでも カウント
-        //   通常: cancelledAt あり → その時点 以降は 除外 (= 線が下がる)
-        //         cancelledAt なし + status=キャンセル → 完全除外
-        const keepCancelled = options && options.keepCancelled;
+        const isCancelSeries = options && options.keepCancelled;
         const isCancelled = /キャンセル|中止|cancel/i.test(String(r.status || ''));
-        const isPendingRefund = /返金待ち/.test(String(r.status || ''));
-        // (Phase 17.S-fix) cancelledAt が ない場合は updatedAt を 代用 — グラフが 右肩下がりになる
-        const cd = toDate(r.cancelledAt) || (isCancelled ? toDate(r.updatedAt) : null);
-        if (!keepCancelled) {
+        let cd = toDate(r.cancelledAt);
+        if (!cd && isCancelled) {
+          cd = toDate(r.updatedAt);
+          if (!cd) {
+            const ad2 = toDate(r.appliedAt || r.createdAt);
+            if (ad2) cd = new Date(ad2.getTime() + 24 * 60 * 60 * 1000);
+          }
+        }
+        if (isCancelSeries) {
+          if (!isCancelled) return;
+          if (!cd || cd > cutoff) return;
+        } else {
           if (cd && cd <= cutoff) return;
           if (isCancelled && !cd) return;
         }
-        if (r.userId) ids.add(r.userId);
+        count++;
       });
-      return ids.size;
+      return count;
     });
     const actualToToday = actual.slice(0, todayIdx + 1);
     const lastActual = actualToToday[actualToToday.length - 1] || 0;
@@ -5946,7 +5967,11 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
     // (Phase 17.S-fix) 分類結果ログ
     const bucketCounts = {};
     Object.keys(buckets).forEach(k => { bucketCounts[k] = buckets[k].length; });
-    console.log('[ApplicationTrendChart payment分類]', bucketCounts);
+    const restoredCancel = regs.filter(r => {
+      const s = String(r.status || '');
+      return !/キャンセル/.test(s) && r.cancelledAt;  // 元キャンセル → 復帰 (= cancelledAt 残ったまま)
+    }).length;
+    console.log('[ApplicationTrendChart payment分類]', bucketCounts, '復帰済 reg=', restoredCancel);
     const keys = STATUS_ORDER.filter(k => buckets[k] && buckets[k].length > 0);
     // 未収録キーがあれば 末尾に追加 (= 想定外データの 保険)
     Object.keys(buckets).forEach(k => { if (keys.indexOf(k) < 0) keys.push(k); });
@@ -6242,11 +6267,14 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
     return DAY_COLORS[idx % DAY_COLORS.length];
   };
 
-  const xLabelStep = totalSteps <= 14 ? 2 : totalSteps <= 28 ? 4 : 7;
+  // (Phase 17.S-fix) ステップ数に応じて x ラベル を 間引き
+  const xLabelStep = totalSteps <= 8 ? 1 : totalSteps <= 14 ? 2 : totalSteps <= 28 ? 4 : totalSteps <= 60 ? 8 : totalSteps <= 200 ? 24 : 48;
   // (Phase 17.S-fix) 粒度別の ラベルフォーマット
   const fmtDate = (d) => {
+    if (timeRange === '6h') return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
     if (timeRange === '1d') return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
     if (timeRange === '3d') return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
+    if (timeRange === '1w') return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
   const isPredicted = todayIdx < days.length - 1;
@@ -6258,15 +6286,42 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
 
   return (
     <section style={{marginBottom:24}}>
-      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
-        <span>登録推移 · {timeRange === 'all' ? `${fmtDate(sd)} 〜 ${fmtDate(ed)} (${totalSteps} 日間)` : timeRange === '3d' ? '直近 3 日間 (= 6 時間刻み)' : '直近 24 時間 (= 1 時間刻み)'}{isPredicted && <span style={{marginLeft:8,color:'var(--jb-ink-ghost)'}}>(点線 = 予測 · {predictionSource})</span>}</span>
-        {/* (Phase 17.S-fix) 時間粒度切替 — 全期間 / 直近 3 日 (= 6 時間刻み) / 直近 1 日 (= 1 時間刻み) */}
-        <div style={{display:'flex',gap:4,fontFamily:'var(--jb-mono)',flexWrap:'wrap',alignItems:'center'}}>
-          <span style={{fontSize:9,color:'var(--jb-ink-ghost)',marginRight:4}}>期間</span>
+      {/* (Phase 17.S-fix) タイトル行 — 固定 */}
+      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:8}}>
+        登録推移 · {timeRange === 'all' ? `${fmtDate(sd)} 〜 ${fmtDate(ed)}` : timeRange === '1w' ? '直近 7 日 (= 6 時間刻み)' : timeRange === '3d' ? '直近 3 日 (= 3 時間刻み)' : timeRange === '1d' ? '直近 24 時間 (= 30 分刻み)' : '直近 6 時間 (= 10 分刻み)'}{isPredicted && <span style={{marginLeft:8,color:'var(--jb-ink-ghost)'}}>(点線 = 予測 · {predictionSource})</span>}
+      </div>
+      {/* (Phase 17.S-fix) コントロール行 — 左端 [−][+]、 中央 期間、 右 表示 */}
+      <div style={{display:'flex',gap:8,marginBottom:10,fontFamily:'var(--jb-mono)',flexWrap:'wrap',alignItems:'center'}}>
+        {/* 拡大/縮小 ボタン — 常に 左端 固定 */}
+        {(() => {
+          const order = ['all', '1w', '3d', '1d', '6h'];
+          const cur = order.indexOf(timeRange);
+          const zoomOut = () => cur > 0 && setTimeRange(order[cur - 1]);
+          const zoomIn = () => cur < order.length - 1 && setTimeRange(order[cur + 1]);
+          const zoomBtnStyle = (disabled) => ({
+            width:28,height:24,padding:0,background:'var(--jb-paper)',
+            color: disabled ? 'var(--jb-ink-ghost)' : 'var(--jb-ink)',
+            border:'1px solid var(--jb-line)',
+            fontSize:14,fontWeight:700,borderRadius:3,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            opacity: disabled ? 0.4 : 1,
+            display:'flex',alignItems:'center',justifyContent:'center',
+          });
+          return (
+            <div style={{display:'flex',gap:2}}>
+              <button type="button" onClick={zoomOut} disabled={cur === 0} style={zoomBtnStyle(cur === 0)} title="縮小 (= 広い期間)">−</button>
+              <button type="button" onClick={zoomIn} disabled={cur === order.length - 1} style={zoomBtnStyle(cur === order.length - 1)} title="拡大 (= 細かい期間)">+</button>
+            </div>
+          );
+        })()}
+        <div style={{display:'flex',gap:4,alignItems:'center'}}>
+          <span style={{fontSize:9,color:'var(--jb-ink-ghost)'}}>期間</span>
           {[
             {k:'all',l:'全期間'},
-            {k:'3d',l:'直近3日'},
-            {k:'1d',l:'直近1日'},
+            {k:'1w',l:'1週間'},
+            {k:'3d',l:'3日'},
+            {k:'1d',l:'1日'},
+            {k:'6h',l:'6時間'},
           ].map(opt => (
             <button key={opt.k} type="button" onClick={() => setTimeRange(opt.k)}
               style={{
@@ -6278,7 +6333,9 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
                 borderRadius:3,cursor:'pointer',textTransform:'none',
               }}>{opt.l}</button>
           ))}
-          <span style={{fontSize:9,color:'var(--jb-ink-ghost)',marginLeft:8,marginRight:4}}>表示</span>
+        </div>
+        <div style={{display:'flex',gap:4,alignItems:'center'}}>
+          <span style={{fontSize:9,color:'var(--jb-ink-ghost)'}}>表示</span>
           {[
             {k:'session',l:'Day 別'},
             {k:'payment',l:'決済方法'},
