@@ -72,6 +72,62 @@
 <meta name="apple-mobile-web-app-title" content="connec+a">
 <meta name="theme-color" content="#163d8a">
 
+<!-- (Phase 17.S-fix) テーマ + サイドバー 早期適用 — ちらつき防止 -->
+<script>
+  (function() {
+    try {
+      var mode = localStorage.getItem('connecta-theme-mode');
+      if (!mode) {
+        // 旧キーから 移行
+        var old = localStorage.getItem('connecta-theme');
+        mode = old === 'night' ? 'night' : old === 'noon' ? 'noon' : 'auto';
+      }
+      var effective = mode;
+      if (mode === 'auto') {
+        var h = new Date().getHours();
+        effective = (h < 6 || h >= 18) ? 'night' : 'noon';
+      }
+      document.documentElement.setAttribute('data-theme', effective);
+    } catch (e) {}
+    // サイドバー折り畳み状態 復元
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        var collapsed = localStorage.getItem('connecta-sidebar-collapsed') === '1';
+        var sb = document.getElementById('mainSidebar');
+        var btn = document.getElementById('sidebarToggleBtn');
+        var icon = document.getElementById('sidebarToggleIcon');
+        var updateIconAndPos = function() {
+          var isCollapsed = sb.classList.contains('collapsed');
+          if (icon) icon.innerHTML = isCollapsed
+            ? '<polyline points="9 18 15 12 9 6"/>'
+            : '<polyline points="15 18 9 12 15 6"/>';
+          if (btn) {
+            var sbRect = sb.getBoundingClientRect();
+            btn.style.left = (sbRect.right - 14) + 'px';  // ボタン半分はみ出す
+            btn.style.top = (sbRect.top + 14) + 'px';
+          }
+        };
+        if (collapsed && sb) sb.classList.add('collapsed');
+        if (btn && sb) {
+          btn.addEventListener('click', function() {
+            sb.classList.toggle('collapsed');
+            try {
+              localStorage.setItem('connecta-sidebar-collapsed',
+                sb.classList.contains('collapsed') ? '1' : '0');
+            } catch (e) {}
+            updateIconAndPos();
+          });
+          // 初期位置 + リサイズ対応
+          setTimeout(updateIconAndPos, 50);
+          window.addEventListener('resize', updateIconAndPos);
+          // transition 終了後 にも 再計算
+          sb.addEventListener('transitionend', updateIconAndPos);
+        }
+      } catch (e) {}
+    });
+  })();
+</script>
+
 <!-- iOS icon -->
 <link rel="apple-touch-icon" href="data:image/png;base64,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">
 <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAADh0lEQVR42u2XTWgdVRTHf+femXkf6cvrC3na9CO15CmtRm0W1SKIRAWNCmIFERGrgiBUXAmCRbrqSlBREBSUpuBCESRWdBUCUolf1VI01mgwoMYmaZK+75l5M/e6aBJra5MXtGZh7nI4HH6c+/ufmRFrrWUVj2KVzxrAGsCqAzjLFZyfUmtBlCD/EoCs9h5YcgLGWCrVGmPjk8wWq4hA2/oMhSs2kE4lUEouzQSstYgIp2fLfH5slEQyweaOHGEj4uTYBLlMipt2bSedSoD8s+tY8gri2FAs12lb3/KX58VSlWxryzLOCCL/oQOxsajz5IyNRQTUEiRNpeBMqUoQRGityLamcR2NnNPUWIue96FS8zEGPFeRTHh/JkdWCGAtRHGMoxWH3j/GwTeOorXixWfv4KG7e2hEMa6jMdaiRPhwaISXDg8zPecTG4PrKLoLeQ7s6+XKrfnFuqYBRMB1NADpVIpy3WCtIWwYRATX0dj5pm8f+ZqHn34XHBcn7SICCc/l27EZToxOMnTocdqy6UW5mwKo1UPmSjU8V1Ms13AdhQDlis/0TJlGFNOeW4fran6bKvPMvl5aUg533Vwg05Lg0f0DjE+U+WF8jsHhH3mgbydRbHC0LC3h2SLF6+98wf5XBmnPpan5EX5gAEglNElPU60HvPfyg+y+vhM/CBkYHOHUTIVqLcQifDA0ytivRaq1gNeev5PH7tu12LupCZSqATMTJWp+jHYULUkXEGZLPo1GTFAPsBbCRkTv3jf57PjvKFdjqgFgybRnyGaSlCs+eiUpWLB5z+3b2bZxHamky8dHf+LwkRFAeGLPtdx64zbqfoNrCpfxyZc/89X3U2zelAMMB57sY9OGLC+89SnHT06jlGBXsooXJOnqzNPVmQdgctanf+A7wHLDdVu4p7d7sb5cDfAcTWwMWlnuvW0H+bYM/QPfEMVm2WV00Ssw1hI2YlytmCvWqRTrAMwW68SxIYxikp7D7p1byLV6VPwGSc/hlr39XNXZSrUe4nkOsR9fYH5TAGo+aloJ3YU8j9zfg4hwdVcerRWeCNZCRz7Lq8/18dTBj5ir+ExOlrAmYmM+TaUWEPgBURRdulW8kO1TU0WGT/yCtdCzo4MwjDh9pgbWUtjazuXtrX+7B5oCsNZizNkypeSCJmb+PbCqHyTnQooSsGDn/VciF/VA1v6M1gD+9wB/AKL/o7AtRii8AAAAAElFTkSuQmCC">
@@ -213,7 +269,81 @@ svg{display:block}
 
 /* ==================== APP LAYOUT ==================== */
 .app{display:flex;min-height:calc(100vh - 52px)}
-.sidebar{width:232px;background:var(--white);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px;flex:none;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
+.sidebar{width:232px;background:var(--white);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px;flex:none;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;transition:width .25s cubic-bezier(.22,1,.36,1);font-family:'M PLUS Rounded 1c','Zen Maru Gothic','Hiragino Maru Gothic ProN','Noto Sans JP',var(--sans)}
+.sidebar .nav-item, .sidebar .nav-label, .sidebar .org-name, .sidebar .org-plan, .sidebar .signin-name{
+  font-family:'M PLUS Rounded 1c','Zen Maru Gothic','Hiragino Maru Gothic ProN','Noto Sans JP',var(--sans);
+}
+/* (Phase 17.S-fix) サイドバー 折り畳み — アイコンのみ表示 */
+.sidebar.collapsed{width:60px;padding:14px 6px;overflow-x:hidden}
+.sidebar.collapsed .nav-item{
+  justify-content:center;padding:9px 0;gap:0;
+  font-size:0 !important;line-height:0;  /* text node 確実 非表示 */
+}
+.sidebar.collapsed .nav-item .ic,
+.sidebar.collapsed .nav-item svg{
+  font-size:14px;line-height:1;display:block;flex:none;
+}
+.sidebar.collapsed .nav-item > *:not(.ic):not(svg){display:none !important}
+.sidebar.collapsed .nav-label{display:none}
+.sidebar.collapsed .nav-section-toggle{display:none}
+.sidebar.collapsed .nav-section{margin-top:8px}
+.sidebar.collapsed .org-switch{
+  padding:8px;justify-content:center;gap:0;
+  font-size:0;line-height:0;
+}
+.sidebar.collapsed .org-switch > *:not(.org-logo){display:none !important}
+.sidebar.collapsed .signin-footer{padding:6px;flex-direction:column;gap:6px;align-items:center;font-size:0}
+.sidebar.collapsed .signin-footer > *{display:none}
+.sidebar.collapsed .signin-footer > .signin-avatar,
+.sidebar.collapsed .signin-footer > button{display:flex;font-size:14px;line-height:1}
+.sidebar.collapsed .signin-meta{display:none}
+.sidebar.collapsed .n-badge,
+.sidebar.collapsed .n-dot{display:none}
+
+/* (Phase 17.S-fix) 折り畳みボタン — 大型化 + 視認性向上 */
+.sidebar-toggle{
+  position:fixed;width:28px;height:28px;border-radius:50%;
+  background:var(--white);border:1.5px solid var(--line2);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:101;color:var(--ink3);
+  transition:left .25s cubic-bezier(.22,1,.36,1),background .15s,color .15s,transform .15s,border-color .15s;
+  box-shadow:var(--sh-sm);
+}
+.sidebar-toggle:hover{
+  background:var(--bg2);color:var(--ink);
+  transform:scale(1.1);border-color:var(--ink3);
+}
+.sidebar-toggle svg{width:14px;height:14px}
+.sidebar.collapsed ~ .sidebar-toggle, body:has(.sidebar.collapsed) .sidebar-toggle{left:60px}
+@keyframes topbarBellRing {
+  0% { transform: rotate(0); }
+  20% { transform: rotate(-12deg); }
+  40% { transform: rotate(10deg); }
+  60% { transform: rotate(-8deg); }
+  80% { transform: rotate(5deg); }
+  100% { transform: rotate(0); }
+}
+/* (Phase 17.S-fix) サイドバー ダークモード */
+:root[data-theme="night"] .sidebar{background:var(--bg2);border-right-color:var(--line2)}
+:root[data-theme="night"] .nav-item{color:var(--ink2)}
+:root[data-theme="night"] .nav-item:hover{background:var(--bg3);color:var(--ink)}
+:root[data-theme="night"] .nav-item.active{background:rgba(56,189,248,0.12);color:var(--jb-blue)}
+:root[data-theme="night"] .nav-item.active::before{background:var(--jb-blue)}
+:root[data-theme="night"] .nav-item .ic{color:var(--ink3)}
+:root[data-theme="night"] .nav-item.active .ic{color:var(--jb-blue)}
+:root[data-theme="night"] .nav-label{color:var(--ink3)}
+:root[data-theme="night"] .nav-item .n-badge{background:var(--bg3);color:var(--ink2)}
+:root[data-theme="night"] .org-switch{background:var(--bg3);border-color:var(--line2)}
+:root[data-theme="night"] .org-switch:hover{background:var(--bg2)}
+:root[data-theme="night"] .sidebar-toggle{background:var(--bg2);border-color:var(--line2);color:var(--ink2)}
+:root[data-theme="night"] .sidebar-toggle:hover{background:var(--bg3);color:var(--ink)}
+:root[data-theme="night"] .sidebar::-webkit-scrollbar{width:6px}
+:root[data-theme="night"] .sidebar::-webkit-scrollbar-track{background:var(--bg2)}
+:root[data-theme="night"] .sidebar::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+:root[data-theme="night"] .sidebar::-webkit-scrollbar-thumb:hover{background:var(--ink3)}
+:root[data-theme="night"] *::-webkit-scrollbar-track{background:var(--bg2)}
+:root[data-theme="night"] *::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+:root[data-theme="night"] *::-webkit-scrollbar-thumb:hover{background:var(--ink3)}
 .sidebar::-webkit-scrollbar{width:6px}
 .sidebar::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 
@@ -540,6 +670,75 @@ svg{display:block}
   --jb-sans:     "M PLUS Rounded 1c", "Noto Sans JP", -apple-system, "Hiragino Sans", sans-serif;
   --jb-mono:     "JetBrains Mono", "Roboto Mono", "Menlo", monospace;
 }
+
+/* ========== (Phase 17.S-fix) Noon Mode (= 明るい デフォルト) ========== */
+:root[data-theme="noon"], :root:not([data-theme]) {
+  /* 既存の light テーマ そのまま */
+}
+
+/* ========== (Phase 17.S-fix) Night Mode (= リッチ ダーク) ========== */
+:root[data-theme="night"] {
+  --jb-blue:       #38BDF8;
+  --jb-blue-deep:  #0284C7;
+  --jb-blue-mid:   #0EA5E9;
+  --jb-blue-light: #7DD3FC;
+  --jb-blue-pale:  #1E3A52;
+  --jb-blue-soft:  #0F1E2A;
+  --jb-blue-line:  #1E3A52;
+  --jb-cyan:       #22D3EE;
+  --jb-cyan-light: #67E8F9;
+  --jb-shouwa:     #F87171;
+  --jb-shouwa-soft:#3A1A1A;
+  --jb-success:    #34D399;
+  --jb-success-soft:#0F2E22;
+  --jb-ink:        #F1F5F9;
+  --jb-ink-soft:   #94A3B8;
+  --jb-ink-ghost:  #475569;
+  --jb-paper:      #0F172A;
+  --jb-paper-mist: #1E293B;
+  --jb-paper-soft: #161F33;
+  --jb-paper-tint: #1A2438;
+  --jb-line:       #334155;
+  --jb-line-soft:  #1E293B;
+  /* (Phase 17.S-fix) サイドバー / トップバー 用 別系統 CSS変数 も 上書き */
+  --ink:           #F1F5F9;  /* 主テキスト → 月光白 */
+  --ink2:          #CBD5E1;
+  --ink3:          #94A3B8;
+  --ink4:          #94A3B8;  /* (= 暗かった ラベル を 明るく) */
+  --ink5:          #64748B;
+  --line:          #1E293B;
+  --line2:         #334155;
+  --bg:            #0F172A;
+  --bg2:           #1E293B;
+  --bg3:           #1A2438;
+  --white:         #1E293B;  /* 白背景 → 暗背景 */
+  --sh-xs:         0 1px 0 rgba(0,0,0,.4);
+  --sh-sm:         0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.3);
+  --sh:            0 2px 8px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
+  --sh-md:         0 8px 24px -8px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3);
+  --sh-lg:         0 24px 48px -16px rgba(0,0,0,.6),0 4px 10px rgba(0,0,0,.4);
+}
+:root[data-theme="night"] .jb-page {
+  background: var(--jb-paper);
+  background-image:
+    radial-gradient(ellipse at top, rgba(56, 189, 248, 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, #1E293B 0%, #0F172A 240px);
+}
+:root[data-theme="night"] body { background: var(--bg); color: var(--ink); }
+:root[data-theme="night"] .topbar { background: var(--bg2) !important; border-bottom-color: var(--line) !important; }
+:root[data-theme="night"] .cmdk { background: var(--bg3); border-color: var(--line2); color: var(--ink3); }
+:root[data-theme="night"] .kbd { background: var(--bg3); color: var(--ink2); border-color: var(--line2); }
+:root[data-theme="night"] input, :root[data-theme="night"] select, :root[data-theme="night"] textarea {
+  background: var(--bg2);
+  color: var(--ink);
+  border-color: var(--line2);
+}
+:root[data-theme="night"] .brand-mark { border-color: var(--line2); }
+:root[data-theme="night"] .brand-name { color: var(--ink); }
+:root[data-theme="night"] .brand-chip { background: var(--bg3); color: var(--ink3); }
+:root[data-theme="night"] .tb-btn:hover { background: var(--bg3); color: var(--ink); }
+:root[data-theme="night"] .tb-user { background: var(--bg3); border-color: var(--line2); }
+:root[data-theme="night"] .tb-user:hover { background: var(--bg2); border-color: var(--line); }
 
 /* ========== Page (純白基調 / 微かな寒色霞) ========== */
 .jb-page {
@@ -1302,6 +1501,66 @@ svg{display:block}
 </head>
 <body>
 
+<!-- (Phase 17.S-fix) オープニング スプラッシュ画面 -->
+<div id="connecta-splash" style="position:fixed;inset:0;z-index:99999;background:var(--bg, #fafafa);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1);">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:24px;animation:splashFloat 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;">
+    <div style="font-size:42px;font-weight:300;letter-spacing:0.02em;color:var(--ink, #1a1a2e);font-family:'Instrument Serif', ui-serif, Georgia, serif;line-height:1;">
+      connec<i style="font-style:italic;color:var(--coral, #E64530);">+</i>a
+    </div>
+    <div style="font-family:'JetBrains Mono', ui-monospace, monospace;font-size:10px;letter-spacing:0.3em;color:var(--ink3, #94A3B8);text-transform:uppercase;">
+      Console / Studio
+    </div>
+    <div style="width:120px;height:1px;background:var(--line, #e5e7eb);position:relative;overflow:hidden;margin-top:8px;">
+      <div style="position:absolute;top:0;left:-30%;width:30%;height:100%;background:linear-gradient(90deg, transparent, var(--ink, #1a1a2e), transparent);animation:splashSweep 1.4s ease-in-out infinite;"></div>
+    </div>
+  </div>
+  <div style="position:absolute;bottom:32px;font-family:'JetBrains Mono', ui-monospace, monospace;font-size:9px;letter-spacing:0.2em;color:var(--ink4, #94A3B8);text-transform:uppercase;opacity:0;animation:splashFadeIn 0.6s ease-out 0.3s forwards;">
+    Meeting, dialogue, and cultures intersect.
+  </div>
+  <style>
+    @keyframes splashFloat {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes splashSweep {
+      0% { left: -30%; }
+      100% { left: 100%; }
+    }
+    @keyframes splashFadeIn { to { opacity: 1; } }
+    :root[data-theme="night"] #connecta-splash { background: #0F172A; }
+  </style>
+</div>
+<script>
+  // (Phase 17.S-fix) スプラッシュ 自動非表示
+  (function() {
+    var splash = document.getElementById('connecta-splash');
+    if (!splash) return;
+    var hide = function() {
+      splash.style.opacity = '0';
+      setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 600);
+    };
+    // 最低 1.2s 表示 → React マウント後に消す
+    var minTime = 1200;
+    var startTime = Date.now();
+    var waitForApp = function() {
+      var ready = document.querySelector('.sidebar') && document.querySelector('.main');
+      var elapsed = Date.now() - startTime;
+      if (ready && elapsed >= minTime) {
+        hide();
+      } else {
+        setTimeout(waitForApp, 100);
+      }
+    };
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(waitForApp, 100);
+    } else {
+      document.addEventListener('DOMContentLoaded', function() { setTimeout(waitForApp, 100); });
+    }
+    // 安全装置 — 最大 8 秒
+    setTimeout(hide, 8000);
+  })();
+</script>
+
 <!-- ============ TOPBAR ============ -->
 <header class="topbar">
   <div class="tb-left">
@@ -1314,11 +1573,6 @@ svg{display:block}
         <div class="brand-name">connec<i>+a</i> Console</div>
       </div>
       <div class="brand-chip">運営 / STUDIO</div>
-    </div>
-    <div class="cmdk">
-      <svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <span>検索 — イベント、参加者、団体、ドキュメント…</span>
-      <span class="cmdk-kbd"><span class="kbd">⌘</span><span class="kbd">K</span></span>
     </div>
   </div>
   <div class="tb-right">
@@ -1348,7 +1602,10 @@ svg{display:block}
   <div class="mobile-overlay" id="mobile-overlay"></div>
 
   <!-- ============ SIDEBAR ============ -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="mainSidebar">
+    <button class="sidebar-toggle" id="sidebarToggleBtn" type="button" title="サイドバー折り畳み" aria-label="サイドバー折り畳み" style="position:fixed">
+      <svg id="sidebarToggleIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
     <div class="org-switch">
       <div class="org-logo"></div>
       <div class="org-info">
@@ -5687,33 +5944,32 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
   const sd = toDate(startDate);
   const ed = toDate(endDate);
   if (!sd || !ed || ed <= sd) return null;
-  // (Phase 17.S-fix) 粒度切替 — 5 段階 で ズームイン
-  //   all  = 全期間、 1 時間刻み (= 内部高解像度、 1 日表示でも 時刻 精密)
-  //   1w   = 直近 7 日、 6 時間刻み
-  //   3d   = 直近 3 日、 3 時間刻み
-  //   1d   = 直近 24 時間、 30 分刻み
-  //   6h   = 直近 6 時間、 10 分刻み
+  // (Phase 17.S-fix) 粒度切替 — 視認性 重視で 細かすぎないように 調整
+  //   all  = 全期間、 1 日刻み (= 滑らかな大局トレンド)
+  //   1w   = 直近 7 日、 1 日刻み (= 8 ポイント、 安定)
+  //   3d   = 直近 3 日、 6 時間刻み (= 12 ポイント)
+  //   1d   = 直近 24 時間、 1 時間刻み (= 24 ポイント)
+  //   6h   = 直近 6 時間、 15 分刻み (= 24 ポイント、 リアルタイム監視)
   const now = new Date();
   let stepMs, rangeStartMs, rangeEndMs;
   if (timeRange === '6h') {
-    stepMs = 10 * 60 * 1000;
+    stepMs = 15 * 60 * 1000;
     rangeEndMs = now.getTime();
     rangeStartMs = rangeEndMs - 6 * 60 * 60 * 1000;
   } else if (timeRange === '1d') {
-    stepMs = 30 * 60 * 1000;
+    stepMs = 60 * 60 * 1000;
     rangeEndMs = now.getTime();
     rangeStartMs = rangeEndMs - 24 * 60 * 60 * 1000;
   } else if (timeRange === '3d') {
-    stepMs = 3 * 60 * 60 * 1000;
+    stepMs = 6 * 60 * 60 * 1000;
     rangeEndMs = now.getTime();
     rangeStartMs = rangeEndMs - 3 * 24 * 60 * 60 * 1000;
   } else if (timeRange === '1w') {
-    stepMs = 6 * 60 * 60 * 1000;
+    stepMs = 24 * 60 * 60 * 1000;  // 1 日刻み (= 6 時間 だと V 字発生)
     rangeEndMs = now.getTime();
     rangeStartMs = rangeEndMs - 7 * 24 * 60 * 60 * 1000;
-  } else {  // 'all' = 全期間
-    // (Phase 17.S-fix) 1 日 表示でも 1 時間 精度で 計算 → 時刻に 応じた 位置で 上下する
-    stepMs = 60 * 60 * 1000;  // 1 時間
+  } else {  // 'all' = 全期間 1 日刻み (= 滑らか)
+    stepMs = 24 * 60 * 60 * 1000;
     sd.setHours(0, 0, 0, 0);
     ed.setHours(23, 59, 59, 999);
     rangeStartMs = sd.getTime();
@@ -6241,12 +6497,51 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
   // SVG 描画パラメータ
   //   (Phase 17.N-8) padR を 80 に拡大 — 「定員 60」 ラベル + Day 別終端ラベル の重なり対策
   const W = 800, H = 280, padL = 40, padR = 80, padT = 20, padB = 30;
-  const maxY = Math.max(1, allData.full[allData.full.length - 1], totalCapacity || 5, 5);
+  // (Phase 17.S-fix) maxY を 全系列 (= 全体 + 各グループ + 予測上限) の 最大値 から計算
+  //   最終点のみ参照だと 途中 peak がグラフ枠外で 「上端切れ」 問題
+  //   さらに 5% の 上余白 で 視覚的に 圧迫感を 避ける
+  const allValues = [];
+  if (allData && allData.full) allValues.push(...allData.full);
+  if (allData && allData.predictedUpper) allValues.push(...allData.predictedUpper);
+  if (sessionData) {
+    sessionData.forEach(ss => {
+      if (ss.data && ss.data.full) allValues.push(...ss.data.full);
+    });
+  }
+  const rawMax = Math.max(1, ...allValues, totalCapacity || 5, 5);
+  const maxY = Math.ceil(rawMax * 1.05);  // 5% 余白
   const xStep = (W - padL - padR) / Math.max(1, days.length - 1);
   const yScale = (H - padT - padB) / maxY;
 
-  const buildPath = (series, offset = 0) =>
-    series.map((v, i) => `${i === 0 ? 'M' : 'L'} ${padL + (i + offset) * xStep} ${H - padB - v * yScale}`).join(' ');
+  // (Phase 17.S-fix) buildPath — bezier 曲線 で 滑らか描画 (= カクカク 解消)
+  //   Catmull-Rom 風 で 各点を 滑らかに 補間
+  const buildPath = (series, offset = 0) => {
+    if (!series || series.length === 0) return '';
+    // (Phase 17.S-fix) スムージング — ガクガク を 放物線 風に
+    //   3 点 移動平均 で 細かい ジグザグ を 吸収
+    const smoothed = series.map((v, i) => {
+      if (i === 0 || i === series.length - 1) return v;
+      return (series[i - 1] + v * 2 + series[i + 1]) / 4;
+    });
+    const pts = smoothed.map((v, i) => [padL + (i + offset) * xStep, H - padB - v * yScale]);
+    if (pts.length === 1) return `M ${pts[0][0]} ${pts[0][1]}`;
+    if (pts.length === 2) return `M ${pts[0][0]} ${pts[0][1]} L ${pts[1][0]} ${pts[1][1]}`;
+    // catmull-rom (= 強めの tension で 放物線 風)
+    let d = `M ${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const tension = 0.5;  // (Phase 17.S-fix) 0.25 → 0.5 で 強く 丸める
+      const c1x = p1[0] + (p2[0] - p0[0]) * tension / 2;
+      const c1y = p1[1] + (p2[1] - p0[1]) * tension / 2;
+      const c2x = p2[0] - (p3[0] - p1[0]) * tension / 2;
+      const c2y = p2[1] - (p3[1] - p1[1]) * tension / 2;
+      d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+    }
+    return d;
+  };
 
   const COLOR_ALL = 'var(--jb-ink)';
   const DAY_COLORS = ['#0EA5E9','#F97316','#10B981','#8B5CF6','#F59E0B','#EC4899'];
@@ -6286,31 +6581,53 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
 
   return (
     <section style={{marginBottom:24}}>
-      {/* (Phase 17.S-fix) タイトル行 — 固定 */}
-      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:8}}>
-        登録推移 · {timeRange === 'all' ? `${fmtDate(sd)} 〜 ${fmtDate(ed)}` : timeRange === '1w' ? '直近 7 日 (= 6 時間刻み)' : timeRange === '3d' ? '直近 3 日 (= 3 時間刻み)' : timeRange === '1d' ? '直近 24 時間 (= 30 分刻み)' : '直近 6 時間 (= 10 分刻み)'}{isPredicted && <span style={{marginLeft:8,color:'var(--jb-ink-ghost)'}}>(点線 = 予測 · {predictionSource})</span>}
+      {/* (Phase 17.S-fix) タイトル行 — 簡潔表示 */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8,fontFamily:'var(--jb-mono)',flexWrap:'wrap',gap:8}}>
+        <div style={{fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600}}>
+          登録推移
+          <span style={{marginLeft:10,color:'var(--jb-ink-ghost)',fontWeight:500,letterSpacing:'0.04em',textTransform:'none'}}>
+            {timeRange === 'all' ? `${fmtDate(sd)} 〜 ${fmtDate(ed)}` : timeRange === '1w' ? '直近 7 日' : timeRange === '3d' ? '直近 3 日' : timeRange === '1d' ? '直近 24 時間' : '直近 6 時間'}
+            {' · '}
+            {timeRange === 'all' ? '1 日刻み' : timeRange === '1w' ? '1 日刻み' : timeRange === '3d' ? '6 時間刻み' : timeRange === '1d' ? '1 時間刻み' : '15 分刻み'}
+          </span>
+        </div>
+        {isPredicted && <span style={{fontSize:9,color:'var(--jb-ink-ghost)'}}>点線 = 予測 ({predictionSource})</span>}
       </div>
       {/* (Phase 17.S-fix) コントロール行 — 左端 [−][+]、 中央 期間、 右 表示 */}
       <div style={{display:'flex',gap:8,marginBottom:10,fontFamily:'var(--jb-mono)',flexWrap:'wrap',alignItems:'center'}}>
-        {/* 拡大/縮小 ボタン — 常に 左端 固定 */}
+        {/* 拡大/縮小 ボタン — インジケータ付き */}
         {(() => {
           const order = ['all', '1w', '3d', '1d', '6h'];
+          const labels = ['全期間', '1週間', '3日', '1日', '6時間'];
           const cur = order.indexOf(timeRange);
           const zoomOut = () => cur > 0 && setTimeRange(order[cur - 1]);
           const zoomIn = () => cur < order.length - 1 && setTimeRange(order[cur + 1]);
           const zoomBtnStyle = (disabled) => ({
-            width:28,height:24,padding:0,background:'var(--jb-paper)',
+            width:26,height:24,padding:0,background:'var(--jb-paper)',
             color: disabled ? 'var(--jb-ink-ghost)' : 'var(--jb-ink)',
             border:'1px solid var(--jb-line)',
             fontSize:14,fontWeight:700,borderRadius:3,
             cursor: disabled ? 'not-allowed' : 'pointer',
-            opacity: disabled ? 0.4 : 1,
+            opacity: disabled ? 0.35 : 1,
             display:'flex',alignItems:'center',justifyContent:'center',
+            lineHeight:1,
           });
           return (
-            <div style={{display:'flex',gap:2}}>
-              <button type="button" onClick={zoomOut} disabled={cur === 0} style={zoomBtnStyle(cur === 0)} title="縮小 (= 広い期間)">−</button>
-              <button type="button" onClick={zoomIn} disabled={cur === order.length - 1} style={zoomBtnStyle(cur === order.length - 1)} title="拡大 (= 細かい期間)">+</button>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{display:'flex',gap:2}}>
+                <button type="button" onClick={zoomOut} disabled={cur === 0} style={zoomBtnStyle(cur === 0)} title="縮小 (= 広い期間)">−</button>
+                <button type="button" onClick={zoomIn} disabled={cur === order.length - 1} style={zoomBtnStyle(cur === order.length - 1)} title="拡大 (= 細かい期間)">+</button>
+              </div>
+              {/* インジケータ — 5 つ の ドット で 現在位置 */}
+              <div style={{display:'flex',gap:3,alignItems:'center'}}>
+                {order.map((k, i) => (
+                  <div key={k} title={labels[i]} style={{
+                    width: i === cur ? 16 : 5, height: 5, borderRadius: 99,
+                    background: i === cur ? 'var(--jb-shouwa)' : 'var(--jb-line)',
+                    transition: 'width 0.2s, background 0.2s',
+                  }}/>
+                ))}
+              </div>
             </div>
           );
         })()}
@@ -6325,12 +6642,13 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
           ].map(opt => (
             <button key={opt.k} type="button" onClick={() => setTimeRange(opt.k)}
               style={{
-                padding:'3px 9px',
+                padding:'3px 9px',height:22,
                 background: timeRange === opt.k ? 'var(--jb-shouwa)' : 'var(--jb-paper)',
                 color: timeRange === opt.k ? '#fff' : 'var(--jb-ink-soft)',
                 border: `1px solid ${timeRange === opt.k ? 'var(--jb-shouwa)' : 'var(--jb-line)'}`,
                 fontSize:9,fontWeight:700,letterSpacing:'0.06em',
                 borderRadius:3,cursor:'pointer',textTransform:'none',
+                lineHeight:1,
               }}>{opt.l}</button>
           ))}
         </div>
@@ -6346,12 +6664,13 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
           ].map(opt => (
             <button key={opt.k} type="button" onClick={() => setGroupMode(opt.k)}
               style={{
-                padding:'3px 9px',
+                padding:'3px 9px',height:22,
                 background: groupMode === opt.k ? 'var(--jb-blue)' : 'var(--jb-paper)',
                 color: groupMode === opt.k ? '#fff' : 'var(--jb-ink-soft)',
                 border: `1px solid ${groupMode === opt.k ? 'var(--jb-blue)' : 'var(--jb-line)'}`,
                 fontSize:9,fontWeight:700,letterSpacing:'0.06em',
                 borderRadius:3,cursor:'pointer',textTransform:'none',
+                lineHeight:1,
               }}>{opt.l}</button>
           ))}
         </div>
@@ -6414,6 +6733,17 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
               border:'1px solid var(--jb-line)',
               borderLeft:`3px solid ${color}`,
               borderRadius:4,
+              transition:'transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s, border-left-width 0.2s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = `0 6px 20px ${color}22, 0 2px 6px rgba(0,0,0,0.04)`;
+              e.currentTarget.style.borderLeftWidth = '4px';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = '';
+              e.currentTarget.style.boxShadow = '';
+              e.currentTarget.style.borderLeftWidth = '3px';
             }}>
               <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.12em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:3}}>
                 {labelText}
@@ -6506,7 +6836,32 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
         }}
         onMouseLeave={() => setHover(null)}
       >
-        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',minWidth:520,display:'block'}}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',minWidth:520,display:'block',shapeRendering:'geometricPrecision'}}>
+          {/* (Phase 17.S-fix) 最高品質: defs に グラデ + drop-shadow フィルタ */}
+          <defs>
+            <filter id="lineGlow" x="-10%" y="-10%" width="120%" height="120%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+              <feComponentTransfer in="blur" result="dimmedBlur"><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+              <feMerge>
+                <feMergeNode in="dimmedBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="softShadow" x="-5%" y="-5%" width="110%" height="120%">
+              <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="#000" floodOpacity="0.12"/>
+            </filter>
+            {/* 各 色 用の グラデーション (= 面 fill) */}
+            {sessionData.map((ss, i) => {
+              const c = colorForGroup(ss.label || (ss.session && ('Day ' + (ss.session.order || (i+1)))), i);
+              return (
+                <linearGradient key={`grad-${i}`} id={`atc-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={c} stopOpacity="0.28"/>
+                  <stop offset="60%" stopColor={c} stopOpacity="0.08"/>
+                  <stop offset="100%" stopColor={c} stopOpacity="0"/>
+                </linearGradient>
+              );
+            })}
+          </defs>
           {/* Y 軸 グリッド */}
           {[0, 0.25, 0.5, 0.75, 1].map(t => {
             const y = H - padB - t * (H - padT - padB);
@@ -6609,7 +6964,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
             const bandPath = `M ${upperPath.join(' L ')} L ${lowerPath.join(' L ')} L ${startX} ${startY} Z`;
             return (
               <path d={bandPath}
-                fill="var(--jb-ink)" opacity="0.08" stroke="none"
+                fill={COLOR_ALL} opacity="0.025" stroke="none"
                 style={{opacity:0,animation:'jbFadeInBand 0.8s ease-out 1.8s forwards'}}/>
             );
           })()}
@@ -6622,11 +6977,20 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
               : ss.data.predicted;
             const predictedPath = buildPath(predictedFull, ss.data.actual.length - 1);
             const lastVal = ss.data.full[ss.data.full.length - 1];
+            // (Phase 17.S-fix) 面塗り グラデ — ライン下を カラフルに 塗る
+            const actualAreaPath = ss.data.actual.length > 0
+              ? `${actualPath} L ${padL + (ss.data.actual.length - 1) * xStep} ${H - padB} L ${padL} ${H - padB} Z`
+              : '';
             return (
               <g key={ss.key || i}>
+                {actualAreaPath && (
+                  <path d={actualAreaPath} fill={`url(#atc-grad-${i})`} stroke="none"
+                    style={{opacity:0,animation:`jbFadeInBand 1.2s ease-out ${0.5 + i * 0.12}s forwards`}}/>
+                )}
                 <path d={actualPath}
                   stroke={color} strokeWidth="2.5" fill="none" opacity="0.95" strokeLinejoin="round" strokeLinecap="round"
-                  style={{strokeDasharray:2000,strokeDashoffset:2000,animation:`jbDrawLine 1.8s ease-out ${0.3 + i * 0.12}s forwards`}}/>
+                  filter="url(#softShadow)"
+                  style={{strokeDasharray:2000,strokeDashoffset:2000,animation:`jbDrawLine 1.8s cubic-bezier(0.22, 1, 0.36, 1) ${0.3 + i * 0.12}s forwards`}}/>
                 {ss.data.predicted.length > 0 && (
                   <path d={predictedPath}
                     stroke={color} strokeWidth="2" fill="none" opacity="0.55" strokeLinejoin="round" strokeLinecap="round"
@@ -6648,7 +7012,8 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
           {/* 全体 折れ線 */}
           <path d={buildPath(allData.actual)}
             stroke={COLOR_ALL} strokeWidth="3" fill="none" strokeLinejoin="round" strokeLinecap="round"
-            style={{strokeDasharray:2000,strokeDashoffset:2000,animation:'jbDrawLine 1.8s ease-out forwards'}}/>
+            filter="url(#softShadow)"
+            style={{strokeDasharray:2000,strokeDashoffset:2000,animation:'jbDrawLine 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards'}}/>
           {allData.predicted.length > 0 && (
             <path d={(() => {
               const arr = allData.actual.length > 0
@@ -6661,11 +7026,21 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
               style={{opacity:0,animation:'jbFadeIn 0.6s ease-out 1.8s forwards'}}/>
           )}
           {/* 終端ドット + 数値 (= 予測末尾値、 N≈ で 推定表示) */}
-          <circle cx={padL + (days.length - 1) * xStep} cy={H - padB - allData.full[allData.full.length - 1] * yScale}
-            r="5" fill={COLOR_ALL} style={{animation:'jbPopIn 0.4s ease-out 2.1s both'}}/>
+          <g style={{animation:'jbPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 2.1s both'}}>
+            {/* パルス リング — 最終点 強調 */}
+            <circle cx={padL + (days.length - 1) * xStep} cy={H - padB - allData.full[allData.full.length - 1] * yScale}
+              r="10" fill={COLOR_ALL} opacity="0.18">
+              <animate attributeName="r" from="6" to="14" dur="2s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" from="0.3" to="0" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx={padL + (days.length - 1) * xStep} cy={H - padB - allData.full[allData.full.length - 1] * yScale}
+              r="5" fill={COLOR_ALL}/>
+            <circle cx={padL + (days.length - 1) * xStep} cy={H - padB - allData.full[allData.full.length - 1] * yScale}
+              r="2.5" fill="#fff"/>
+          </g>
           <text x={padL + (days.length - 1) * xStep - 8} y={H - padB - allData.full[allData.full.length - 1] * yScale - 10}
             textAnchor="end" fontSize="14" fontWeight="800" fill={COLOR_ALL} fontFamily="var(--jb-display)"
-            style={{animation:'jbPopIn 0.4s ease-out 2.1s both'}}>
+            style={{animation:'jbPopIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 2.1s both'}}>
             {isPredicted ? `≈${allData.full[allData.full.length - 1]}` : allData.full[allData.full.length - 1]}
           </text>
           {/* 今日 時点の値 マーカー */}
@@ -6733,9 +7108,20 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
         })()}
         <style>{`
           @keyframes jbDrawLine { to { stroke-dashoffset: 0; } }
-          @keyframes jbPopIn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+          @keyframes jbPopIn {
+            0% { opacity: 0; transform: scale(0); }
+            70% { opacity: 1; transform: scale(1.15); }
+            100% { opacity: 1; transform: scale(1); }
+          }
           @keyframes jbFadeIn { from { opacity: 0; } to { opacity: 0.55; } }
-          @keyframes jbFadeInBand { from { opacity: 0; } to { opacity: 0.08; } }
+          @keyframes jbFadeInBand {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 0.5; transform: translateY(0); }
+          }
+          @keyframes jbShimmer {
+            0% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: -20; }
+          }
         `}</style>
       </div>
     </section>
@@ -26770,10 +27156,12 @@ function App({user, onLogout}){
     });
   }, [user]);
 
-  // 未読通知ポーリング (60秒ごと)
-  // トップバーのベルアイコンに未読件数を表示
+  // (Phase 17.S-fix) 未読通知ポーリング — 15 秒ごと (= ほぼリアルタイム)
+  //   + サイドナビの 「通知センター」 バッジ も 同期更新
+  //   + 増加時に トースト通知 表示 (= リアルタイム感)
   useEffectApp(() => {
     let cancelled = false;
+    let prevUnreadCount = -1;
     async function fetchUnread() {
       try {
         const notifs = await window.fetchData('listNotifications');
@@ -26791,12 +27179,33 @@ function App({user, onLogout}){
             if (dotEl) dotEl.style.display = 'none';
           }
         }
-      } catch (e) {
-        // サイレント
-      }
+        // (Phase 17.S-fix) サイドナビ の 通知センター バッジも 同期
+        document.querySelectorAll('.nav-item[data-nav="notifications"] .n-badge').forEach(badge => {
+          if (unreadCount > 0) {
+            badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+            badge.style.display = '';
+          } else {
+            badge.style.display = 'none';
+          }
+        });
+        // (Phase 17.S-fix) 増加時に トースト + アイコン パルス
+        if (prevUnreadCount >= 0 && unreadCount > prevUnreadCount) {
+          const newCount = unreadCount - prevUnreadCount;
+          if (window.toast && window.toast.info) {
+            window.toast.info(`🔔 新しい通知が ${newCount} 件 あります`);
+          }
+          // ベルアイコン に 一時的な パルス
+          const btn = document.getElementById('topbar-notif-btn');
+          if (btn) {
+            btn.style.animation = 'topbarBellRing 0.8s cubic-bezier(0.36, 0, 0.66, -0.56)';
+            setTimeout(() => { btn.style.animation = ''; }, 800);
+          }
+        }
+        prevUnreadCount = unreadCount;
+      } catch (e) { /* サイレント */ }
     }
     fetchUnread();
-    const interval = setInterval(fetchUnread, 60000);   // 60秒
+    const interval = setInterval(fetchUnread, 15000);   // 15 秒 (= ほぼリアルタイム)
     return () => { cancelled = true; clearInterval(interval); };
   }, [user]);
 
@@ -26843,6 +27252,11 @@ function App({user, onLogout}){
         <div style="font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.name}</div>
         <div style="font-size:10.5px;color:var(--ink4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${user.highestRole || 'メンバー'} · ${m.dept || '—'}</div>
       </div>
+      <button class="theme-toggle" title="テーマ切替 (= ヌーン / ナイト / 自動)" style="background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 8px;cursor:pointer;color:var(--ink4);display:flex;align-items:center;justify-content:center;margin-right:6px" aria-label="テーマ切替">
+        <svg class="theme-icon-noon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="theme-icon-night" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="theme-icon-auto" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 9a3 3 0 0 0 0 6"/></svg>
+      </button>
       <button class="signin-logout" title="ログアウト" style="background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 8px;cursor:pointer;color:var(--ink4);display:flex;align-items:center;justify-content:center" aria-label="ログアウト">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
@@ -26864,6 +27278,65 @@ function App({user, onLogout}){
         e.currentTarget.style.borderColor = 'var(--coral)';
       });
       logoutBtn.addEventListener('mouseleave', (e) => {
+        e.currentTarget.style.color = 'var(--ink4)';
+        e.currentTarget.style.borderColor = 'var(--line)';
+      });
+    }
+
+    // (Phase 17.S-fix) テーマ切替 — ヌーン / ナイト / 自動 の 3 状態
+    const themeBtn = footer.querySelector('.theme-toggle');
+    if (themeBtn) {
+      const isNightTime = () => {
+        const h = new Date().getHours();
+        return h < 6 || h >= 18;  // 18:00 〜 翌 6:00 = night
+      };
+      const applyTheme = (mode) => {
+        // mode: 'noon' / 'night' / 'auto'
+        let effective = mode;
+        if (mode === 'auto') effective = isNightTime() ? 'night' : 'noon';
+        document.documentElement.setAttribute('data-theme', effective);
+        const noonIcon = themeBtn.querySelector('.theme-icon-noon');
+        const nightIcon = themeBtn.querySelector('.theme-icon-night');
+        const autoIcon = themeBtn.querySelector('.theme-icon-auto');
+        if (noonIcon) noonIcon.style.display = mode === 'noon' ? 'block' : 'none';
+        if (nightIcon) nightIcon.style.display = mode === 'night' ? 'block' : 'none';
+        if (autoIcon) autoIcon.style.display = mode === 'auto' ? 'block' : 'none';
+        themeBtn.setAttribute('title',
+          mode === 'auto' ? `自動 (現在: ${effective === 'night' ? 'ナイト' : 'ヌーン'})` :
+          mode === 'noon' ? 'ヌーン (= 明るい)' : 'ナイト (= ダーク)');
+        try { localStorage.setItem('connecta-theme-mode', mode); } catch (e) {}
+      };
+      let savedMode = 'auto';
+      try { savedMode = localStorage.getItem('connecta-theme-mode') || 'auto'; } catch (e) {}
+      // 旧キー (= connecta-theme) からの 移行
+      if (!localStorage.getItem('connecta-theme-mode')) {
+        const oldTheme = localStorage.getItem('connecta-theme');
+        if (oldTheme === 'night') savedMode = 'night';
+        else if (oldTheme === 'noon') savedMode = 'noon';
+      }
+      applyTheme(savedMode);
+      // 自動モード時は 30 分ごとに 再評価
+      let autoTimer = null;
+      const startAutoTimer = () => {
+        if (autoTimer) clearInterval(autoTimer);
+        autoTimer = setInterval(() => {
+          if (document.documentElement.getAttribute('data-theme-mode') === 'auto') {
+            applyTheme('auto');
+          }
+        }, 30 * 60 * 1000);
+      };
+      themeBtn.addEventListener('click', () => {
+        const cur = localStorage.getItem('connecta-theme-mode') || 'auto';
+        const next = cur === 'noon' ? 'night' : cur === 'night' ? 'auto' : 'noon';
+        applyTheme(next);
+        if (next === 'auto') startAutoTimer();
+      });
+      if (savedMode === 'auto') startAutoTimer();
+      themeBtn.addEventListener('mouseenter', (e) => {
+        e.currentTarget.style.color = 'var(--jb-blue, #00A8E1)';
+        e.currentTarget.style.borderColor = 'var(--jb-blue, #00A8E1)';
+      });
+      themeBtn.addEventListener('mouseleave', (e) => {
         e.currentTarget.style.color = 'var(--ink4)';
         e.currentTarget.style.borderColor = 'var(--line)';
       });
