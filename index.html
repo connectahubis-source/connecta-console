@@ -1576,7 +1576,7 @@ svg{display:block}
     </div>
   </div>
   <div class="tb-right">
-    <button class="tb-btn" data-goto="notifications" id="topbar-notif-btn" title="通知">
+    <button class="tb-btn" id="topbar-notif-btn" title="通知 (= サイドパネル)" type="button">
       <svg class="ic" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.3 11A9 9 0 0 1 12 4a9 9 0 0 1 8.7 7 21 21 0 0 0 .87 5"/><path d="m3 3 18 18"/></svg>
       <span class="dot" id="topbar-notif-dot" style="display:none"></span>
       <span id="topbar-notif-count" style="display:none;position:absolute;top:6px;right:4px;background:var(--coral);color:white;border-radius:9px;padding:1px 5px;font-size:9px;font-weight:700;min-width:14px;text-align:center;line-height:1.3">0</span>
@@ -8107,6 +8107,31 @@ function PageEventAdminDetail() {
   };
 
   useEffect(() => { loadAll(); }, [eventId]);
+
+  // (Phase 17.S-fix) 通知から の openReg=R-xxx パラメータ → 申込モーダル 自動オープン
+  useEffect(() => {
+    if (loading) return;
+    if (!apps || apps.length === 0) return;
+    try {
+      const hash = window.location.hash || '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx < 0) return;
+      const qs = new URLSearchParams(hash.substring(qIdx + 1));
+      const openReg = qs.get('openReg');
+      if (!openReg) return;
+      // 該当する app を探す
+      const targetApp = apps.find(a => {
+        // application は regs を 持つ — 一致する RegID を探す
+        return a.regs && a.regs.some(r => r.id === openReg || r.regId === openReg);
+      }) || apps.find(a => a.id === openReg);  // ApplicationID 直接指定 も対応
+      if (targetApp) {
+        setDetailModalApp(targetApp);
+        // URL から openReg を 除去 (= 再オープン防止)
+        const newHash = hash.substring(0, qIdx) + '?id=' + encodeURIComponent(eventId);
+        window.history.replaceState(null, '', newHash);
+      }
+    } catch (e) { console.warn('[openReg] failed:', e); }
+  }, [loading, apps, eventId]);
 
   const participantMap = useMemo(() => {
     const m = {};
@@ -15955,12 +15980,33 @@ function ApplicationDetailModal({ app, event, participant, onClose, onReload }) 
   }
 
   async function handleCancelReg(regId) {
-    if (!window.confirm(`Reg ${regId} を キャンセルしますか?\n\n決済済なら 返金待ち、 未決済なら キャンセル になります。`)) return;
+    // (Phase 17.S-fix) 返金額 自動計算 + 詳細 ダイアログ
+    let refund = null;
+    try {
+      refund = await window.fetchData('calculateRefundAmount', { regId: regId });
+    } catch (e) { /* フォールバック */ }
+    let msg = `Reg ${regId} を キャンセルしますか?`;
+    if (refund && refund.eligible) {
+      msg += '\n\n━━━━━━━━━━━━━━━━━━━━━━';
+      msg += `\n💰 支払済額: ¥${(refund.paidAmount || 0).toLocaleString()}`;
+      msg += `\n📅 開催まで: ${refund.daysUntilEvent} 日`;
+      msg += `\n✅ 返金率: ${refund.percent}% (= ¥${(refund.amount || 0).toLocaleString()})`;
+      if (refund.policyText) {
+        msg += '\n\n📋 ポリシー:\n' + refund.policyText.substring(0, 200);
+      }
+      msg += '\n━━━━━━━━━━━━━━━━━━━━━━';
+      if (refund.paidAmount > 0 && refund.amount < refund.paidAmount) {
+        msg += `\n\n⚠ ¥${(refund.paidAmount - refund.amount).toLocaleString()} は 返金されません`;
+      }
+    } else {
+      msg += '\n\n決済済なら 返金待ち、 未決済なら キャンセル になります。';
+    }
+    if (!window.confirm(msg)) return;
     setBusy(true);
     try {
       const res = await window.postData('application.cancelRegistration', { regId: regId, reason: 'Admin から個別キャンセル' });
-      window.toast.success(`Reg ${regId} を ${res.newStatus} にしました`);
-      // 個別 reg を再取得
+      const refundMsg = refund && refund.amount > 0 ? ` (返金予定 ¥${refund.amount.toLocaleString()})` : '';
+      window.toast.success(`Reg ${regId} を ${res.newStatus} にしました${refundMsg}`);
       const regs = await window.fetchData('listRegistrations');
       const filtered = (Array.isArray(regs) ? regs : []).filter(r => String(r.applicationId || '') === String(app.applicationId));
       setAppRegs(filtered);
@@ -16988,10 +17034,78 @@ function PageNotifications(){
     }
   }
 
+  // (Phase 17.S-fix) 通知 → 詳細画面 遷移
+  //   - REG-/R- → 該当 reg の event を fetch → イベント詳細 + 申込モーダル 自動オープン
+  //   - EVT- → イベント詳細
+  //   - kpi → KPI レポート
+  async function navigateToDetail(n) {
+    if (!n || !n.relatedId) return;
+    const rid = String(n.relatedId);
+    const kind = String(n.type || n.kind || '');
+
+    // KPI レポート
+    if (/kpi_report|kpi/i.test(kind)) {
+      window.location.hash = 'analytics';
+      return;
+    }
+
+    // RegID (= R- or REG-) → reg の event を 取得 して モーダル指定 で 遷移
+    if (/^R-|^REG-/.test(rid)) {
+      try {
+        const reg = await window.fetchData('getRegistrationById', { regId: rid });
+        if (reg && reg.eventId) {
+          // openReg パラメータで モーダル 自動オープン 指示
+          window.location.hash = 'event-detail?id=' + encodeURIComponent(reg.eventId) + '&openReg=' + encodeURIComponent(rid);
+          return;
+        }
+      } catch (err) {
+        // フォールバック: 申込一覧
+      }
+      window.location.hash = 'applications';
+      return;
+    }
+
+    // EventID → イベント詳細
+    if (/^EVT-|^E-/.test(rid) || /event_full|event_reminder/i.test(kind)) {
+      window.location.hash = 'event-detail?id=' + encodeURIComponent(rid);
+      return;
+    }
+
+    // フォールバック
+    if (/registration|payment/i.test(kind)) {
+      window.location.hash = 'applications';
+    }
+  }
+
+  // (Phase 17.S-fix) クリック動作 — 既読化 + 詳細遷移
+  async function handleClick(n) {
+    // 未読なら 既読に
+    if (n.unread) {
+      setNotifs(prev => prev.map(x => x.id === n.id ? {...x, unread: false} : x));
+      try {
+        await window.postData('toggleNotification', { notifId: n.id });
+      } catch (err) {
+        setNotifs(prev => prev.map(x => x.id === n.id ? {...x, unread: true} : x));
+      }
+    }
+    // relatedId が ある なら 詳細画面へ
+    await navigateToDetail(n);
+  }
+
   const filtered = notifs.filter(n => {
     if (filter === "all") return true;
     if (filter === "unread") return n.unread;
     return n.type === filter;
+  });
+
+  // (Phase 17.S-fix) ソート — 未読 トップ、 同カテゴリは 新着順
+  const sorted = filtered.slice().sort((a, b) => {
+    // 1. 未読 を 上に
+    if (a.unread !== b.unread) return a.unread ? -1 : 1;
+    // 2. 作成日時 (= createdAt) 新着順
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tb - ta;
   });
 
   const tabs = [
@@ -17042,25 +17156,37 @@ function PageNotifications(){
               </div>
             ) : (
               <div className="notif-list">
-                {filtered.map(n => (
+                {sorted.map(n => (
                   <div key={n.id} className={clsx("notif", n.unread && "unread")}
-                    style={{cursor:'pointer'}}
-                    onClick={()=>toggleRead(n.id)}>
+                    style={{cursor:'pointer',position:'relative'}}
+                    onClick={()=>handleClick(n)}>
                     <div className="notif-icon" style={{background:`var(--${n.color}-50)`,color:`var(--${n.color})`}}>
                       <Icon n={n.icon} s={16}/>
                     </div>
-                    <div>
+                    <div style={{flex:1,minWidth:0}}>
                       <div className="notif-title">{n.title}</div>
                       <div className="notif-body">{n.body}</div>
+                      {n.relatedId && (
+                        <div style={{fontSize:10,color:'var(--ink4)',marginTop:4,display:'flex',alignItems:'center',gap:4}}>
+                          <Icon n="external" s={10}/>
+                          <span>詳細を見る →</span>
+                        </div>
+                      )}
                     </div>
                     <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6}}>
                       <div className="notif-time">{n.time}</div>
                       {n.unread && <div className="notif-unread-dot"></div>}
-                      {window.canDo('notifications.delete') && (
-                        <button className="btn btn-soft btn-sm btn-icon" title="削除" onClick={(ev)=>{ev.stopPropagation(); handleDelete(n.id);}}>
-                          <Icon n="trash" s={11}/>
+                      <div style={{display:'flex',gap:4}}>
+                        <button className="btn btn-soft btn-sm btn-icon" title={n.unread ? '既読にする' : '未読に戻す'}
+                          onClick={(ev)=>{ev.stopPropagation(); toggleRead(n.id);}}>
+                          <Icon n={n.unread ? 'eye' : 'eye-off'} s={11}/>
                         </button>
-                      )}
+                        {window.canDo('notifications.delete') && (
+                          <button className="btn btn-soft btn-sm btn-icon" title="削除" onClick={(ev)=>{ev.stopPropagation(); handleDelete(n.id);}}>
+                            <Icon n="trash" s={11}/>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -17351,6 +17477,9 @@ function PageEventCreate(){
   const [publishAt, setPublishAt] = useState("");
   const [requirements, setRequirements] = useState("");
   const [customQuestions, setCustomQuestions] = useState("");
+  // (Phase 17.S-fix) 申込対象者 制限
+  const [eligibilityRule, setEligibilityRule] = useState(null);  // { role:[], graduateYear:[], department:[], organization:[] }
+  const [eligibilityStrength, setEligibilityStrength] = useState("");  // '' / 'soft' / 'hard'
   // 決済
   const [fee, setFee] = useState("");
   const [paymentMethods, setPaymentMethods] = useState(["PayPay"]);   // 配列、デフォルトはPayPay
@@ -17363,6 +17492,9 @@ function PageEventCreate(){
   const [paymentUrl_other,  setPaymentUrl_other]  = useState("");
   const [earlyBird, setEarlyBird] = useState("");
   const [cancelPolicy, setCancelPolicy] = useState("");
+  // (Phase 17.S-fix) キャンセルポリシー ルール (= 構造化)
+  //   [{ days: 7, percent: 100 }, { days: 3, percent: 50 }, { days: 0, percent: 0 }]
+  const [cancelPolicyRule, setCancelPolicyRule] = useState([]);
   // (Part D) イベントポリシー (申込画面で表示、必須)
   const [policyJa, setPolicyJa] = useState("");
   const [policyEn, setPolicyEn] = useState("");
@@ -17479,10 +17611,22 @@ function PageEventCreate(){
         setRegCloseDate(ev.regCloseDate || "");
         setPublishAt(ev.publishAt || "");
         setRequirements(ev.requirements || "");
+        // (Phase 17.S-fix) 申込対象者 制限
+        if (ev.eligibilityRule) {
+          try { setEligibilityRule(JSON.parse(ev.eligibilityRule)); } catch (e) { setEligibilityRule(null); }
+        } else { setEligibilityRule(null); }
+        setEligibilityStrength(ev.eligibilityStrength || "");
         setCustomQuestions(ev.customQuestions || "");
         setFee(ev.fee ? String(ev.fee) : "");
         setEarlyBird(ev.earlyBird || "");
         setCancelPolicy(ev.cancelPolicy || "");
+        // (Phase 17.S-fix) キャンセルポリシー ルール 読み込み
+        if (ev.cancelPolicyRule) {
+          try {
+            const parsed = JSON.parse(ev.cancelPolicyRule);
+            setCancelPolicyRule(Array.isArray(parsed) ? parsed : []);
+          } catch (e) { setCancelPolicyRule([]); }
+        } else { setCancelPolicyRule([]); }
         // (Part D) イベントポリシーをロード
         setPolicyJa(ev.policy_ja || ev.policy || "");
         setPolicyEn(ev.policy_en || "");
@@ -17594,6 +17738,9 @@ function PageEventCreate(){
       regCloseDate: regCloseDate || '',
       publishAt: publishAt || '',
       requirements: requirements || '',
+      // (Phase 17.S-fix) 申込対象者 制限
+      eligibilityRule: eligibilityRule ? JSON.stringify(eligibilityRule) : '',
+      eligibilityStrength: eligibilityStrength || '',
       customQuestions: customQuestions || '',
       fee: Number(fee) || 0,
       paymentMethod: paymentMethods.join(', '),    // 旧列 (互換のため残す)
@@ -17607,6 +17754,8 @@ function PageEventCreate(){
       adminMemberId: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '',
       earlyBird: earlyBird || '',
       cancelPolicy: cancelPolicy || '',
+      // (Phase 17.S-fix) キャンセルポリシー ルール (= 構造化)
+      cancelPolicyRule: cancelPolicyRule && cancelPolicyRule.length > 0 ? JSON.stringify(cancelPolicyRule) : '',
       // (Part D) イベントポリシー (申込画面で表示)
       policy_ja: policyJa || '',
       policy_en: policyEn || '',
@@ -18111,6 +18260,108 @@ function PageEventCreate(){
                   </div>
                   <div className="field-hint">1行 = 1質問。改行で区切る</div>
                 </div>
+                {/* (Phase 17.S-fix) 申込対象者 制限 (= 自動チェック) */}
+                <div className="field" style={{borderTop:'1px solid var(--line)',paddingTop:14,marginTop:6}}>
+                  <label className="field-label" style={{display:'flex',alignItems:'center',gap:6}}>
+                    <Icon n="users" s={14}/> 申込対象者 制限 <span style={{fontSize:10,color:'var(--ink4)',fontWeight:400}}>(= 自動チェック)</span>
+                  </label>
+                  <div style={{fontSize:11,color:'var(--ink3)',marginBottom:10}}>
+                    Participants の 役割 / 学年 / 部署 / 組織 を 自動チェック します。 空欄なら 制限なし。
+                  </div>
+                  {/* 強度 */}
+                  <div style={{display:'flex',gap:8,marginBottom:10}}>
+                    {[
+                      { k: '', l: '制限なし', d: '誰でも 申込可' },
+                      { k: 'soft', l: 'ソフト', d: '警告 + 続行可' },
+                      { k: 'hard', l: 'ハード', d: '申込不可' },
+                    ].map(opt => (
+                      <button key={opt.k} type="button" onClick={() => setEligibilityStrength(opt.k)}
+                        style={{
+                          flex:1,padding:'8px 6px',borderRadius:6,cursor:'pointer',
+                          background: eligibilityStrength === opt.k ? 'var(--coral)' : 'var(--white)',
+                          color: eligibilityStrength === opt.k ? '#fff' : 'var(--ink)',
+                          border:`1px solid ${eligibilityStrength === opt.k ? 'var(--coral)' : 'var(--line)'}`,
+                          fontSize:11,fontWeight:600,
+                        }}>
+                        <div>{opt.l}</div>
+                        <div style={{fontSize:9,fontWeight:400,marginTop:2,opacity:0.85}}>{opt.d}</div>
+                      </button>
+                    ))}
+                  </div>
+                  {/* ルール詳細 (= 強度 が ない なら 非表示) */}
+                  {eligibilityStrength && (
+                    <div style={{padding:12,background:'var(--bg2)',borderRadius:6,fontSize:11}}>
+                      {/* 年齢制限 — 数値 範囲 */}
+                      <div style={{marginBottom:10,paddingBottom:10,borderBottom:'1px dashed var(--line)'}}>
+                        <div style={{fontSize:10,color:'var(--ink3)',marginBottom:6,fontWeight:600}}>年齢制限 (= 生年月日 から自動計算)</div>
+                        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                          <input type="number" min="0" max="120" className="input" style={{width:80,padding:'6px 8px',fontSize:12,textAlign:'center'}}
+                            value={(eligibilityRule && eligibilityRule.ageMin != null) ? eligibilityRule.ageMin : ''}
+                            onChange={e => {
+                              const v = e.target.value === '' ? null : Number(e.target.value);
+                              setEligibilityRule(prev => ({ ...(prev || {}), ageMin: v }));
+                            }}
+                            placeholder="未指定"/>
+                          <span style={{color:'var(--ink3)'}}>歳以上</span>
+                          <span style={{color:'var(--ink4)',margin:'0 4px'}}>〜</span>
+                          <input type="number" min="0" max="120" className="input" style={{width:80,padding:'6px 8px',fontSize:12,textAlign:'center'}}
+                            value={(eligibilityRule && eligibilityRule.ageMax != null) ? eligibilityRule.ageMax : ''}
+                            onChange={e => {
+                              const v = e.target.value === '' ? null : Number(e.target.value);
+                              setEligibilityRule(prev => ({ ...(prev || {}), ageMax: v }));
+                            }}
+                            placeholder="未指定"/>
+                          <span style={{color:'var(--ink3)'}}>歳以下</span>
+                        </div>
+                        <div style={{fontSize:9,color:'var(--ink4)',marginTop:4}}>ⓘ 片方だけ でも OK (= 「18 歳以上」 のみ など)</div>
+                      </div>
+                      {/* 国籍 + 在留ステータス */}
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10,paddingBottom:10,borderBottom:'1px dashed var(--line)'}}>
+                        <div>
+                          <div style={{fontSize:10,color:'var(--ink3)',marginBottom:3,fontWeight:600}}>国籍 (= 限定)</div>
+                          <IMETextarea className="input" style={{height:48,padding:6,fontSize:11,resize:'vertical'}}
+                            value={(eligibilityRule && Array.isArray(eligibilityRule.nationality)) ? eligibilityRule.nationality.join('\n') : ''}
+                            onChange={e => {
+                              const vals = e.target.value.split('\n').map(s => s.trim()).filter(Boolean);
+                              setEligibilityRule(prev => ({ ...(prev || {}), nationality: vals }));
+                            }}
+                            placeholder="例: 日本"/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,color:'var(--ink3)',marginBottom:3,fontWeight:600}}>在留ステータス</div>
+                          <IMETextarea className="input" style={{height:48,padding:6,fontSize:11,resize:'vertical'}}
+                            value={(eligibilityRule && Array.isArray(eligibilityRule.residenceStatus)) ? eligibilityRule.residenceStatus.join('\n') : ''}
+                            onChange={e => {
+                              const vals = e.target.value.split('\n').map(s => s.trim()).filter(Boolean);
+                              setEligibilityRule(prev => ({ ...(prev || {}), residenceStatus: vals }));
+                            }}
+                            placeholder="例: 日本人 / 在留外国人"/>
+                        </div>
+                      </div>
+                      {/* 役割 / 学年 / 部署 / 組織 */}
+                      {[
+                        { key: 'role', label: '役割', ph: '例: member, 一般, 学生 (改行で複数)' },
+                        { key: 'graduateYear', label: '所属学年', ph: '例: 1, 2, 3 (改行で複数)' },
+                        { key: 'department', label: '所属部署', ph: '例: IFT, COMMUNITY (改行で複数)' },
+                        { key: 'organization', label: '所属組織', ph: '例: 東北大学 (改行で複数)' },
+                      ].map(f => (
+                        <div key={f.key} style={{marginBottom:8}}>
+                          <div style={{fontSize:10,color:'var(--ink3)',marginBottom:3,fontWeight:600}}>{f.label}</div>
+                          <IMETextarea className="input" style={{height:48,padding:6,fontSize:11,resize:'vertical'}}
+                            value={(eligibilityRule && Array.isArray(eligibilityRule[f.key])) ? eligibilityRule[f.key].join('\n') : ''}
+                            onChange={e => {
+                              const vals = e.target.value.split('\n').map(s => s.trim()).filter(Boolean);
+                              setEligibilityRule(prev => ({ ...(prev || {}), [f.key]: vals }));
+                            }}
+                            placeholder={f.ph}/>
+                        </div>
+                      ))}
+                      <div style={{fontSize:10,color:'var(--ink4)',marginTop:6}}>
+                        ⓘ 1 行 = 1 つの 許可値。 すべて 空欄のフィールド は チェックしません。
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -18328,6 +18579,59 @@ function PageEventCreate(){
                     <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={cancelPolicyEasy} onChange={e=>setCancelPolicyEasy(e.target.value)} placeholder="やさしい日本語 (空ならjaフォールバック)"/>
                     <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
                     <IMETextarea className="input" style={{height:60,padding:8,fontSize:12,resize:'vertical'}} value={cancelPolicyEn} onChange={e=>setCancelPolicyEn(e.target.value)} placeholder="English (空ならjaフォールバック)"/>
+                  </div>
+                  {/* (Phase 17.S-fix) 構造化ポリシールール — 自動返金額計算用 */}
+                  <div style={{marginTop:14,padding:12,background:'var(--bg2)',borderRadius:6,border:'1px solid var(--line)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                      <div style={{fontSize:11,fontWeight:600,color:'var(--ink)'}}>
+                        <Icon n="card" s={12}/> 自動返金 ルール <span style={{fontSize:9,color:'var(--ink4)',fontWeight:400}}>(= キャンセル時 自動計算)</span>
+                      </div>
+                      <button type="button" onClick={() => {
+                        setCancelPolicyRule(prev => [...(prev || []), { days: 0, percent: 0 }]);
+                      }} style={{
+                        fontSize:10,padding:'4px 8px',borderRadius:4,
+                        background:'var(--white)',color:'var(--ink)',
+                        border:'1px solid var(--line)',cursor:'pointer',fontWeight:600,
+                      }}>+ 段階追加</button>
+                    </div>
+                    {(!cancelPolicyRule || cancelPolicyRule.length === 0) ? (
+                      <div style={{fontSize:10,color:'var(--ink4)',textAlign:'center',padding:'12px 0'}}>
+                        ルール 未設定 → 全額返金 (= 100%)
+                      </div>
+                    ) : (
+                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                        {cancelPolicyRule.map((tier, i) => (
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontSize:11}}>
+                            <span style={{color:'var(--ink3)',width:28,textAlign:'center'}}>{i + 1}.</span>
+                            <span style={{color:'var(--ink3)'}}>開催</span>
+                            <input type="number" min="0" max="365" className="input" style={{width:60,padding:'4px 6px',fontSize:11,textAlign:'center'}}
+                              value={tier.days}
+                              onChange={e => {
+                                const v = Number(e.target.value) || 0;
+                                setCancelPolicyRule(prev => prev.map((t, idx) => idx === i ? { ...t, days: v } : t));
+                              }}/>
+                            <span style={{color:'var(--ink3)'}}>日以上前 →</span>
+                            <input type="number" min="0" max="100" className="input" style={{width:60,padding:'4px 6px',fontSize:11,textAlign:'center'}}
+                              value={tier.percent}
+                              onChange={e => {
+                                const v = Number(e.target.value) || 0;
+                                setCancelPolicyRule(prev => prev.map((t, idx) => idx === i ? { ...t, percent: v } : t));
+                              }}/>
+                            <span style={{color:'var(--ink3)'}}>% 返金</span>
+                            <button type="button" onClick={() => {
+                              setCancelPolicyRule(prev => prev.filter((_, idx) => idx !== i));
+                            }} style={{
+                              marginLeft:'auto',width:22,height:22,padding:0,borderRadius:4,
+                              background:'transparent',border:'1px solid var(--line)',cursor:'pointer',
+                              display:'flex',alignItems:'center',justifyContent:'center',color:'var(--ink4)',
+                            }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{fontSize:9,color:'var(--ink4)',marginTop:8,lineHeight:1.5}}>
+                      ⓘ 例: 「7 日前 → 100%」「3 日前 → 50%」「0 日前 → 0%」 と 段階を 設定 すれば、 キャンセル時 残日数 に応じて 自動で 返金額計算。 ルール未設定なら 常に 全額返金。
+                    </div>
                   </div>
                 </div>
 
@@ -27368,7 +27672,235 @@ function App({user, onLogout}){
       <Comp/>
       <ToastContainerComp/>
       <ConfirmDialogHostComp/>
+      <NotificationSidePanel/>
     </AppFragment>
+  );
+}
+
+// (Phase 17.S-fix) NotificationSidePanel — 右側 ドロワー で 通知操作 + 並行ナビ
+function NotificationSidePanel() {
+  const [open, setOpen] = useState(false);
+  const [notifs, setNotifs] = useState([]);
+  const [filter, setFilter] = useState('unread');  // 'unread' / 'all'
+  const [loading, setLoading] = useState(false);
+
+  // (Phase 17.S-fix) ベルボタン クリック で open
+  useEffect(() => {
+    const btn = document.getElementById('topbar-notif-btn');
+    if (!btn) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(prev => !prev);
+    };
+    btn.addEventListener('click', handler);
+    return () => btn.removeEventListener('click', handler);
+  }, []);
+
+  // (Phase 17.S-fix) Open 時に fetch + パネル 開いている間 30 秒ごと polling
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const fetch = async () => {
+      setLoading(true);
+      try {
+        const data = await window.fetchData('listNotifications');
+        if (!cancelled) setNotifs(Array.isArray(data) ? data : []);
+      } catch (e) {} finally { if (!cancelled) setLoading(false); }
+    };
+    fetch();
+    const iv = setInterval(fetch, 30000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [open]);
+
+  // ESC で閉じる
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open]);
+
+  // ソート — 未読 → 上
+  const filtered = notifs.filter(n => filter === 'unread' ? n.unread : true);
+  const sorted = filtered.slice().sort((a, b) => {
+    if (a.unread !== b.unread) return a.unread ? -1 : 1;
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tb - ta;
+  });
+
+  const unreadCount = notifs.filter(n => n.unread).length;
+
+  // 詳細遷移 (= PageNotifications と同じロジック)
+  async function navigateToDetail(n) {
+    if (!n || !n.relatedId) return;
+    const rid = String(n.relatedId);
+    const kind = String(n.type || n.kind || '');
+    if (/kpi_report|kpi/i.test(kind)) { window.location.hash = 'analytics'; return; }
+    if (/^R-|^REG-/.test(rid)) {
+      try {
+        const reg = await window.fetchData('getRegistrationById', { regId: rid });
+        if (reg && reg.eventId) {
+          window.location.hash = 'event-detail?id=' + encodeURIComponent(reg.eventId) + '&openReg=' + encodeURIComponent(rid);
+          return;
+        }
+      } catch (e) {}
+      window.location.hash = 'applications';
+      return;
+    }
+    if (/^EVT-|^E-/.test(rid) || /event_full|event_reminder/i.test(kind)) {
+      window.location.hash = 'event-detail?id=' + encodeURIComponent(rid);
+      return;
+    }
+    if (/registration|payment/i.test(kind)) window.location.hash = 'applications';
+  }
+
+  async function handleClick(n) {
+    if (n.unread) {
+      setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, unread: false } : x));
+      try { await window.postData('toggleNotification', { notifId: n.id }); }
+      catch (e) { setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, unread: true } : x)); }
+    }
+    await navigateToDetail(n);
+  }
+
+  async function markAllRead() {
+    const unreadOnes = notifs.filter(n => n.unread);
+    if (unreadOnes.length === 0) return;
+    setNotifs(prev => prev.map(x => ({ ...x, unread: false })));
+    try { await Promise.all(unreadOnes.map(n => window.postData('toggleNotification', { notifId: n.id }))); }
+    catch (e) {}
+  }
+
+  return (
+    <>
+      {/* オーバーレイ (= クリックで 閉じる) */}
+      {open && (
+        <div onClick={() => setOpen(false)}
+          style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.18)',zIndex:9000,
+                  animation:'notifPanelFade 0.2s ease-out'}}/>
+      )}
+      {/* サイドパネル */}
+      <div style={{
+        position:'fixed',top:0,right:0,bottom:0,
+        width: open ? 380 : 0,
+        background:'var(--white)',
+        borderLeft: open ? '1px solid var(--line)' : 'none',
+        boxShadow: open ? '-8px 0 32px rgba(0,0,0,0.12)' : 'none',
+        zIndex:9001,
+        overflow:'hidden',
+        transition:'width 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+        display:'flex',flexDirection:'column',
+      }}>
+        {/* ヘッダー */}
+        <div style={{
+          padding:'14px 16px',borderBottom:'1px solid var(--line)',
+          display:'flex',justifyContent:'space-between',alignItems:'center',
+          background:'var(--bg2)',flex:'none',
+        }}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8}}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--ink)'}}>通知</div>
+            {unreadCount > 0 && (
+              <div style={{fontSize:11,color:'var(--coral)',fontWeight:600}}>
+                未読 {unreadCount}
+              </div>
+            )}
+          </div>
+          <button onClick={() => setOpen(false)}
+            style={{background:'transparent',border:'none',cursor:'pointer',color:'var(--ink3)',
+                    width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        {/* フィルタ + 操作 */}
+        <div style={{padding:'10px 16px',borderBottom:'1px solid var(--line)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flex:'none'}}>
+          <div style={{display:'flex',gap:4}}>
+            {[
+              { k: 'unread', l: '未読' },
+              { k: 'all', l: 'すべて' },
+            ].map(opt => (
+              <button key={opt.k} onClick={() => setFilter(opt.k)}
+                style={{
+                  padding:'4px 10px',fontSize:10,fontWeight:600,borderRadius:3,
+                  background: filter === opt.k ? 'var(--jb-shouwa, var(--coral))' : 'var(--bg3)',
+                  color: filter === opt.k ? '#fff' : 'var(--ink3)',
+                  border:`1px solid ${filter === opt.k ? 'var(--jb-shouwa, var(--coral))' : 'var(--line)'}`,
+                  cursor:'pointer',
+                }}>{opt.l}</button>
+            ))}
+          </div>
+          {unreadCount > 0 && (
+            <button onClick={markAllRead}
+              style={{fontSize:10,color:'var(--ink3)',background:'transparent',border:'none',cursor:'pointer',padding:'4px 6px'}}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--jb-blue, var(--ink))'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--ink3)'}>
+              すべて既読
+            </button>
+          )}
+        </div>
+        {/* リスト */}
+        <div style={{flex:1,overflowY:'auto',padding:'8px 0'}}>
+          {loading && notifs.length === 0 ? (
+            <div style={{textAlign:'center',color:'var(--ink4)',padding:'40px 0',fontSize:11}}>読み込み中...</div>
+          ) : sorted.length === 0 ? (
+            <div style={{textAlign:'center',color:'var(--ink4)',padding:'40px 0',fontSize:11}}>
+              {filter === 'unread' ? '未読の通知はありません' : '通知はありません'}
+            </div>
+          ) : sorted.map(n => (
+            <div key={n.id} onClick={() => handleClick(n)}
+              style={{
+                padding:'12px 16px',cursor:'pointer',borderBottom:'1px solid var(--line-soft, var(--line))',
+                background: n.unread ? 'rgba(56, 189, 248, 0.04)' : 'transparent',
+                transition:'background 0.15s',
+                position:'relative',
+                display:'flex',gap:10,alignItems:'flex-start',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = n.unread ? 'rgba(56, 189, 248, 0.08)' : 'var(--bg2)'}
+              onMouseLeave={e => e.currentTarget.style.background = n.unread ? 'rgba(56, 189, 248, 0.04)' : 'transparent'}>
+              <div style={{
+                width:32,height:32,borderRadius:8,flex:'none',
+                background:`var(--${n.color}-50, var(--bg3))`,
+                color:`var(--${n.color}, var(--ink))`,
+                display:'flex',alignItems:'center',justifyContent:'center',
+              }}>
+                <Icon n={n.icon} s={14}/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:n.unread?700:500,color:'var(--ink)',lineHeight:1.4}}>
+                  {n.title}
+                </div>
+                <div style={{fontSize:11,color:'var(--ink3)',lineHeight:1.4,marginTop:2,
+                              overflow:'hidden',textOverflow:'ellipsis',display:'-webkit-box',
+                              WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>
+                  {n.body}
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+                  <div style={{fontSize:9,color:'var(--ink4)'}}>{n.time}</div>
+                  {n.relatedId && <div style={{fontSize:9,color:'var(--jb-blue, var(--ink3))',fontWeight:600}}>詳細 →</div>}
+                </div>
+              </div>
+              {n.unread && (
+                <div style={{
+                  position:'absolute',top:14,right:14,
+                  width:6,height:6,borderRadius:'50%',background:'var(--coral)',
+                }}/>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        @keyframes notifPanelFade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      `}</style>
+    </>
   );
 }
 
