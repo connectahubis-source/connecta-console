@@ -17495,6 +17495,13 @@ function PageEventCreate(){
   // (Phase 17.S-fix) キャンセルポリシー ルール (= 構造化)
   //   [{ days: 7, percent: 100 }, { days: 3, percent: 50 }, { days: 0, percent: 0 }]
   const [cancelPolicyRule, setCancelPolicyRule] = useState([]);
+  // (Phase 17.S-fix) 同伴者料金システム — 本人 + 同伴者 (子供/配偶者) をまとめて登録
+  //   料金は GAS 側 resolveCompanionFee_ で再計算 (client 値は無視)
+  const [allowCompanions, setAllowCompanions] = useState(false);
+  const [childFee, setChildFee] = useState('');
+  const [childAgeMax, setChildAgeMax] = useState(12);
+  const [maxCompanions, setMaxCompanions] = useState(0);
+  const [companionCountsToCapacity, setCompanionCountsToCapacity] = useState(true);
   // (Part D) イベントポリシー (申込画面で表示、必須)
   const [policyJa, setPolicyJa] = useState("");
   const [policyEn, setPolicyEn] = useState("");
@@ -17627,6 +17634,17 @@ function PageEventCreate(){
             setCancelPolicyRule(Array.isArray(parsed) ? parsed : []);
           } catch (e) { setCancelPolicyRule([]); }
         } else { setCancelPolicyRule([]); }
+        // (Phase 17.S-fix) 同伴者設定 読み込み
+        setAllowCompanions(ev.allowCompanions === true || ev.allowCompanions === 'true' || ev.allowCompanions === 'TRUE');
+        setChildFee(ev.childFee != null && ev.childFee !== '' ? String(ev.childFee) : '');
+        setChildAgeMax(ev.childAgeMax != null && ev.childAgeMax !== '' ? Number(ev.childAgeMax) : 12);
+        setMaxCompanions(ev.maxCompanions != null && ev.maxCompanions !== '' ? Number(ev.maxCompanions) : 0);
+        // 定員カウント: 未設定 (undefined / null / 空文字) は TRUE フォールバック
+        setCompanionCountsToCapacity(
+          ev.companionCountsToCapacity !== false &&
+          ev.companionCountsToCapacity !== 'false' &&
+          ev.companionCountsToCapacity !== 'FALSE'
+        );
         // (Part D) イベントポリシーをロード
         setPolicyJa(ev.policy_ja || ev.policy || "");
         setPolicyEn(ev.policy_en || "");
@@ -17756,6 +17774,12 @@ function PageEventCreate(){
       cancelPolicy: cancelPolicy || '',
       // (Phase 17.S-fix) キャンセルポリシー ルール (= 構造化)
       cancelPolicyRule: cancelPolicyRule && cancelPolicyRule.length > 0 ? JSON.stringify(cancelPolicyRule) : '',
+      // (Phase 17.S-fix) 同伴者料金システム (boolean は GAS 編集5 で TRUE/FALSE に変換される)
+      allowCompanions: allowCompanions,
+      childFee: Number(childFee) || 0,
+      childAgeMax: Number(childAgeMax) || 12,
+      maxCompanions: Number(maxCompanions) || 0,
+      companionCountsToCapacity: companionCountsToCapacity,
       // (Part D) イベントポリシー (申込画面で表示)
       policy_ja: policyJa || '',
       policy_en: policyEn || '',
@@ -18633,6 +18657,76 @@ function PageEventCreate(){
                       ⓘ 例: 「7 日前 → 100%」「3 日前 → 50%」「0 日前 → 0%」 と 段階を 設定 すれば、 キャンセル時 残日数 に応じて 自動で 返金額計算。 ルール未設定なら 常に 全額返金。
                     </div>
                   </div>
+                </div>
+
+                {/* (Phase 17.S-fix) 同伴者設定 — 子供料金・同伴者上限・定員カウント */}
+                <div className="field">
+                  <label className="field-label">同伴者設定</label>
+
+                  {/* 受入 ON/OFF トグル */}
+                  <div style={{padding:'12px 14px',background:allowCompanions ? 'var(--indigo-50)' : 'var(--bg2)',border:`1px solid ${allowCompanions ? 'var(--indigo)' : 'var(--line)'}`,borderRadius:8,display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}
+                    onClick={() => setAllowCompanions(!allowCompanions)}>
+                    <input type="checkbox" checked={allowCompanions} onChange={()=>{}} style={{width:18,height:18,cursor:'pointer'}}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600,color:allowCompanions ? 'var(--indigo)' : 'var(--ink2)'}}>
+                        <Icon n="users" s={12}/> 同伴者の申込を受け付ける
+                      </div>
+                      <div style={{fontSize:11,color:'var(--ink4)',marginTop:2}}>
+                        本人 + 同伴者 (子供/配偶者など) をまとめて登録できます。 料金はサーバーが年齢で再計算します。
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 受入 ON のときのみ詳細設定 (案A: OFF 時は非表示) */}
+                  {allowCompanions && (
+                    <div style={{marginTop:12,padding:12,background:'var(--bg2)',borderRadius:6,border:'1px solid var(--line)'}}>
+                      <div className="grid-2" style={{gap:12,marginBottom:12}}>
+                        <div className="field" style={{marginBottom:0}}>
+                          <label className="field-label">子供料金 (円)</label>
+                          <input type="number" min="0" className="input"
+                            value={childFee}
+                            onChange={e => setChildFee(e.target.value)}
+                            placeholder="例: 1000"/>
+                          <div className="field-hint">年齢が子供年齢上限以下なら適用。 0 円も可。</div>
+                        </div>
+                        <div className="field" style={{marginBottom:0}}>
+                          <label className="field-label">子供年齢上限 (歳)</label>
+                          <input type="number" min="0" max="20" className="input"
+                            value={childAgeMax}
+                            onChange={e => setChildAgeMax(Number(e.target.value) || 0)}
+                            placeholder="12"/>
+                          <div className="field-hint">この年齢以下なら子供料金。 デフォルト 12。</div>
+                        </div>
+                      </div>
+                      <div className="field" style={{marginBottom:12}}>
+                        <label className="field-label">同伴者上限 (名)</label>
+                        <input type="number" min="0" className="input"
+                          value={maxCompanions}
+                          onChange={e => setMaxCompanions(Number(e.target.value) || 0)}
+                          placeholder="0"
+                          style={{maxWidth:120}}/>
+                        <div className="field-hint">1 申込あたりの同伴者数の上限。 0 = 無制限。</div>
+                      </div>
+
+                      {/* 定員カウント ON/OFF */}
+                      <div style={{padding:'10px 12px',background:companionCountsToCapacity ? 'var(--white)' : 'var(--bg)',border:`1px solid ${companionCountsToCapacity ? 'var(--jb-blue)' : 'var(--line)'}`,borderRadius:6,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}
+                        onClick={() => setCompanionCountsToCapacity(!companionCountsToCapacity)}>
+                        <input type="checkbox" checked={companionCountsToCapacity} onChange={()=>{}} style={{width:16,height:16,cursor:'pointer'}}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,fontWeight:600,color:companionCountsToCapacity ? 'var(--jb-blue)' : 'var(--ink3)'}}>
+                            同伴者も定員にカウントする
+                          </div>
+                          <div style={{fontSize:10,color:'var(--ink4)',marginTop:1}}>
+                            OFF にすると本人のみが定員消費。 デフォルト ON。
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{fontSize:9,color:'var(--ink4)',marginTop:10,lineHeight:1.5}}>
+                        ⓘ 同伴者料金は GAS 側で再計算するため、 参加者画面からの改ざんは不可。 年齢制限 (ageMin / ageMax) は同伴者にも適用 (ただし子供料金対象は ageMin 免除)。 国籍制限は本人のみに適用。 クーポンは本人料金にのみ適用。
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* (Part D) イベントポリシー — 申込画面で表示・同意必須 */}
