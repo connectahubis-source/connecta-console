@@ -160,27 +160,39 @@
   --indigo-700:oklch(0.28 0.17 263);
   --indigo-ink:oklch(0.22 0.13 263);
 
-  /* ACCENT — 小田急レッド / グリーン (Phase 16.J10) */
-  --coral:        #E64530;
+  /* ACCENT — 小田急レッド / グリーン (Phase 16.J10)
+     (統一) coral/green/red は jb-* を単一の真実源として参照。
+     これにより Noon/Night 両テーマで自動的に色が追従する。 */
+  --coral:        var(--jb-shouwa);
   --coral-600:    #C53728;
-  --coral-50:     #FCE4DF;
+  --coral-50:     var(--jb-shouwa-soft);
   --coral-100:    #F8C9C0;
 
-  --green:        #009D6A;
-  --green-50:     #D4F0E2;
+  --green:        var(--jb-success);
+  --green-50:     var(--jb-success-soft);
   --green-100:    #A8E0C2;
   --amber:        #F59E0B;
   --amber-50:     #FEF3C7;
   --amber-100:    #FDE68A;
-  --red:          #E64530;
-  --red-50:       #FCE4DF;
+  --red:          var(--jb-shouwa);
+  --red-50:       var(--jb-shouwa-soft);
   --red-100:      #F8C9C0;
   --violet:oklch(0.58 0.17 300);
   --violet-50:oklch(0.96 0.03 300);
+  --violet-100:oklch(0.90 0.07 300);
   --teal:oklch(0.65 0.1 200);
   --teal-50:oklch(0.96 0.025 200);
   --pink:oklch(0.72 0.14 345);
   --pink-50:oklch(0.97 0.025 345);
+
+  /* (修正) 旧コードが参照する未定義トークンの互換エイリアス。
+     これまでフォールバック頼み or 無効値だったものを正規化。 */
+  --indigo-soft: var(--indigo-50);
+  --ink1:        var(--ink);
+  --ink-mute:    var(--ink3);
+  --line-soft:   var(--line);
+  --jp:          var(--jb-sans);
+  --jb-bg:       var(--jb-paper);
 
   --ink:oklch(0.18 0.012 265);
   --ink2:oklch(0.32 0.012 265);
@@ -717,6 +729,33 @@ svg{display:block}
   --sh:            0 2px 8px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
   --sh-md:         0 8px 24px -8px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3);
   --sh-lg:         0 24px 48px -16px rgba(0,0,0,.6),0 4px 10px rgba(0,0,0,.4);
+
+  /* (修正) Night: 旧アクセント/インディゴ系の暗所対応。
+     淡色背景トークン(*-50/-100)が Noon の near-white のままだと
+     ダークモードで白いブロックとして浮くため上書きする。
+     coral/green/red の主色と -50 は jb-* エイリアス経由で自動追従済み。 */
+  --indigo:        #5B8DEF;
+  --indigo-hover:  #7BA5F2;
+  --indigo-50:     #18243A;
+  --indigo-100:    #1E2F4D;
+  --indigo-200:    #284069;
+  --indigo-600:    #5B8DEF;
+  --indigo-700:    #9DBDF7;
+  --indigo-ink:    #BFD3FA;
+  --coral-600:     #FF8B6F;
+  --coral-100:     #3A1A1A;
+  --green-100:     #0F2E22;
+  --red-100:       #3A1A1A;
+  --amber:         #FBBF24;
+  --amber-50:      #2A2410;
+  --amber-100:     #3A3214;
+  --violet:        #A78BFA;
+  --violet-50:     #241B3A;
+  --violet-100:    #2E2348;
+  --teal:          #2DD4BF;
+  --teal-50:       #0F2A2A;
+  --pink:          #F472B6;
+  --pink-50:       #2E1622;
 }
 :root[data-theme="night"] .jb-page {
   background: var(--jb-paper);
@@ -1644,6 +1683,7 @@ svg{display:block}
       <a href="#qr" class="nav-item" data-nav="qr"><svg class="ic" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg>QR照会 / 受付</a>
       <a href="#schedule" class="nav-item" data-nav="schedule"><svg class="ic" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>スケジュール</a>
       <a href="#satisfaction" class="nav-item" data-nav="satisfaction"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>満足度調査</a>
+      <a href="#post-event" class="nav-item" data-nav="post-event"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/><path d="M3 12h.01M3 18h.01M3 6h.01"/></svg>イベント後のこと</a>
     </div>
 
     <div class="nav-section">
@@ -2456,6 +2496,7 @@ const Icon = ({n, s=16, cls="", style={}}) => {
     x: <svg {...common}><path d="M18 6 6 18M6 6l12 12"/></svg>,
     check: <svg {...common}><path d="M20 6 9 17l-5-5"/></svg>,
     chevDown: <svg {...common}><path d="m6 9 6 6 6-6"/></svg>,
+    chevUp: <svg {...common}><path d="m18 15-6-6-6 6"/></svg>,
     chevRight: <svg {...common}><path d="m9 18 6-6-6-6"/></svg>,
     chevLeft: <svg {...common}><path d="m15 18-6-6 6-6"/></svg>,
     more: <svg {...common}><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>,
@@ -4713,6 +4754,15 @@ function PageRegistrations(){
                       <div>
                         <div style={{fontWeight:600}}>{r.userName || '—'}</div>
                         <div style={{fontSize:11,color:'var(--ink4)'}}>{r.userEmail || '—'}</div>
+                        {r.companionsCount > 0 && (
+                          <div style={{
+                            display:'inline-flex',alignItems:'center',gap:3,marginTop:3,
+                            padding:'1px 7px',background:'var(--indigo-soft, #eef2ff)',color:'var(--indigo, #3730a3)',
+                            borderRadius:999,fontSize:10,fontWeight:700,letterSpacing:'0.03em',
+                          }} title={`本人 + 同伴者 ${r.companionsCount} 名 = 合計 ${r.companionsCount + 1} 名`}>
+                            <Icon n="users" s={10}/> +{r.companionsCount} 同伴
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -4776,13 +4826,66 @@ function PageRegistrations(){
 /**
  * 満足度調査作成・編集モーダル。
  */
+// (満足度調査 再設計) 作成テンプレート。 作成後はビルダーでイベントごとに編集可能。
+// スケール (NPS 0-10 / 満足度 1-10) は質問文に埋め込まず、 型の min/max として分離。
+const SURVEY_TEMPLATES = [
+  {
+    key: 'standard', name: '標準',
+    desc: 'NPS ・ 満足度 ・ 自由記述 の 3 問。 迷ったらこれ。',
+    questions: [
+      { type:'nps',   label:'このイベントを友人や同僚に勧めたいと思いますか',     role:'nps',  options:[], required:true,  min:0, max:10 },
+      { type:'scale', label:'イベント全体の満足度を教えてください',               role:'csat', options:[], required:true,  min:1, max:10 },
+      { type:'text',  label:'良かった点・改善してほしい点があればご記入ください',   role:'',     options:[], required:false, min:'', max:'' },
+    ],
+  },
+  {
+    key: 'simple', name: '簡易',
+    desc: '満足度 ・ 自由記述 の 2 問。 回答負担を最小に。',
+    questions: [
+      { type:'scale', label:'今回のイベントはいかがでしたか', role:'csat', options:[], required:true,  min:1, max:10 },
+      { type:'text',  label:'ご感想・ご意見をお聞かせください', role:'',    options:[], required:false, min:'', max:'' },
+    ],
+  },
+  {
+    key: 'detailed', name: '詳細',
+    desc: '多面的に評価。 内容 ・ 運営 ・ 会場 ・ 再参加意向まで。',
+    questions: [
+      { type:'nps',    label:'このイベントを友人や同僚に勧めたいと思いますか', role:'nps',  options:[], required:true,  min:0, max:10 },
+      { type:'scale',  label:'内容の満足度',       role:'csat', options:[], required:true,  min:1, max:10 },
+      { type:'scale',  label:'運営・進行の満足度', role:'',     options:[], required:true,  min:1, max:10 },
+      { type:'scale',  label:'会場・環境の満足度', role:'',     options:[], required:false, min:1, max:10 },
+      { type:'single', label:'今後も connec+a のイベントに参加したいですか', role:'', options:['はい','未定','いいえ'], required:true,  min:'', max:'' },
+      { type:'multi',  label:'特に良かったものを選んでください',           role:'', options:['内容','交流','運営','会場','その他'], required:false, min:'', max:'' },
+      { type:'text',   label:'その他、 ご自由にご記入ください',             role:'', options:[], required:false, min:'', max:'' },
+    ],
+  },
+  {
+    key: 'community', name: '交流特化',
+    desc: '外国人住民の交流イベント向け。 出会い ・ 言語サポート ・ 参加理由。',
+    questions: [
+      { type:'scale',  label:'新しい出会いや交流はありましたか', role:'csat', options:[], required:true,  min:1, max:10 },
+      { type:'single', label:'日本語でのサポートは十分でしたか', role:'',    options:['十分だった','まあまあ','不足していた'], required:true,  min:'', max:'' },
+      { type:'multi',  label:'参加した理由を教えてください',     role:'',    options:['友達づくり','情報収集','日本語の練習','イベント内容','その他'], required:false, min:'', max:'' },
+      { type:'nps',    label:'このイベントを友人に勧めたいと思いますか', role:'nps', options:[], required:true,  min:0, max:10 },
+      { type:'text',   label:'次回参加したいイベントや要望があれば教えてください', role:'', options:[], required:false, min:'', max:'' },
+    ],
+  },
+];
+
 function SurveyModal({mode, initialValues, events, onSave, onCancel}){
   const init = initialValues || {};
   const [title, setTitle] = useState(init.title || "");
+  const [titleEasy, setTitleEasy] = useState(init.title_easy || "");
+  const [titleEn, setTitleEn] = useState(init.title_en || "");
+  const [q1Easy, setQ1Easy] = useState(init.question1_easy || "");
+  const [q1En, setQ1En] = useState(init.question1_en || "");
+  const [q2Easy, setQ2Easy] = useState(init.question2_easy || "");
+  const [q2En, setQ2En] = useState(init.question2_en || "");
+  const [q3Easy, setQ3Easy] = useState(init.question3_easy || "");
+  const [q3En, setQ3En] = useState(init.question3_en || "");
+  const [showI18n, setShowI18n] = useState(false);
   const [eventId, setEventId] = useState(init.eventId || "");
-  const [q1, setQ1] = useState(init.question1 || "このイベントを他の人に勧めたいと思いますか? (0-10)");
-  const [q2, setQ2] = useState(init.question2 || "今回の体験にどれくらい満足しましたか? (1-10)");
-  const [q3, setQ3] = useState(init.question3 || "改善点や感想を自由にお聞かせください");
+  const [templateKey, setTemplateKey] = useState('standard');
   const [status, setStatus] = useState(init.status || "下書き");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -4831,30 +4934,59 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
 
     setSaving(true);
     setError(null);
+
+    // 選択テンプレートと、 後方互換用のクリーンな質問文 (スケールは埋め込まない)
+    const tpl = SURVEY_TEMPLATES.find(x => x.key === templateKey) || SURVEY_TEMPLATES[0];
+    const npsQ  = tpl.questions.find(q => q.type === 'nps');
+    const csatQ = tpl.questions.find(q => q.role === 'csat') || tpl.questions.find(q => q.type === 'scale');
+    const textQ = tpl.questions.find(q => q.type === 'text');
+    const compat = {
+      question1: npsQ  ? npsQ.label  : (tpl.questions[0] ? tpl.questions[0].label : ''),
+      question2: csatQ ? csatQ.label : '',
+      question3: textQ ? textQ.label : '',
+    };
+    // 多言語フィールド (任意入力)
+    const i18n = {
+      title_easy: titleEasy.trim(),
+      title_en: titleEn.trim(),
+      question1_easy: q1Easy.trim(),
+      question1_en: q1En.trim(),
+      question2_easy: q2Easy.trim(),
+      question2_en: q2En.trim(),
+      question3_easy: q3Easy.trim(),
+      question3_en: q3En.trim(),
+    };
+
     try {
-      // ターゲット種別による分岐
-      if (isMulti && target === 'all_sessions') {
-        // 全セッション一括作成
+      if (mode === 'edit') {
+        // 編集はメタ情報のみ。 質問はカードの「質問を編集」で変更する。
+        await onSave({ title: title.trim(), status, ...i18n });
+      } else if (isMulti && target === 'all_sessions') {
+        // 全セッション一括作成 (テンプレートを各日に流し込む)
         await onSave({
           _action: 'createSurveysForSessions',
+          _templateQuestions: tpl.questions,
           eventId,
           titlePrefix: title.trim(),
-          question1: q1.trim(),
-          question2: q2.trim(),
-          question3: q3.trim(),
+          titlePrefix_easy: titleEasy.trim(),
+          titlePrefix_en: titleEn.trim(),
           status,
+          ...compat,
+          question1_easy: i18n.question1_easy, question1_en: i18n.question1_en,
+          question2_easy: i18n.question2_easy, question2_en: i18n.question2_en,
+          question3_easy: i18n.question3_easy, question3_en: i18n.question3_en,
         });
       } else {
-        // 通常の単一作成 (event 全体 or 特定セッション)
+        // 単一作成 (event 全体 or 特定セッション)
         await onSave({
+          _templateQuestions: tpl.questions,
           title: title.trim(),
           eventId,
           sessionId: (isMulti && target === 'session_specific') ? sessionId : '',
           kind: (isMulti && target === 'session_specific') ? 'session' : 'event',
-          question1: q1.trim(),
-          question2: q2.trim(),
-          question3: q3.trim(),
           status,
+          ...compat,
+          ...i18n,
         });
       }
     } catch (err) {
@@ -4881,6 +5013,56 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
               </div>
             )}
           </div>
+
+          {/* 多言語 (やさしい日本語 / English) — 任意。通知・マイページで設定言語に出し分け */}
+          {(() => {
+            const tplR = SURVEY_TEMPLATES.find(x => x.key === templateKey) || SURVEY_TEMPLATES[0];
+            const refQ1 = mode === 'edit' ? (init.question1 || '') : ((tplR.questions.find(q=>q.type==='nps') || tplR.questions[0] || {}).label || '');
+            const refQ2 = mode === 'edit' ? (init.question2 || '') : ((tplR.questions.find(q=>q.role==='csat') || tplR.questions.find(q=>q.type==='scale') || {}).label || '');
+            const refQ3 = mode === 'edit' ? (init.question3 || '') : ((tplR.questions.find(q=>q.type==='text') || {}).label || '');
+            const titleLabelEasy = isMulti && target === 'all_sessions' ? 'タイトル接頭辞 (やさしい日本語)' : 'タイトル (やさしい日本語)';
+            const titleLabelEn   = isMulti && target === 'all_sessions' ? 'タイトル接頭辞 (English)' : 'タイトル (English)';
+            return (
+              <div style={{border:'1px solid var(--line)',borderRadius:8,padding:'10px 12px',background:'var(--surface-2,rgba(0,0,0,0.02))'}}>
+                <button type="button" className="btn btn-ghost btn-sm" style={{padding:'2px 4px',fontSize:12}} onClick={()=>setShowI18n(v=>!v)}>
+                  <Icon n={showI18n ? 'chevron-down' : 'chevron-right'} s={13}/> 多言語 (やさしい日本語 / English) ・ 任意
+                </button>
+                {showI18n && (
+                  <div className="stack" style={{gap:12,marginTop:10}}>
+                    <div style={{fontSize:11,color:'var(--ink4)'}}>未入力の項目は日本語が表示されます。標準テンプレートの設問は未入力でも自動で3言語化されます。</div>
+                    <div className="grid-2" style={{gap:12}}>
+                      <div className="field">
+                        <label className="field-label">{titleLabelEasy}</label>
+                        <input className="input" value={titleEasy} onChange={e=>setTitleEasy(e.target.value)} placeholder="やさしい日本語のタイトル"/>
+                      </div>
+                      <div className="field">
+                        <label className="field-label">{titleLabelEn}</label>
+                        <input className="input" value={titleEn} onChange={e=>setTitleEn(e.target.value)} placeholder="English title"/>
+                      </div>
+                    </div>
+                    {[{ja:refQ1,e:q1Easy,se:setQ1Easy,n:q1En,sn:setQ1En,k:'設問1'},
+                      {ja:refQ2,e:q2Easy,se:setQ2Easy,n:q2En,sn:setQ2En,k:'設問2'},
+                      {ja:refQ3,e:q3Easy,se:setQ3Easy,n:q3En,sn:setQ3En,k:'設問3'}].map((row,i)=> row.ja ? (
+                      <div key={i} style={{borderTop:'1px dashed var(--line)',paddingTop:10}}>
+                        <div style={{fontSize:11,color:'var(--ink4)',marginBottom:6}}>{row.k}（日本語）: {row.ja}</div>
+                        <div className="grid-2" style={{gap:12}}>
+                          <div className="field">
+                            <label className="field-label" style={{fontSize:11}}>やさしい日本語</label>
+                            <input className="input" value={row.e} onChange={e=>row.se(e.target.value)} placeholder="やさしい日本語の設問"/>
+                          </div>
+                          <div className="field">
+                            <label className="field-label" style={{fontSize:11}}>English</label>
+                            <input className="input" value={row.n} onChange={e=>row.sn(e.target.value)} placeholder="English question"/>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null)}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="grid-2" style={{gap:14}}>
             <div className="field">
               <label className="field-label">対象イベント <span className="field-req">*</span></label>
@@ -4956,18 +5138,37 @@ function SurveyModal({mode, initialValues, events, onSave, onCancel}){
             </div>
           )}
 
-          <div className="field">
-            <label className="field-label">質問1: NPS (0-10)</label>
-            <input className="input" value={q1} onChange={e=>setQ1(e.target.value)}/>
-          </div>
-          <div className="field">
-            <label className="field-label">質問2: 満足度 (1-10)</label>
-            <input className="input" value={q2} onChange={e=>setQ2(e.target.value)}/>
-          </div>
-          <div className="field">
-            <label className="field-label">質問3: 自由回答</label>
-            <input className="input" value={q3} onChange={e=>setQ3(e.target.value)}/>
-          </div>
+          {mode === 'create' ? (
+            <div className="field">
+              <label className="field-label">テンプレート</label>
+              <div className="stack" style={{gap:8}}>
+                {SURVEY_TEMPLATES.map(tpl => {
+                  const sel = templateKey === tpl.key;
+                  return (
+                    <label key={tpl.key} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 12px',borderRadius:8,cursor:'pointer',border:sel?'2px solid var(--indigo)':'1px solid var(--line)',background:sel?'var(--indigo-50)':'var(--bg2)'}}>
+                      <input type="radio" name="surveyTemplate" value={tpl.key} checked={sel} onChange={()=>setTemplateKey(tpl.key)} style={{marginTop:3}}/>
+                      <div style={{flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <span style={{fontWeight:700,fontSize:13}}>{tpl.name}</span>
+                          <span style={{fontSize:10,color:'var(--ink4)'}}>{tpl.questions.length} 問</span>
+                        </div>
+                        <div style={{fontSize:11,color:'var(--ink4)',marginTop:2}}>{tpl.desc}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:11,color:'var(--ink4)',marginTop:6}}>
+                ⓘ 作成後、 カードの「質問を編集」からイベントごとに自由に調整できます。
+              </div>
+            </div>
+          ) : (
+            <div className="field">
+              <div style={{fontSize:12,color:'var(--ink4)',padding:'10px 12px',background:'var(--bg2)',borderRadius:8,border:'1px solid var(--line)'}}>
+                質問はカードの「質問を編集」から変更できます。 ここではタイトルとステータスのみ更新します。
+              </div>
+            </div>
+          )}
         </div>
         <div style={{padding:14,borderTop:'1px solid var(--line)',display:'flex',justifyContent:'flex-end',gap:8}}>
           <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>キャンセル</button>
@@ -5057,6 +5258,524 @@ function ResponseModal({survey, onSave, onCancel}){
   );
 }
 
+// -------------------- QuestionBuilderModal (満足度調査 再設計 Phase 2) --------------------
+// 正規化された質問を追加/並替/タイプ設定/必須/選択肢で編集し、saveSurveyQuestions で保存。
+const SURVEY_Q_TYPES = [
+  { v: 'nps',    label: 'NPS (0-10 推奨度)' },
+  { v: 'scale',  label: '評価スケール (数値)' },
+  { v: 'single', label: '単一選択' },
+  { v: 'multi',  label: '複数選択' },
+  { v: 'text',   label: '自由記述' },
+];
+
+function blankQuestion(type) {
+  const t = type || 'text';
+  if (t === 'nps')   return { type: 'nps',   label: 'このイベントを他の人に勧めたいと思いますか?', role: 'nps',  options: [], required: true,  min: 0, max: 10 };
+  if (t === 'scale') return { type: 'scale', label: '今回の体験にどれくらい満足しましたか?',     role: 'csat', options: [], required: true,  min: 1, max: 5 };
+  if (t === 'single')return { type: 'single',label: '',                                          role: '',     options: [''], required: false, min: '', max: '' };
+  if (t === 'multi') return { type: 'multi', label: '',                                          role: '',     options: [''], required: false, min: '', max: '' };
+  return { type: 'text', label: '', role: '', options: [], required: false, min: '', max: '' };
+}
+
+function QuestionBuilderModal({ survey, onClose, onSaved }) {
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    window.fetchData('getSurveyQuestions', { surveyId: survey.id })
+      .then(res => {
+        if (!alive) return;
+        const arr = (Array.isArray(res) ? res : []).map(q => ({
+          // legacy 合成質問 (SV-xxx-legacy-*) は新規扱いにして実体化させる
+          id: (q.id && String(q.id).indexOf('-legacy-') < 0) ? q.id : undefined,
+          type: q.type || 'text',
+          label: q.label || '',
+          role: q.role || '',
+          options: Array.isArray(q.options) ? q.options.slice() : [],
+          required: !!q.required,
+          min: q.min != null ? q.min : '',
+          max: q.max != null ? q.max : '',
+        }));
+        setQuestions(arr.length ? arr : [blankQuestion('nps')]);
+        setLoading(false);
+      })
+      .catch(e => { if (alive) { setError(e.message || String(e)); setLoading(false); } });
+    return () => { alive = false; };
+  }, [survey.id]);
+
+  function patch(i, changes) {
+    setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, ...changes } : q));
+  }
+  function changeType(i, type) {
+    const def = blankQuestion(type);
+    setQuestions(qs => qs.map((q, idx) => {
+      if (idx !== i) return q;
+      // ラベルは維持、型依存項目はデフォルトへ
+      return { ...def, label: q.label || def.label, id: q.id };
+    }));
+  }
+  function move(i, dir) {
+    setQuestions(qs => {
+      const j = i + dir;
+      if (j < 0 || j >= qs.length) return qs;
+      const copy = qs.slice();
+      const tmp = copy[i]; copy[i] = copy[j]; copy[j] = tmp;
+      return copy;
+    });
+  }
+  function remove(i) { setQuestions(qs => qs.filter((_, idx) => idx !== i)); }
+  function addQ(type) { setQuestions(qs => [...qs, blankQuestion(type)]); }
+
+  function setOption(i, oi, val) {
+    setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options: q.options.map((o, k) => k === oi ? val : o) } : q));
+  }
+  function addOption(i) { setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options: [...q.options, ''] } : q)); }
+  function removeOption(i, oi) { setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options: q.options.filter((_, k) => k !== oi) } : q)); }
+
+  async function handleSave() {
+    // クライアント検証
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q.label || !q.label.trim()) { setError(`質問 ${i + 1}: 質問文を入力してください`); return; }
+      if (q.type === 'single' || q.type === 'multi') {
+        const opts = q.options.filter(o => String(o).trim() !== '');
+        if (opts.length < 1) { setError(`質問 ${i + 1}: 選択肢を1つ以上入力してください`); return; }
+      }
+      if (q.type === 'scale') {
+        const lo = Number(q.min), hi = Number(q.max);
+        if (isNaN(lo) || isNaN(hi) || lo >= hi) { setError(`質問 ${i + 1}: 最小 < 最大 で指定してください`); return; }
+      }
+    }
+    setSaving(true); setError(null);
+    try {
+      const payloadQs = questions.map(q => ({
+        id: q.id,
+        type: q.type,
+        label: q.label.trim(),
+        role: q.role || '',
+        options: (q.type === 'single' || q.type === 'multi') ? q.options.filter(o => String(o).trim() !== '') : [],
+        required: !!q.required,
+        min: (q.type === 'scale' || q.type === 'nps') ? Number(q.min) : '',
+        max: (q.type === 'scale' || q.type === 'nps') ? Number(q.max) : '',
+      }));
+      await window.postData('saveSurveyQuestions', { surveyId: survey.id, questions: payloadQs });
+      window.toast.success('質問を保存しました');
+      if (onSaved) onSaved();
+      onClose();
+    } catch (e) {
+      setError(e.message || String(e));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onClose}>
+      <div className="card" style={{width:720,maxWidth:'95%',maxHeight:'92vh',overflow:'auto'}} onClick={(e)=>e.stopPropagation()}>
+        <div className="card-head">
+          <div className="card-title"><Icon n="star" s={16}/> 質問を編集 — {survey.title}</div>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><Icon n="x" s={14}/></button>
+        </div>
+        <div className="card-body stack" style={{gap:12}}>
+          {error && <div style={{padding:10,background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:6,color:'var(--red)',fontSize:12}}>{error}</div>}
+          {loading ? (
+            <div className="empty" style={{padding:'40px 20px'}}>読み込み中…</div>
+          ) : (
+            <>
+              {questions.map((q, i) => (
+                <div key={i} className="card" style={{padding:12,background:'var(--bg2)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                    <span style={{fontFamily:'var(--serif)',fontSize:16,color:'var(--ink4)',minWidth:22}}>{i+1}</span>
+                    <div className="select-wrap" style={{flex:'0 0 200px'}}>
+                      <select className="input select" value={q.type} onChange={e=>changeType(i, e.target.value)}>
+                        {SURVEY_Q_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{flex:1}}></div>
+                    <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>move(i,-1)} disabled={i===0} title="上へ"><Icon n="chevUp" s={13}/></button>
+                    <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>move(i,1)} disabled={i===questions.length-1} title="下へ"><Icon n="chevDown" s={13}/></button>
+                    <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>remove(i)} title="削除" style={{color:'var(--coral)'}}><Icon n="trash" s={13}/></button>
+                  </div>
+                  <input className="input" value={q.label} onChange={e=>patch(i,{label:e.target.value})} placeholder="質問文を入力" style={{marginBottom:8}}/>
+
+                  {q.type === 'nps' && (
+                    <div style={{fontSize:11,color:'var(--ink4)'}}>0-10 の推奨度。 ダッシュボードの NPS 指標として集計されます。</div>
+                  )}
+                  {q.type === 'scale' && (
+                    <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                      <label style={{fontSize:12,color:'var(--ink3)',display:'flex',alignItems:'center',gap:6}}>最小
+                        <input className="input" type="number" value={q.min} onChange={e=>patch(i,{min:e.target.value})} style={{width:70}}/>
+                      </label>
+                      <label style={{fontSize:12,color:'var(--ink3)',display:'flex',alignItems:'center',gap:6}}>最大
+                        <input className="input" type="number" value={q.max} onChange={e=>patch(i,{max:e.target.value})} style={{width:70}}/>
+                      </label>
+                      <label style={{fontSize:12,color:'var(--ink3)',display:'flex',alignItems:'center',gap:6}}>
+                        <input type="checkbox" checked={q.role==='csat'} onChange={e=>patch(i,{role:e.target.checked?'csat':''})}/>
+                        満足度KPIとして集計
+                      </label>
+                    </div>
+                  )}
+                  {(q.type === 'single' || q.type === 'multi') && (
+                    <div className="stack" style={{gap:6}}>
+                      {q.options.map((o, oi) => (
+                        <div key={oi} style={{display:'flex',gap:6,alignItems:'center'}}>
+                          <input className="input" value={o} onChange={e=>setOption(i,oi,e.target.value)} placeholder={`選択肢 ${oi+1}`}/>
+                          <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>removeOption(i,oi)} disabled={q.options.length<=1} style={{color:'var(--coral)'}}><Icon n="x" s={12}/></button>
+                        </div>
+                      ))}
+                      <button className="btn btn-soft btn-sm" onClick={()=>addOption(i)} style={{alignSelf:'flex-start'}}><Icon n="plus" s={12}/> 選択肢を追加</button>
+                    </div>
+                  )}
+
+                  <div style={{marginTop:10,display:'flex',alignItems:'center',gap:6}}>
+                    <label style={{fontSize:12,color:'var(--ink3)',display:'flex',alignItems:'center',gap:6}}>
+                      <input type="checkbox" checked={q.required} onChange={e=>patch(i,{required:e.target.checked})}/>
+                      必須
+                    </label>
+                  </div>
+                </div>
+              ))}
+
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {SURVEY_Q_TYPES.map(t => (
+                  <button key={t.v} className="btn btn-soft btn-sm" onClick={()=>addQ(t.v)}><Icon n="plus" s={12}/> {t.label}</button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div style={{padding:14,borderTop:'1px solid var(--line)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+          <span style={{fontSize:11,color:'var(--ink4)'}}>{questions.length} 問</span>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-ghost" onClick={onClose} disabled={saving}>キャンセル</button>
+            <button className="btn btn-indigo" onClick={handleSave} disabled={saving||loading}>{saving ? '保存中…' : '質問を保存'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------- SurveyAnalytics (満足度調査 再設計 Phase 3) --------------------
+// getSurveyAnalytics の結果を Chart.js で可視化。
+function svBarOpts(horizontal){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    indexAxis: horizontal ? 'y' : 'x',
+    plugins:{ legend:{display:false}, tooltip:{enabled:true} },
+    scales:{ [horizontal?'x':'y']:{ beginAtZero:true, ticks:{ precision:0 } } },
+  };
+}
+function svDonutOpts(){
+  return { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ boxWidth:12, font:{size:11} } } } };
+}
+const SV_PAL = {
+  promoter:'#10B981', passive:'#F59E0B', detractor:'#F43F5E', bar:'#6366F1',
+  donut:['#6366F1','#F43F5E','#8B5CF6','#10B981','#F59E0B','#14B8A6','#EC4899','#0EA5E9','#A855F7','#22C55E'],
+};
+
+function QuestionViz({ q }){
+  const head = (
+    <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8,marginBottom:8}}>
+      <div style={{fontWeight:600,fontSize:13}}>{q.label}</div>
+      <div style={{fontSize:11,color:'var(--ink4)'}}>{q.count} 回答</div>
+    </div>
+  );
+  const wrap = (children) => <div className="card" style={{padding:12,background:'var(--bg2)'}}>{head}{children}</div>;
+
+  if (q.count === 0) return wrap(<div style={{fontSize:12,color:'var(--ink5)'}}>回答なし</div>);
+
+  if (q.type === 'nps') {
+    const total = (q.promoters + q.passives + q.detractors) || 1;
+    const pct = n => Math.round(n / total * 100);
+    return wrap(
+      <div style={{display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+        <div style={{textAlign:'center',minWidth:64}}>
+          <div style={{fontFamily:'var(--serif)',fontSize:30,lineHeight:1,color: q.nps>=0?'var(--green)':'var(--coral)'}}>{q.nps != null ? q.nps : '—'}</div>
+          <div style={{fontSize:10,color:'var(--ink4)',marginTop:2}}>NPS</div>
+        </div>
+        <div style={{flex:1,minWidth:200}}>
+          <div style={{display:'flex',height:18,borderRadius:9,overflow:'hidden',border:'1px solid var(--line)'}}>
+            <div style={{width:pct(q.promoters)+'%',background:SV_PAL.promoter}}></div>
+            <div style={{width:pct(q.passives)+'%',background:SV_PAL.passive}}></div>
+            <div style={{width:pct(q.detractors)+'%',background:SV_PAL.detractor}}></div>
+          </div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginTop:4}}>
+            <span style={{color:SV_PAL.promoter}}>推奨者 {q.promoters}</span>
+            <span style={{color:SV_PAL.passive}}>中立 {q.passives}</span>
+            <span style={{color:SV_PAL.detractor}}>批判者 {q.detractors}</span>
+          </div>
+          <div style={{fontSize:11,color:'var(--ink4)',marginTop:4}}>平均 {q.average != null ? q.average : '—'}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (q.type === 'scale') {
+    const labels = Object.keys(q.distribution);
+    const data = labels.map(k => q.distribution[k]);
+    return wrap(
+      <>
+        <div style={{fontSize:11,color:'var(--ink4)',marginBottom:6}}>平均 {q.average != null ? q.average : '—'} / {q.max}</div>
+        <ChartCanvas type="bar" h={160} data={{labels, datasets:[{data, backgroundColor:SV_PAL.bar, borderRadius:4}]}} options={svBarOpts(false)}/>
+      </>
+    );
+  }
+
+  if (q.type === 'single' || q.type === 'multi') {
+    const labels = Object.keys(q.counts);
+    const data = labels.map(k => q.counts[k]);
+    return wrap(
+      q.type === 'single'
+        ? <ChartCanvas type="doughnut" h={200} data={{labels, datasets:[{data, backgroundColor:SV_PAL.donut}]}} options={svDonutOpts()}/>
+        : <ChartCanvas type="bar" h={Math.max(140, labels.length*36)} data={{labels, datasets:[{data, backgroundColor:SV_PAL.bar, borderRadius:4}]}} options={svBarOpts(true)}/>
+    );
+  }
+
+  // text
+  return wrap(
+    <div className="stack" style={{gap:6,maxHeight:240,overflow:'auto'}}>
+      {q.responses.map((t,i)=>(
+        <div key={i} style={{fontSize:12,padding:'6px 10px',background:'var(--bg)',borderRadius:6,border:'1px solid var(--line)'}}>{t}</div>
+      ))}
+    </div>
+  );
+}
+
+function SurveyAnalytics({ analytics, loading }){
+  if (loading) return <div className="empty" style={{padding:'30px 20px',fontSize:12}}>集計を読み込み中…</div>;
+  if (!analytics) return null;
+  if (!analytics.questions || analytics.questions.length === 0) {
+    return <div className="empty" style={{padding:'30px 20px',fontSize:12}}>質問が設定されていません</div>;
+  }
+  return (
+    <div className="stack" style={{gap:12,padding:14}}>
+      {analytics.questions.map((q,i) => <QuestionViz key={q.questionId || i} q={q}/>)}
+    </div>
+  );
+}
+
+function SessionMementoRow({ sess, busy, onSave }){
+  const [url, setUrl] = useState(sess.mementoPhotoUrl || "");
+  const [publishAt, setPublishAt] = useState(String(sess.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
+  const [uploading, setUploading] = useState(false);
+  const dirty = (url !== (sess.mementoPhotoUrl || "")) || (publishAt !== String(sess.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
+  return (
+    <div style={{padding:12,border:'1px solid var(--line)',borderRadius:8,background:'var(--white)',marginBottom:10}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+        <span style={{fontWeight:700,fontSize:13}}>Day {sess.order}</span>
+        <span style={{fontSize:12,color:'var(--ink3)'}}>{sess.date || ''}{sess.name ? ' ・ ' + sess.name : ''}</span>
+      </div>
+      <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>記念写真URL</label>
+      <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
+        <input className="input" style={{flex:'1 1 200px',fontSize:12}} value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://... (空ならイベント共通→ヒーロー)"/>
+        <label className={clsx("btn","btn-soft","btn-sm")} style={{cursor:uploading?'wait':'pointer',opacity:uploading?0.6:1}}>
+          <Icon n="upload" s={12}/> {uploading ? ' …' : ' 画像'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" style={{display:'none'}} disabled={uploading}
+            onChange={async (e) => {
+              const file = e.target.files && e.target.files[0];
+              if (!file) return;
+              if (file.size > 15 * 1024 * 1024) { window.toast.error('画像が大きすぎます (最大 15MB)'); e.target.value=''; return; }
+              setUploading(true);
+              try {
+                const compressed = await window.compressImage(file, { maxLong: 2000, quality: 0.82 });
+                const result = await window.postData('uploadPosterImage', {
+                  filename: 'memento-' + sess.id + '-' + file.name.replace(/\.[^.]+$/, '.jpg'),
+                  mimeType: compressed.mimeType, dataBase64: compressed.dataBase64, eventId: sess.eventId || '',
+                });
+                if (result && result.url) { setUrl(result.url); window.toast.success('アップロードしました'); }
+                else throw new Error('アップロード結果が不正です');
+              } catch (err) { window.toast.error('アップロード失敗: ' + (err.message || err)); }
+              finally { setUploading(false); e.target.value=''; }
+            }}/>
+        </label>
+        {url && <button type="button" className="btn btn-soft btn-sm" style={{color:'var(--coral)'}} onClick={()=>setUrl('')}><Icon n="x" s={11}/></button>}
+      </div>
+      <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>記念写真の公開予約 (任意)</label>
+      <input type="datetime-local" className="input" style={{fontSize:12,marginBottom:8}} value={publishAt} onChange={e=>setPublishAt(e.target.value)}/>
+      <div style={{display:'flex',justifyContent:'flex-end'}}>
+        <button className="btn btn-pri btn-sm" disabled={busy || !dirty} onClick={()=>onSave(sess, url, publishAt)}>
+          {busy ? '保存中…' : (dirty ? '保存' : '保存済み')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PagePostEvent(){
+  const [events, setEvents] = useState([]);
+  const [eventId, setEventId] = useState("");
+  const [sessions, setSessions] = useState([]);
+  const [surveys, setSurveys] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [editingSurvey, setEditingSurvey] = useState(null); // {mode, initialValues}
+
+  useEffect(() => {
+    window.fetchData('listEvents')
+      .then(evs => setEvents(Array.isArray(evs) ? evs : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const selectedEvent = events.find(e => e.id === eventId) || null;
+  const isMulti = !!selectedEvent && (selectedEvent.format === 'multi' || sessions.length > 0);
+
+  const loadDetail = useCallback(() => {
+    if (!eventId) { setSessions([]); setSurveys([]); return; }
+    window.fetchData('listEventSessions', { eventId }).then(s => setSessions(Array.isArray(s) ? s : [])).catch(() => setSessions([]));
+    window.fetchData('listSurveys').then(all => setSurveys((Array.isArray(all) ? all : []).filter(s => s.eventId === eventId))).catch(() => setSurveys([]));
+  }, [eventId]);
+  useEffect(() => { loadDetail(); }, [loadDetail]);
+
+  async function saveSessionMemento(sess, url, publishAt) {
+    setBusy(true);
+    try {
+      await window.postData('updateEventSession', { sessionId: sess.id, fields: { mementoPhotoUrl: url || '', mementoPublishAt: publishAt || '' } });
+      window.toast.success('セッションの記念写真を保存しました');
+      loadDetail();
+    } catch (e) { window.toast.error('保存に失敗: ' + (e.message || e)); }
+    finally { setBusy(false); }
+  }
+
+  async function handleSurveySave(payload) {
+    const tplQuestions = Array.isArray(payload._templateQuestions) ? payload._templateQuestions : null;
+    const action = payload._action;
+    const clean = {};
+    for (const k in payload) { if (k[0] !== '_') clean[k] = payload[k]; }
+    if (action === 'createSurveysForSessions') {
+      const result = await window.postData('createSurveysForSessions', clean);
+      if (tplQuestions && result && Array.isArray(result.surveys)) {
+        try { for (const s of result.surveys) await window.postData('saveSurveyQuestions', { surveyId: s.id, questions: tplQuestions }); } catch (e) {}
+      }
+      setEditingSurvey(null);
+      window.toast.success(`${result.created || ''} 件のアンケートを一括作成しました`);
+      loadDetail();
+      return;
+    }
+    const result = await window.postData('createSurvey', clean);
+    if (tplQuestions && result && result.survey && result.survey.id) {
+      try { await window.postData('saveSurveyQuestions', { surveyId: result.survey.id, questions: tplQuestions }); } catch (e) {}
+    }
+    setEditingSurvey(null);
+    window.toast.success('アンケートを作成しました');
+    loadDetail();
+  }
+  async function handleSurveyUpdate(surveyId, payload) {
+    await window.postData('updateSurvey', { surveyId, fields: payload });
+    setEditingSurvey(null);
+    window.toast.success('アンケートを更新しました');
+    loadDetail();
+  }
+  async function handleSurveyStatus(surveyId, status) {
+    try {
+      await window.postData('updateSurvey', { surveyId, fields: { status } });
+      window.toast.success(`ステータスを「${status}」に変更しました`);
+      loadDetail();
+    } catch (e) { window.toast.error('変更に失敗: ' + (e.message || e)); }
+  }
+
+  const activeEvents = events.filter(e => e.status !== 'アーカイブ');
+
+  return (
+    <div className="page">
+      <div className="ph">
+        <div>
+          <div className="ph-title">イベント後のこと</div>
+          <div className="ph-sub">記念写真の公開設定（複数日はセッションごと）と満足度調査を、イベント単位でまとめて管理します。</div>
+        </div>
+      </div>
+
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-body">
+          <label className="field-label">対象イベント</label>
+          <div className="select-wrap">
+            <select className="input select" value={eventId} onChange={e=>setEventId(e.target.value)}>
+              <option value="">選択してください</option>
+              {activeEvents.map(e => (
+                <option key={e.id} value={e.id}>[{e.id}] {e.title}{e.format === 'multi' ? ` (${e.sessionCount || '?'}日間)` : ''}</option>
+              ))}
+            </select>
+          </div>
+          {loading && <div style={{fontSize:12,color:'var(--ink4)',marginTop:8}}>読み込み中…</div>}
+        </div>
+      </div>
+
+      {!eventId ? (
+        <div className="card"><div className="card-body" style={{textAlign:'center',color:'var(--ink4)',fontSize:13,padding:'30px'}}>イベントを選ぶと、記念写真とアンケートの設定が表示されます。</div></div>
+      ) : (
+        <React.Fragment>
+          {/* 記念写真 */}
+          <div className="card" style={{marginBottom:16}}>
+            <div className="card-head"><div className="card-title">🎖 記念写真</div></div>
+            <div className="card-body">
+              {isMulti ? (
+                <React.Fragment>
+                  <div className="field-hint" style={{marginBottom:10}}>複数日イベントです。日（セッション）ごとに記念写真と公開予約を設定できます。空のセッションはイベント共通→ヒーロー画像にフォールバックします。</div>
+                  {sessions.length === 0 ? (
+                    <div style={{fontSize:13,color:'var(--ink4)'}}>セッションがまだありません。イベント編集でセッションを追加してください。</div>
+                  ) : (
+                    sessions.slice().sort((a,b)=>a.order-b.order).map(s => (
+                      <SessionMementoRow key={s.id} sess={s} busy={busy} onSave={saveSessionMemento}/>
+                    ))
+                  )}
+                </React.Fragment>
+              ) : (
+                <div className="field-hint">
+                  単日イベントの記念写真（写真URL・公開予約）は、イベント編集の「参加記念コレクション」で設定します。複数日にするとここで日ごとに分けて設定できます。
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 満足度調査 */}
+          <div className="card">
+            <div className="card-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div className="card-title">⭐ 満足度調査</div>
+              <button className="btn btn-pri btn-sm" onClick={()=>setEditingSurvey({mode:'create', initialValues:{ eventId }})}>
+                <Icon n="plus" s={13}/> アンケートを作成
+              </button>
+            </div>
+            <div className="card-body">
+              {surveys.length === 0 ? (
+                <div style={{fontSize:13,color:'var(--ink4)',textAlign:'center',padding:'18px'}}>このイベントのアンケートはまだありません。</div>
+              ) : (
+                <div className="stack" style={{gap:8}}>
+                  {surveys.map(s => (
+                    <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',border:'1px solid var(--line)',borderRadius:8,flexWrap:'wrap'}}>
+                      <span className={clsx('badge', s.status === '公開中' ? 'badge-green' : s.status === 'アーカイブ' ? 'badge-ink' : 'badge-amber')} style={{fontSize:11}}>{s.status}</span>
+                      <span style={{flex:1,fontSize:13,fontWeight:600,minWidth:140}}>{s.title}</span>
+                      {s.status !== '公開中'
+                        ? <button className="btn btn-soft btn-sm" onClick={()=>handleSurveyStatus(s.id, '公開中')}>公開</button>
+                        : <button className="btn btn-soft btn-sm" onClick={()=>handleSurveyStatus(s.id, '下書き')}>下書きに戻す</button>}
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setEditingSurvey({mode:'edit', initialValues:s})}>編集</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </React.Fragment>
+      )}
+
+      {editingSurvey && (
+        <SurveyModal
+          mode={editingSurvey.mode}
+          initialValues={editingSurvey.initialValues}
+          events={events}
+          onSave={editingSurvey.mode === 'edit'
+            ? (payload) => handleSurveyUpdate(editingSurvey.initialValues.id, payload)
+            : handleSurveySave}
+          onCancel={()=>setEditingSurvey(null)}
+        />
+      )}
+    </div>
+  );
+}
+window.PagePostEvent = PagePostEvent;
+
 function PageSatisfaction(){
   const [surveys, setSurveys] = useState([]);
   const [responses, setResponses] = useState([]);   // 全アンケートの回答
@@ -5066,18 +5785,24 @@ function PageSatisfaction(){
   const [filter, setFilter] = useState("active");   // active / archived / all
   const [editing, setEditing] = useState(null);     // {mode, values}
   const [responseModal, setResponseModal] = useState(null);   // survey or null
+  const [builderSurvey, setBuilderSurvey] = useState(null);   // (Phase 2) 質問ビルダー対象 survey or null
   const [expandedSurvey, setExpandedSurvey] = useState(null);
+  const [registrations, setRegistrations] = useState([]);   // (Phase 3) 回答率算出用
+  const [analytics, setAnalytics] = useState({});           // (Phase 3) surveyId -> 集計結果
+  const [analyticsLoading, setAnalyticsLoading] = useState({}); // surveyId -> bool
 
   async function fetchAll() {
     setLoading(true);
     setError(null);
     try {
-      const [svs, evs] = await Promise.all([
+      const [svs, evs, regs] = await Promise.all([
         window.fetchData('listSurveys'),
         window.fetchData('listEvents'),
+        window.fetchData('listRegistrations').catch(() => []),
       ]);
       setSurveys(Array.isArray(svs) ? svs : []);
       setEvents(Array.isArray(evs) ? evs : []);
+      setRegistrations(Array.isArray(regs) ? regs : []);
       // 全アンケートの回答を並列取得
       const respArrays = await Promise.all(
         (Array.isArray(svs) ? svs : []).map(s =>
@@ -5124,6 +5849,37 @@ function PageSatisfaction(){
     return responses.filter(r => r.surveyId === surveyId);
   }
 
+  // (Phase 3) チェックイン済み人数 = 回答率の母数
+  function checkedInForSurvey(s) {
+    if (!s) return 0;
+    return registrations.filter(r =>
+      r.eventId === s.eventId &&
+      (s.sessionId ? r.sessionId === s.sessionId : true) &&
+      r.status === 'チェックイン済'
+    ).length;
+  }
+
+  // (Phase 3) 集計を遅延ロード (展開時のみ取得)
+  async function loadAnalytics(surveyId) {
+    if (analytics[surveyId] || analyticsLoading[surveyId]) return;
+    setAnalyticsLoading(m => ({ ...m, [surveyId]: true }));
+    try {
+      const res = await window.fetchData('getSurveyAnalytics', { surveyId });
+      setAnalytics(m => ({ ...m, [surveyId]: res }));
+    } catch (e) {
+      window.toast.error('集計の取得に失敗しました');
+    } finally {
+      setAnalyticsLoading(m => ({ ...m, [surveyId]: false }));
+    }
+  }
+
+  // (Phase 3) カード展開のトグル + 集計ロード
+  function toggleExpand(s) {
+    const next = expandedSurvey === s.id ? null : s.id;
+    setExpandedSurvey(next);
+    if (next) loadAnalytics(s.id);
+  }
+
   // NPS 計算 (推奨者 9-10、批判者 0-6)
   function calcNps(resps) {
     const valid = resps.filter(r => r.nps !== null && r.nps !== undefined);
@@ -5149,19 +5905,36 @@ function PageSatisfaction(){
   // ========== CRUD アクション ==========
 
   async function handleCreate(payload) {
-    if (payload._action === 'createSurveysForSessions') {
-      // _action を除いたコピーを作成 (Babel _excluded 衝突回避)
-      const rest = {};
-      for (const k in payload) {
-        if (k !== '_action') rest[k] = payload[k];
+    // _ 接頭辞フィールド (テンプレート/アクション) を分離。 GAS には渡さない。
+    const tplQuestions = Array.isArray(payload._templateQuestions) ? payload._templateQuestions : null;
+    const action = payload._action;
+    const clean = {};
+    for (const k in payload) { if (k[0] !== '_') clean[k] = payload[k]; }
+
+    if (action === 'createSurveysForSessions') {
+      const result = await window.postData('createSurveysForSessions', clean);
+      if (tplQuestions && result && Array.isArray(result.surveys)) {
+        try {
+          for (const s of result.surveys) {
+            await window.postData('saveSurveyQuestions', { surveyId: s.id, questions: tplQuestions });
+          }
+        } catch (e) {
+          window.toast.error('一部の質問流し込みに失敗しました。ビルダーで確認してください');
+        }
       }
-      const result = await window.postData('createSurveysForSessions', rest);
       setEditing(null);
       window.toast.success(`${result.created || ''} 件のアンケートを一括作成しました`);
       await fetchAll();
       return;
     }
-    await window.postData('createSurvey', payload);
+    const result = await window.postData('createSurvey', clean);
+    if (tplQuestions && result && result.survey && result.survey.id) {
+      try {
+        await window.postData('saveSurveyQuestions', { surveyId: result.survey.id, questions: tplQuestions });
+      } catch (e) {
+        window.toast.error('質問の流し込みに失敗しました。ビルダーで設定してください');
+      }
+    }
     setEditing(null);
     window.toast.success('アンケートを作成しました');
     await fetchAll();
@@ -5195,6 +5968,17 @@ function PageSatisfaction(){
     setResponseModal(null);
     window.toast.success('回答を登録しました');
     await fetchAll();
+  }
+
+  // (Phase 2) ライフサイクル: ワンクリックでステータス変更
+  async function handleStatusChange(surveyId, newStatus) {
+    try {
+      await window.postData('updateSurvey', { surveyId, fields: { status: newStatus } });
+      window.toast.success(`ステータスを「${newStatus}」に変更しました`);
+      await fetchAll();
+    } catch (err) {
+      window.toast.error('変更に失敗しました: ' + (err.message || err));
+    }
   }
 
   async function handleResponseDelete(responseId) {
@@ -5264,10 +6048,12 @@ function PageSatisfaction(){
             const resps = getResponsesFor(s.id);
             const sNps = calcNps(resps);
             const sCsat = calcCsat(resps);
+            const sCheckedIn = checkedInForSurvey(s);
+            const sRate = sCheckedIn > 0 ? Math.round(resps.length / sCheckedIn * 100) : null;
             const isExpanded = expandedSurvey === s.id;
             return (
               <div key={s.id} className="card">
-                <div className="card-head" style={{cursor:'pointer'}} onClick={()=>setExpandedSurvey(isExpanded ? null : s.id)}>
+                <div className="card-head" style={{cursor:'pointer'}} onClick={()=>toggleExpand(s)}>
                   <div style={{flex:1,display:'flex',alignItems:'center',gap:10}}>
                     <div style={{width:4,height:32,background:`var(--${s.eventAccent})`,borderRadius:2}}></div>
                     <div>
@@ -5290,6 +6076,12 @@ function PageSatisfaction(){
                       <div style={{fontSize:11,color:'var(--ink4)'}}>回答</div>
                       <div style={{fontFamily:'var(--serif)',fontSize:18}}>{resps.length}</div>
                     </div>
+                    <div style={{textAlign:'right'}} title={sCheckedIn > 0 ? `回答 ${resps.length} / チェックイン ${sCheckedIn}` : 'チェックイン人数が未取得'}>
+                      <div style={{fontSize:11,color:'var(--ink4)'}}>回答率</div>
+                      <div style={{fontFamily:'var(--serif)',fontSize:18,color: sRate !== null ? 'var(--indigo)' : 'var(--ink4)'}}>
+                        {sRate !== null ? sRate + '%' : '—'}
+                      </div>
+                    </div>
                     <div style={{textAlign:'right'}}>
                       <div style={{fontSize:11,color:'var(--ink4)'}}>NPS</div>
                       <div style={{fontFamily:'var(--serif)',fontSize:18,color: sNps !== null ? (sNps >= 0 ? 'var(--green)' : 'var(--coral)') : 'var(--ink4)'}}>
@@ -5302,6 +6094,26 @@ function PageSatisfaction(){
                         {sCsat !== null ? sCsat : '—'}
                       </div>
                     </div>
+                    {window.canDo('surveys.update') && s.status === '下書き' && (
+                      <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '公開中');}} style={{color:'var(--green)'}} title="公開して参加者に回答可にする">
+                        <Icon n="check" s={12}/> 公開
+                      </button>
+                    )}
+                    {window.canDo('surveys.update') && s.status === '公開中' && (
+                      <>
+                        <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '終了');}} title="回答受付を終了する">
+                          終了
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '下書き');}} title="下書きに戻す">
+                          下書き
+                        </button>
+                      </>
+                    )}
+                    {window.canDo('surveys.update') && s.status === '終了' && (
+                      <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '公開中');}} style={{color:'var(--green)'}} title="再公開する">
+                        <Icon n="check" s={12}/> 再公開
+                      </button>
+                    )}
                     <span className={clsx("badge", s.status==="公開中"?"badge-green":s.status==="下書き"?"badge-amber":"badge-ink")}>
                       <span className="badge-dot"></span>{s.status}
                     </span>
@@ -5313,11 +6125,17 @@ function PageSatisfaction(){
                   <div style={{borderTop:'1px solid var(--line)'}}>
                     <div style={{padding:14,background:'var(--bg2)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <div style={{fontSize:12,color:'var(--ink3)'}}>
-                        <b>質問1 (NPS):</b> {s.question1}<br/>
-                        <b>質問2 (満足度):</b> {s.question2}<br/>
-                        <b>質問3 (自由):</b> {s.question3}
+                        回答 <b>{resps.length}</b>
+                        {sCheckedIn > 0
+                          ? <> / チェックイン <b>{sCheckedIn}</b> 名 · 回答率 <b style={{color:'var(--indigo)'}}>{sRate}%</b></>
+                          : <span style={{color:'var(--ink5)'}}> · チェックイン人数なし</span>}
                       </div>
                       <div style={{display:'flex',gap:6}}>
+                        {window.canDo('surveys.update') && (
+                          <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); setBuilderSurvey(s);}}>
+                            <Icon n="edit" s={12}/> 質問を編集
+                          </button>
+                        )}
                         {window.canDo('surveys.update') && (
                           <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); setResponseModal(s);}}>
                             <Icon n="plus" s={12}/> 回答登録
@@ -5325,7 +6143,7 @@ function PageSatisfaction(){
                         )}
                         {window.canDo('surveys.update') && (
                           <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); setEditing({mode:'edit', values:s});}}>
-                            <Icon n="edit" s={12}/> 編集
+                            <Icon n="edit" s={12}/> 設定
                           </button>
                         )}
                         {s.status !== 'アーカイブ' && window.canDo('surveys.delete') && (
@@ -5335,6 +6153,9 @@ function PageSatisfaction(){
                         )}
                       </div>
                     </div>
+                    <SurveyAnalytics analytics={analytics[s.id]} loading={analyticsLoading[s.id]}/>
+
+                    <div style={{padding:'10px 14px',fontSize:11,color:'var(--ink4)',borderTop:'1px solid var(--line)',background:'var(--bg2)',fontWeight:600}}>個別回答</div>
                     {resps.length === 0 ? (
                       <div className="empty" style={{padding:'30px 20px'}}>
                         <div style={{fontSize:12}}>まだ回答がありません</div>
@@ -5405,6 +6226,14 @@ function PageSatisfaction(){
           survey={responseModal}
           onSave={handleResponseCreate}
           onCancel={()=>setResponseModal(null)}
+        />
+      )}
+
+      {builderSurvey && (
+        <QuestionBuilderModal
+          survey={builderSurvey}
+          onClose={()=>setBuilderSurvey(null)}
+          onSaved={()=>fetchAll()}
         />
       )}
     </div>
@@ -8011,6 +8840,7 @@ function PageEventAdminDetail() {
   const [detailModalApp, setDetailModalApp] = useState(null);
   const [activityModal, setActivityModal] = useState(null);  // (Phase 17.K) {mode, activity?, defaultSessionId?}
   const [bulkMailOpen, setBulkMailOpen] = useState(false);  // (Phase 17.M-B4)
+  const [bulkMailPreset, setBulkMailPreset] = useState(null);  // (満足度調査) 送信プリセット or null
   const [trendPattern, setTrendPattern] = useState(null);  // (Phase 17.N-2) 過去パターン
   const [promos, setPromos] = useState([]);  // (Phase 17.O) 広報イベント
   const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
@@ -8381,8 +9211,29 @@ function PageEventAdminDetail() {
               <Icon n="edit" s={12}/> 編集
             </button>
             {/* (Phase 17.M-B4) 一斉メール送信 */}
-            <button className="jb-btn" onClick={() => setBulkMailOpen(true)}>
+            <button className="jb-btn" onClick={() => { setBulkMailPreset(null); setBulkMailOpen(true); }}>
               <Icon n="mail" s={12}/> 一斉メール
+            </button>
+            {/* (満足度調査) アンケート依頼メール — チェックイン済のみ、 マイページ導線を事前充填 */}
+            <button className="jb-btn" onClick={() => {
+              setBulkMailPreset({
+                subject: `【connec+a】 ${event.title || '{{event}}'} アンケートのお願い`,
+                body: `{{name}} 様\n\n先日は {{event}} にご参加いただきありがとうございました。\nよりよいイベントづくりのため、 満足度アンケートにご協力ください (所要 1〜2 分)。\n\n下記マイページからご回答いただけます。\nhttps://connectahubis-source.github.io/event\n\nご回答お待ちしております。\nconnec+a`,
+                statuses: ['チェックイン済'],
+              });
+              setBulkMailOpen(true);
+            }}>
+              <Icon n="star" s={12}/> 満足度調査を送信
+            </button>
+            {/* (満足度調査) マイページ (回答導線) リンクをコピー */}
+            <button className="jb-btn" onClick={() => {
+              const url = 'https://connectahubis-source.github.io/event';
+              navigator.clipboard.writeText(url).then(
+                () => window.toast.success('アンケート回答ページ (マイページ) のリンクをコピーしました'),
+                () => window.toast.error('コピーに失敗しました')
+              );
+            }} title="参加者がアンケートに回答するマイページの URL をコピー">
+              <Icon n="link" s={12}/> リンクをコピー
             </button>
             {/* (Phase 17.M-B2) 印刷 (= タイムテーブル + 出席者) */}
             <button className="jb-btn" onClick={() => window.print()}>
@@ -8670,7 +9521,8 @@ function PageEventAdminDetail() {
         <BulkMailModal
           event={event}
           appCount={apps.length}
-          onClose={() => setBulkMailOpen(false)}
+          preset={bulkMailPreset}
+          onClose={() => { setBulkMailOpen(false); setBulkMailPreset(null); }}
         />
       )}
     </div>
@@ -9121,12 +9973,12 @@ function FormRow({ label, children }) {
 // =============================================================================
 // (Phase 17.M-B4) BulkMailModal — 同イベントの 全申込者へ一斉メール送信
 // =============================================================================
-function BulkMailModal({ event, appCount, onClose }) {
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+function BulkMailModal({ event, appCount, preset, onClose }) {
+  const [subject, setSubject] = useState((preset && preset.subject) || '');
+  const [body, setBody] = useState((preset && preset.body) || '');
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);
-  const [statuses, setStatuses] = useState(['申込済み','決済済み','チェックイン保留','チェックイン済']);
+  const [statuses, setStatuses] = useState((preset && Array.isArray(preset.statuses)) ? preset.statuses : ['申込済み','決済済み','チェックイン保留','チェックイン済']);
   const [view, setView] = useState('edit');  // 'edit' | 'preview'
 
   const toggleStatus = (s) => {
@@ -9293,10 +10145,10 @@ function BulkMailModal({ event, appCount, onClose }) {
             )}
 
             {view === 'preview' && (
-              <div style={{padding:'22px 26px',background:'#F2F7FB'}}>
+              <div style={{padding:'22px 26px',background:'var(--jb-paper-mist)'}}>
                 {/* メールヘッダー風 */}
                 <div style={{
-                  background:'#fff',
+                  background:'var(--white)',
                   border:'1px solid #D8E4ED',
                   borderRadius:8,
                   overflow:'hidden',
@@ -9321,7 +10173,7 @@ function BulkMailModal({ event, appCount, onClose }) {
                     </div>
                     <div style={{
                       width:56,height:56,
-                      background:'#fff',borderRadius:8,
+                      background:'var(--white)',borderRadius:8,
                       display:'flex',alignItems:'center',justifyContent:'center',
                       flexShrink:0,
                     }}>
@@ -9391,14 +10243,33 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
     a.click();
     setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
   };
+  // (Phase 17.S-fix) 同伴者を CSV セル用に整形 ("名前(年齢・種別); ...")
+  const formatCompanionsForCsv = (r) => {
+    let comps = [];
+    if (Array.isArray(r.companions) && r.companions.length > 0) {
+      comps = r.companions;
+    } else if (r.companions && typeof r.companions === 'string') {
+      try { const arr = JSON.parse(r.companions); if (Array.isArray(arr)) comps = arr; } catch (e) {}
+    }
+    if (!comps || comps.length === 0) return '';
+    return comps.map(c => {
+      const meta = [
+        (c.age != null && c.age !== '') ? c.age + '歳' : '',
+        c.kind || '',
+      ].filter(Boolean).join('・');
+      return (c.name || '') + (meta ? '(' + meta + ')' : '');
+    }).join('; ');
+  };
+
   const exportDayCsv = (sess) => {
     const sessRegs = regs.filter(r => r.sessionId === sess.id);
     const active = sessRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
     const rows = [
-      ['RegID','名前','メール','ステータス','決済','金額','備考'],
+      ['RegID','名前','メール','ステータス','決済','金額','同伴者人数','総来場人数','同伴者詳細','備考'],
       ...active.map(r => {
         const p = participantMap[r.userId] || {};
-        return [r.id, p.name || r.userId, p.email || '', r.status, r.paid ? '済' : '未', r.amount || '', r.note || ''];
+        const cc = Number(r.companionsCount) || 0;
+        return [r.id, p.name || r.userId, p.email || '', r.status, r.paid ? '済' : '未', r.amount || '', cc, cc + 1, formatCompanionsForCsv(r), r.note || ''];
       }),
     ];
     const dateStr = (sess.date || '').replace(/-/g, '');
@@ -9406,14 +10277,15 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
   };
   const exportAllCsv = () => {
     const rows = [
-      ['EventID','Day','RegID','名前','メール','ステータス','決済','金額','備考'],
+      ['EventID','Day','RegID','名前','メール','ステータス','決済','金額','同伴者人数','総来場人数','同伴者詳細','備考'],
     ];
     sessions.forEach(sess => {
       const sessRegs = regs.filter(r => r.sessionId === sess.id);
       const active = sessRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
       active.forEach(r => {
         const p = participantMap[r.userId] || {};
-        rows.push([event.id, `Day${sess.order || ''}`, r.id, p.name || r.userId, p.email || '', r.status, r.paid ? '済' : '未', r.amount || '', r.note || '']);
+        const cc = Number(r.companionsCount) || 0;
+        rows.push([event.id, `Day${sess.order || ''}`, r.id, p.name || r.userId, p.email || '', r.status, r.paid ? '済' : '未', r.amount || '', cc, cc + 1, formatCompanionsForCsv(r), r.note || '']);
       });
     });
     downloadCsv(`${event.id}_all_attendees.csv`, rows);
@@ -9619,6 +10491,7 @@ window.EventMapEmbed = EventMapEmbed;
 window.RegistrationModal = RegistrationModal;
 window.SurveyModal = SurveyModal;
 window.ResponseModal = ResponseModal;
+window.QuestionBuilderModal = QuestionBuilderModal;
 
 })();
 </script>
@@ -9967,6 +10840,12 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
   const [category, setCategory] = useState(init.category || "お知らせ");
   const [body, setBody] = useState(init.body || "");
   const [status, setStatus] = useState(init.status || "下書き");
+  // (P2-i18n) 多言語フィールド
+  const [titleEasy, setTitleEasy] = useState(init.title_easy || "");
+  const [titleEn, setTitleEn] = useState(init.title_en || "");
+  const [bodyEasy, setBodyEasy] = useState(init.body_easy || "");
+  const [bodyEn, setBodyEn] = useState(init.body_en || "");
+  const [showI18n, setShowI18n] = useState(false);
   // (Phase 15.S35) 画像 URL
   const [coverImageUrl, setCoverImageUrl] = useState(init.coverImageUrl || "");
   const [thumbnailImageUrl, setThumbnailImageUrl] = useState(init.thumbnailImageUrl || "");
@@ -9986,6 +10865,10 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
         status: publishStatus || status,
         coverImageUrl: coverImageUrl.trim(),
         thumbnailImageUrl: thumbnailImageUrl.trim(),
+        title_easy: titleEasy.trim(),
+        title_en: titleEn.trim(),
+        body_easy: bodyEasy.trim(),
+        body_en: bodyEn.trim(),
       });
     } catch (err) {
       setError(err.message || String(err));
@@ -10034,6 +10917,36 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
             <label className="field-label">本文 <span className="field-req">*</span></label>
             <textarea className="input" style={{height:280,padding:12,resize:'vertical',fontSize:13,lineHeight:1.6}} value={body} onChange={e=>setBody(e.target.value)} placeholder="記事本文を入力..."/>
             <div className="field-hint">Markdown 記法に対応</div>
+          </div>
+
+          {/* (P2-i18n) 多言語 (やさしい日本語 / English) — 任意 */}
+          <div style={{border:'1px solid var(--line)',borderRadius:8,padding:'10px 12px',background:'var(--surface-2,rgba(0,0,0,0.02))'}}>
+            <button type="button" className="btn btn-ghost btn-sm" style={{padding:'2px 4px',fontSize:12}} onClick={()=>setShowI18n(v=>!v)}>
+              <Icon n={showI18n ? 'chevron-down' : 'chevron-right'} s={13}/> 多言語 (やさしい日本語 / English) ・ 任意
+            </button>
+            {showI18n && (
+              <div className="stack" style={{gap:12,marginTop:10}}>
+                <div style={{fontSize:11,color:'var(--ink4)'}}>未入力の項目は日本語が表示されます。参加者が言語を切り替えるとここで入れた文が表示されます。</div>
+                <div className="grid-2" style={{gap:12}}>
+                  <div className="field">
+                    <label className="field-label">タイトル (やさしい日本語)</label>
+                    <input className="input" value={titleEasy} onChange={e=>setTitleEasy(e.target.value)} placeholder="やさしい日本語のタイトル"/>
+                  </div>
+                  <div className="field">
+                    <label className="field-label">タイトル (English)</label>
+                    <input className="input" value={titleEn} onChange={e=>setTitleEn(e.target.value)} placeholder="English title"/>
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="field-label">本文 (やさしい日本語)</label>
+                  <textarea className="input" style={{height:140,padding:10,resize:'vertical',fontSize:13,lineHeight:1.6}} value={bodyEasy} onChange={e=>setBodyEasy(e.target.value)} placeholder="やさしい日本語の本文"/>
+                </div>
+                <div className="field">
+                  <label className="field-label">本文 (English)</label>
+                  <textarea className="input" style={{height:140,padding:10,resize:'vertical',fontSize:13,lineHeight:1.6}} value={bodyEn} onChange={e=>setBodyEn(e.target.value)} placeholder="English body"/>
+                </div>
+              </div>
+            )}
           </div>
           {/* (Phase 15.S35) 画像 URL */}
           <div className="grid-2" style={{gap:14}}>
@@ -11220,6 +12133,7 @@ const EventMapEmbed = window.EventMapEmbed;
 const RegistrationModal = window.RegistrationModal;
 const SurveyModal = window.SurveyModal;
 const ResponseModal = window.ResponseModal;
+const QuestionBuilderModal = window.QuestionBuilderModal;
 
 // -------------------- PageParticipants --------------------
 
@@ -12398,7 +13312,7 @@ function PayPayEventCard({ stat, links, registrations, onRefresh, expanded, onTo
 
   return (
     <div style={{
-      background:'#fff',
+      background:'var(--white)',
       border:'1px solid var(--line)',
       borderRadius:8,
       overflow:'hidden',
@@ -12860,7 +13774,7 @@ function PayPayRegistrationsList({ eventId, registrations, onRefresh }) {
                       disabled={submitting}
                       style={{
                         padding:'3px 8px', fontSize:9,
-                        background:'#fff', border:'1px solid #166534',
+                        background:'var(--white)', border:'1px solid #166534',
                         color:'#166534', borderRadius:3, cursor:'pointer',
                       }}>メール送信</button>
                   )}
@@ -13064,7 +13978,7 @@ function PageCoupons() {
         </div>
       ) : (
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',background:'#fff',border:'1px solid var(--line)',fontSize:13}}>
+          <table style={{width:'100%',borderCollapse:'collapse',background:'var(--white)',border:'1px solid var(--line)',fontSize:13}}>
             <thead>
               <tr style={{background:'var(--bg2)',borderBottom:'1px solid var(--line)'}}>
                 <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12,color:'var(--ink2)'}}>コード</th>
@@ -13141,7 +14055,7 @@ function PageCoupons() {
                           取得URL
                         </button>
                         <button onClick={() => openUsage(c)} className="btn-mini"
-                          style={{padding:'4px 10px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink2)'}}>
+                          style={{padding:'4px 10px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink2)'}}>
                           履歴
                         </button>
                         <button onClick={() => setEditTarget(c)} className="btn-mini"
@@ -13149,7 +14063,7 @@ function PageCoupons() {
                           編集
                         </button>
                         <button onClick={() => handleDelete(c.id, c.code)} className="btn-mini"
-                          style={{padding:'4px 10px',background:'#fff',border:'1px solid #dc2626',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--jb-shouwa)'}}>
+                          style={{padding:'4px 10px',background:'var(--white)',border:'1px solid #dc2626',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--jb-shouwa)'}}>
                           削除
                         </button>
                       </div>
@@ -13170,7 +14084,7 @@ function PageCoupons() {
           display:'flex',alignItems:'center',justifyContent:'center',padding:20,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            background:'#fff',borderRadius:8,padding:24,maxWidth:560,width:'100%',
+            background:'var(--white)',borderRadius:8,padding:24,maxWidth:560,width:'100%',
             boxShadow:'0 20px 50px rgba(0,0,0,0.3)',
           }}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -13205,7 +14119,7 @@ function PageCoupons() {
                   style={{flex:1,fontSize:14,fontFamily:'var(--mono)',fontWeight:700,letterSpacing:'0.06em'}}
                   onClick={e => e.target.select()}/>
                 <button onClick={() => copyToClipboard(shareTarget.code, 'コードをコピーしました')}
-                  style={{padding:'8px 14px',background:'#fff',color:'var(--jb-blue-deep)',border:'1px solid var(--jb-blue-deep)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  style={{padding:'8px 14px',background:'var(--white)',color:'var(--jb-blue-deep)',border:'1px solid var(--jb-blue-deep)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
                   コピー
                 </button>
               </div>
@@ -13315,7 +14229,7 @@ function CouponEditForm({ target, events, onCancel, onSaved }) {
     <div className="page" style={{padding:'24px',maxWidth:800}}>
       <div style={{marginBottom:18,display:'flex',alignItems:'center',gap:12}}>
         <button onClick={onCancel}
-          style={{padding:'6px 12px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+          style={{padding:'6px 12px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
           ← 一覧へ戻る
         </button>
         <h1 style={{fontSize:20,fontWeight:700,margin:0,color:'var(--ink1)'}}>
@@ -13329,7 +14243,7 @@ function CouponEditForm({ target, events, onCancel, onSaved }) {
         </div>
       )}
 
-      <div style={{background:'#fff',border:'1px solid var(--line)',borderRadius:6,padding:24,display:'flex',flexDirection:'column',gap:18}}>
+      <div style={{background:'var(--white)',border:'1px solid var(--line)',borderRadius:6,padding:24,display:'flex',flexDirection:'column',gap:18}}>
         {/* コード */}
         <div className="field">
           <label className="field-label">クーポンコード <span className="field-req">*</span></label>
@@ -13485,7 +14399,7 @@ function CouponEditForm({ target, events, onCancel, onSaved }) {
         {/* ボタン */}
         <div style={{display:'flex',gap:12,justifyContent:'flex-end',paddingTop:12,borderTop:'1px solid var(--line)'}}>
           <button onClick={onCancel} disabled={saving}
-            style={{padding:'10px 20px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:13,cursor:saving?'not-allowed':'pointer',color:'var(--ink2)'}}>
+            style={{padding:'10px 20px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:6,fontSize:13,cursor:saving?'not-allowed':'pointer',color:'var(--ink2)'}}>
             キャンセル
           </button>
           <button onClick={handleSubmit} disabled={saving}
@@ -13506,7 +14420,7 @@ function CouponUsageView({ coupon, usage, loading, onClose }) {
     <div className="page" style={{padding:'24px',maxWidth:900}}>
       <div style={{marginBottom:18,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
         <button onClick={onClose}
-          style={{padding:'6px 12px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+          style={{padding:'6px 12px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
           ← 一覧へ戻る
         </button>
         <h1 style={{fontSize:20,fontWeight:700,margin:0,color:'var(--ink1)'}}>
@@ -13525,7 +14439,7 @@ function CouponUsageView({ coupon, usage, loading, onClose }) {
           まだ使用履歴がありません
         </div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',background:'#fff',border:'1px solid var(--line)',fontSize:13}}>
+        <table style={{width:'100%',borderCollapse:'collapse',background:'var(--white)',border:'1px solid var(--line)',fontSize:13}}>
           <thead>
             <tr style={{background:'var(--bg2)',borderBottom:'1px solid var(--line)'}}>
               <th style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:12}}>使用日時</th>
@@ -13795,7 +14709,7 @@ function PagePayments(){
         <select value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)}
           style={{
             padding:'6px 12px',border:'1px solid var(--line)',borderRadius:6,
-            fontSize:13,background:'#fff',minWidth:240,cursor:'pointer',
+            fontSize:13,background:'var(--white)',minWidth:240,cursor:'pointer',
           }}>
           <option value="">すべてのイベント</option>
           {revenueSummary.map(s => (
@@ -13806,7 +14720,7 @@ function PagePayments(){
         </select>
         {selectedEventId && (
           <button onClick={() => setSelectedEventId('')}
-            style={{padding:'4px 10px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink3)'}}>
+            style={{padding:'4px 10px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink3)'}}>
             クリア
           </button>
         )}
@@ -14203,7 +15117,7 @@ function PagePayments(){
             <span style={{fontSize:11,color:'var(--ink4)'}}>{logLoading ? '読み込み中...' : `${paymentLog.length} 件`}</span>
             <div style={{flex:1}}/>
             <button onClick={() => reloadPaymentLog({})}
-              style={{padding:'4px 10px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink2)'}}>
+              style={{padding:'4px 10px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--ink2)'}}>
               再読込
             </button>
           </div>
@@ -16415,7 +17329,7 @@ function PaymentMethodChangeModal({ target, onCancel, onSubmit }) {
       display:'flex',alignItems:'center',justifyContent:'center',padding:20,
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:'#fff',borderRadius:8,padding:24,maxWidth:480,width:'100%',
+        background:'var(--white)',borderRadius:8,padding:24,maxWidth:480,width:'100%',
         boxShadow:'0 20px 50px rgba(0,0,0,0.3)',
       }}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
@@ -16470,7 +17384,7 @@ function PaymentMethodChangeModal({ target, onCancel, onSubmit }) {
 
         <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18,paddingTop:14,borderTop:'1px solid var(--line)'}}>
           <button onClick={onCancel} disabled={submitting}
-            style={{padding:'8px 16px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+            style={{padding:'8px 16px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
             キャンセル
           </button>
           <button onClick={handleSubmit} disabled={submitting}
@@ -16522,7 +17436,7 @@ function PaymentRefundModal({ target, onCancel, onSubmit }) {
       display:'flex',alignItems:'center',justifyContent:'center',padding:20,
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:'#fff',borderRadius:8,padding:24,maxWidth:480,width:'100%',
+        background:'var(--white)',borderRadius:8,padding:24,maxWidth:480,width:'100%',
         boxShadow:'0 20px 50px rgba(0,0,0,0.3)',
         borderTop: '4px solid #dc2626',
       }}>
@@ -16567,7 +17481,7 @@ function PaymentRefundModal({ target, onCancel, onSubmit }) {
 
         <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18,paddingTop:14,borderTop:'1px solid var(--line)'}}>
           <button onClick={onCancel} disabled={submitting}
-            style={{padding:'8px 16px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
+            style={{padding:'8px 16px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:6,fontSize:12,cursor:'pointer',color:'var(--ink2)'}}>
             キャンセル
           </button>
           <button onClick={handleSubmit} disabled={submitting}
@@ -16761,7 +17675,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
       {/* フィルタバー */}
       <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:14,flexWrap:'wrap',padding:'10px 14px',background:'var(--bg2)',borderRadius:8}}>
         <select value={selectedEventId} onChange={e => onSelectEvent(e.target.value)}
-          style={{padding:'6px 10px',border:'1px solid var(--line)',borderRadius:4,fontSize:12,background:'#fff',minWidth:200}}>
+          style={{padding:'6px 10px',border:'1px solid var(--line)',borderRadius:4,fontSize:12,background:'var(--white)',minWidth:200}}>
           <option value="">すべてのイベント</option>
           {revenueSummary.map(s => (
             <option key={s.eventId} value={s.eventId}>{s.title}{s.date ? ` (${s.date})` : ''}</option>
@@ -16782,7 +17696,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
         </div>
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="RegID / 参加者 / イベント で検索"
-          style={{flex:1,minWidth:200,padding:'6px 12px',border:'1px solid var(--line)',borderRadius:4,fontSize:12,background:'#fff'}}/>
+          style={{flex:1,minWidth:200,padding:'6px 12px',border:'1px solid var(--line)',borderRadius:4,fontSize:12,background:'var(--white)'}}/>
         <span style={{fontSize:11,color:'var(--ink4)'}}>{loading ? '...' : `${groupedVisible.length} 件 (申込数: ${visible.length})`}</span>
       </div>
 
@@ -16894,7 +17808,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
                       {!isCancelled && (
                         <div style={{display:'inline-flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
                           <button onClick={() => onMethodChange(modalTarget)}
-                            style={{padding:'3px 8px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink2)'}}>
+                            style={{padding:'3px 8px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink2)'}}>
                             方法変更
                           </button>
                           {/* (Phase 15.S126/S127) 返金ボタン: 「決済済み」 または「返金待ち」 の場合のみ */}
@@ -16928,7 +17842,7 @@ function RegistrationsPaymentTable({ revenueSummary, selectedEventId, onSelectEv
                                 onTogglePaid(allRegIds, false);
                               }
                             }}
-                              style={{padding:'3px 8px',background:'#fff',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink3)'}}>
+                              style={{padding:'3px 8px',background:'var(--white)',border:'1px solid var(--line)',borderRadius:4,fontSize:10,cursor:'pointer',color:'var(--ink3)'}}>
                               未決済に戻す
                             </button>
                           )}
@@ -17445,6 +18359,71 @@ function SessionEditor({session, index, onChange, onDelete, zoomHistory, feeMode
   );
 }
 
+function autoSealForCategory(cat){
+  switch(String(cat||'').trim()){
+    case 'IFT': return 'passport';
+    case 'hub': return 'minimal';
+    case 'community': return 'beaded';
+    case 'order made': return 'laurel';
+    default: return 'classic';
+  }
+}
+function MementoSealPreview({variant, date, size}){
+  const uid = 'ams' + Math.random().toString(36).slice(2,8);
+  const s = size || 84;
+  const v = variant || 'classic';
+  let inner;
+  if(v==='beaded'){
+    inner = (<g>
+      <circle cx="60" cy="60" r="55" fill="none" stroke="currentColor" strokeWidth="3.4" strokeDasharray="3.6 4.4"/>
+      <circle cx="60" cy="60" r="45" fill="none" stroke="currentColor" strokeWidth="1.4"/>
+      <polygon points="60,35 64.17,46.25 76.2,46.73 66.76,54.2 70.01,65.79 60,59.1 49.99,65.79 53.24,54.2 43.8,46.73 55.83,46.25" fill="currentColor"/>
+      <text x="60" y="94" fontSize="11" fontWeight="700" fill="currentColor" textAnchor="middle" style={{fontFamily:'var(--mono)'}}>{date}</text>
+    </g>);
+  } else if(v==='laurel'){
+    inner = (<g>
+      <path d="M26 82 C16 60 24 38 40 30" fill="none" stroke="currentColor" strokeWidth="2.2"/>
+      <ellipse cx="22" cy="68" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(40 22 68)"/>
+      <ellipse cx="20" cy="58" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(25 20 58)"/>
+      <ellipse cx="24" cy="48" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(5 24 48)"/>
+      <ellipse cx="32" cy="38" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(-20 32 38)"/>
+      <path d="M94 82 C104 60 96 38 80 30" fill="none" stroke="currentColor" strokeWidth="2.2"/>
+      <ellipse cx="98" cy="68" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(-40 98 68)"/>
+      <ellipse cx="100" cy="58" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(-25 100 58)"/>
+      <ellipse cx="96" cy="48" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(-5 96 48)"/>
+      <ellipse cx="88" cy="38" rx="5.5" ry="2.6" fill="currentColor" transform="rotate(20 88 38)"/>
+      <text x="60" y="64" fontSize="30" fill="currentColor" textAnchor="middle" style={{fontFamily:'var(--serif)',fontWeight:700}}>A</text>
+      <text x="60" y="92" fontSize="10" fontWeight="700" fill="currentColor" textAnchor="middle" style={{fontFamily:'var(--mono)'}}>{date}</text>
+    </g>);
+  } else if(v==='passport'){
+    inner = (<g>
+      <rect x="14" y="32" width="92" height="56" rx="7" fill="none" stroke="currentColor" strokeWidth="2.6"/>
+      <rect x="20" y="38" width="80" height="44" rx="4" fill="none" stroke="currentColor" strokeWidth="0.9"/>
+      <text x="60" y="56" fontSize="10" letterSpacing="2.5" fontWeight="700" fill="currentColor" textAnchor="middle" style={{fontFamily:'var(--mono)'}}>CONNEC+A</text>
+      <path d="M30 63 h60" stroke="currentColor" strokeWidth="0.9" opacity="0.5"/>
+      <text x="60" y="77" fontSize="11" fontWeight="700" fill="currentColor" textAnchor="middle" style={{fontFamily:'var(--mono)'}}>{date}</text>
+    </g>);
+  } else if(v==='minimal'){
+    inner = (<g>
+      <circle cx="60" cy="60" r="50" fill="none" stroke="currentColor" strokeWidth="1.4"/>
+      <path d="M60 46 V70 M48 58 H72" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+      <text x="60" y="92" fontSize="10" letterSpacing="1.5" fontWeight="700" fill="currentColor" textAnchor="middle" style={{fontFamily:'var(--mono)'}}>{date}</text>
+    </g>);
+  } else {
+    inner = (<g>
+      <defs><path id={'ms'+uid} d="M60 62 m-40 0 a40 40 0 0 1 80 0" fill="none"/></defs>
+      <circle cx="60" cy="60" r="55" fill="none" stroke="currentColor" strokeWidth="2.4"/>
+      <circle cx="60" cy="60" r="49" fill="none" stroke="currentColor" strokeWidth="1"/>
+      <text fontSize="9.5" fontWeight="700" letterSpacing="2.5" fill="currentColor" style={{fontFamily:'var(--mono)'}}>
+        <textPath href={'#ms'+uid} startOffset="50%" textAnchor="middle">CONNEC+A 参加記念</textPath>
+      </text>
+      <path d="M45 56 l9 9 18 -20" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M34 76 h52" stroke="currentColor" strokeWidth="1" opacity="0.55"/>
+      <text x="60" y="92" fontSize="11" fontWeight="700" fill="currentColor" textAnchor="middle" style={{fontFamily:'var(--mono)'}}>{date}</text>
+    </g>);
+  }
+  return (<svg width={s} height={s} viewBox="0 0 120 120" style={{color:'#ffffff'}}>{inner}</svg>);
+}
 function PageEventCreate(){
   // URL hash から編集対象 ID を取得 (例: #event-create?id=E-2601)
   const editId = (() => {
@@ -17519,6 +18498,11 @@ function PageEventCreate(){
   // ヒーロー画像 (Phase 6.1) - 横長ヒーロー画像
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [heroUploading, setHeroUploading] = useState(false);
+  // (2d) 参加記念コレクション設定
+  const [mementoPhotoUrl, setMementoPhotoUrl] = useState("");
+  const [sealType, setSealType] = useState("");
+  const [mementoPublishAt, setMementoPublishAt] = useState("");
+  const [mementoUploading, setMementoUploading] = useState(false);
   // (Phase 7.2) ヒーローオーバーレイ — 画像上に重ねるテキスト/図形
   // 配列: [{id, type:'text'|'circle'|'rect'|'triangle', x, y, w, h, ...}]
   const [heroOverlay, setHeroOverlay] = useState([]);
@@ -17653,6 +18637,10 @@ function PageEventCreate(){
         setSnsCopy(ev.snsCopy || "");
         setPosterUrl(ev.posterUrl || "");
         setHeroImageUrl(ev.heroImageUrl || "");
+        // (2d) 参加記念
+        setMementoPhotoUrl(ev.mementoPhotoUrl || "");
+        setSealType(ev.sealType || "");
+        setMementoPublishAt(String(ev.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
         // (Phase 7.2) heroOverlay読み込み — JSON文字列または配列を受け取る
         try {
           const ov = ev.heroOverlay;
@@ -17787,6 +18775,9 @@ function PageEventCreate(){
       snsCopy: snsCopy || '',
       posterUrl: posterUrl || '',
       heroImageUrl: heroImageUrl || '',
+      mementoPhotoUrl: mementoPhotoUrl || '',
+      sealType: sealType || '',
+      mementoPublishAt: mementoPublishAt || '',
       heroOverlay: JSON.stringify(heroOverlay || []),
       // (Phase 7.4) イベントタグ
       area: area || '',
@@ -19069,9 +20060,126 @@ function PageEventCreate(){
                   </div>
                 </div>
 
+                {/* (2d) 参加記念コレクション設定 */}
+                <div className="field" style={{marginTop:16,padding:16,background:'var(--bg2)',borderRadius:10,border:'1px solid var(--line)'}}>
+                  <label className="field-label" style={{fontWeight:700,fontSize:13,marginBottom:6}}>
+                    🎖 参加記念コレクション (任意)
+                  </label>
+                  <div className="field-hint" style={{marginBottom:10}}>
+                    マイページの「参加記念コレクション」に表示する写真とスタンプを設定します。写真が空のときはヒーロー画像、それも無ければポスターを使用します。
+                  </div>
+
+                  <label className="field-label" style={{fontSize:12,marginBottom:4,display:'block'}}>記念写真URL (横長推奨 / 集合写真など)</label>
+                  <input
+                    className="input"
+                    value={mementoPhotoUrl}
+                    onChange={e=>setMementoPhotoUrl(e.target.value)}
+                    placeholder="https://... (空ならヒーロー画像を使用)"
+                    style={{marginBottom:10}}
+                  />
+
+                  <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}}>
+                    <label className={clsx("btn","btn-soft")} style={{cursor:mementoUploading?'wait':'pointer',opacity:mementoUploading?0.6:1}}>
+                      <Icon n="upload" s={14}/>
+                      {mementoUploading ? ' アップロード中…' : (mementoPhotoUrl ? ' 写真を差し替え' : ' 写真をアップロード')}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        style={{display:'none'}}
+                        disabled={mementoUploading}
+                        onChange={async (e) => {
+                          const file = e.target.files && e.target.files[0];
+                          if (!file) return;
+                          if (file.size > 15 * 1024 * 1024) {
+                            window.toast.error('画像が大きすぎます (最大 15MB)');
+                            e.target.value = '';
+                            return;
+                          }
+                          setMementoUploading(true);
+                          try {
+                            const compressed = await window.compressImage(file, {
+                              maxLong: 2000,
+                              quality: 0.82,
+                            });
+                            const result = await window.postData('uploadPosterImage', {
+                              filename: 'memento-' + file.name.replace(/\.[^.]+$/, '.jpg'),
+                              mimeType: compressed.mimeType,
+                              dataBase64: compressed.dataBase64,
+                              eventId: editId || '',
+                            });
+                            if (result && result.url) {
+                              setMementoPhotoUrl(result.url);
+                              window.toast.success('記念写真をアップロードしました');
+                            } else {
+                              throw new Error('アップロード結果が不正です');
+                            }
+                          } catch (err) {
+                            window.toast.error('アップロード失敗: ' + (err.message || err));
+                          } finally {
+                            setMementoUploading(false);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+                    {mementoPhotoUrl && (
+                      <button
+                        type="button"
+                        className="btn btn-soft btn-sm"
+                        onClick={() => setMementoPhotoUrl('')}
+                        style={{color:'var(--coral)'}}>
+                        <Icon n="x" s={12}/> クリア
+                      </button>
+                    )}
+                  </div>
+
+                  <label className="field-label" style={{fontSize:12,marginBottom:4,display:'block'}}>スタンプ種別</label>
+                  <select
+                    className="input"
+                    value={sealType}
+                    onChange={e=>setSealType(e.target.value)}
+                  >
+                    <option value="">自動 (カテゴリ準拠)</option>
+                    <option value="classic">クラシック</option>
+                    <option value="beaded">ビーズ縁</option>
+                    <option value="laurel">月桂樹モノグラム</option>
+                    <option value="passport">パスポート風</option>
+                    <option value="minimal">ミニマル</option>
+                  </select>
+                  <div className="field-hint" style={{marginTop:6}}>
+                    自動: IFT→パスポート風 / hub→ミニマル / community→ビーズ縁 / order made→月桂樹 / その他→クラシック
+                  </div>
+
+                  <label className="field-label" style={{fontSize:12,margin:'14px 0 4px',display:'block'}}>記念写真の公開予約 (任意)</label>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={mementoPublishAt}
+                    onChange={e=>setMementoPublishAt(e.target.value)}
+                  />
+                  <div className="field-hint" style={{marginTop:6}}>
+                    指定日時まで記念写真は表示されず、ヒーロー画像/ポスターが代わりに出ます。空欄なら即時公開。複数日イベントはセッションごとの設定が「イベント後のこと」で可能になります。
+                  </div>
+
+                  {/* WYSIWYG: マイページでの参加記念プレビュー */}
+                  <div style={{marginTop:14,marginBottom:5,fontSize:11,color:'var(--ink2)'}}>マイページでの表示プレビュー</div>
+                  <div style={{
+                    position:'relative', width:'100%', maxWidth:320, aspectRatio:'16/9',
+                    background: (mementoPhotoUrl||heroImageUrl||posterUrl)
+                      ? 'var(--jb-blue-deep) url('+(mementoPhotoUrl||heroImageUrl||posterUrl)+') center/cover no-repeat'
+                      : 'linear-gradient(150deg, #5aa0e6, #0a2960)',
+                    borderRadius:10, border:'1px solid var(--line)', overflow:'hidden',
+                  }}>
+                    <div style={{position:'absolute', inset:6, border:'1.5px solid rgba(255,255,255,0.45)', borderRadius:7, pointerEvents:'none'}}/>
+                    <div style={{position:'absolute', left:'5%', bottom:'9%', filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.55))'}}>
+                      <MementoSealPreview variant={sealType || autoSealForCategory(category)} date={date || ''} size={78}/>
+                    </div>
+                  </div>
+                </div>
+
                 {/* (Phase 7.2) ヒーローオーバーレイエディタ — 画像 + テキスト/図形 */}
                 {heroImageUrl && (
-                  <div className="field" style={{marginTop:16,padding:16,background:'#fff',borderRadius:10,border:'1px solid var(--line)'}}>
+                  <div className="field" style={{marginTop:16,padding:16,background:'var(--white)',borderRadius:10,border:'1px solid var(--line)'}}>
                     <label className="field-label" style={{fontWeight:700,fontSize:13,marginBottom:6,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <span>🎨 オーバーレイ (テキスト・図形)</span>
                       <span style={{fontSize:11,fontWeight:400,color:'var(--ink2)'}}>{(heroOverlay||[]).length} 個</span>
@@ -19472,6 +20580,7 @@ function PageQR(){
   const [scanning, setScanning] = useState(false);
   const [lastResult, setLastResult] = useState(null);   // {type: 'success'|'error'|'duplicate', message, regId, name, ...}
   const [manualQuery, setManualQuery] = useState("");
+  const [undoing, setUndoing] = useState(false);   // (QR拡張) 取り消し進行中
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -19507,19 +20616,27 @@ function PageQR(){
     } catch (e) {}
   }
   function playSuccess() {
-    // 2 音上昇: C5 → E5 → G5 (爽やかなチャイム)
-    playTone(523.25, 0.10, 'sine', 0.30);              // C5
-    setTimeout(() => playTone(659.25, 0.10, 'sine', 0.30), 90);  // E5
-    setTimeout(() => playTone(783.99, 0.18, 'sine', 0.30), 180); // G5
+    // (QR拡張) 大きく目立つ受付音 — 明るい上昇アルペジオ + 最後を強く二度鳴らす
+    // triangle 波は sine より抜けが良く、 騒がしい会場でも聞こえやすい
+    playTone(659.25, 0.12, 'triangle', 0.65);                         // E5
+    setTimeout(() => playTone(830.61, 0.12, 'triangle', 0.65),  90);  // G#5
+    setTimeout(() => playTone(987.77, 0.14, 'triangle', 0.70), 180);  // B5
+    setTimeout(() => playTone(1318.51, 0.30, 'triangle', 0.72), 290); // E6 (強め・長め)
   }
   function playError() {
-    // 低音 2 連 (ブザー、 short)
-    playTone(220, 0.15, 'sawtooth', 0.20);
-    setTimeout(() => playTone(180, 0.20, 'sawtooth', 0.20), 160);
+    // 低音 2 連 (ブザー) — 目立つように音量強化
+    playTone(220, 0.18, 'sawtooth', 0.45);
+    setTimeout(() => playTone(165, 0.26, 'sawtooth', 0.50), 170);
   }
   function playDuplicate() {
-    // 中音 1 音 (注意喚起、 short)
-    playTone(440, 0.18, 'triangle', 0.20);
+    // 中音 2 連 (注意喚起) — 既に受付済の合図
+    playTone(523.25, 0.16, 'triangle', 0.45);
+    setTimeout(() => playTone(523.25, 0.16, 'triangle', 0.45), 200);
+  }
+  function playUndo() {
+    // 下降 2 音 (取り消しの合図)
+    playTone(659.25, 0.14, 'sine', 0.45);
+    setTimeout(() => playTone(440, 0.22, 'sine', 0.45), 130);
   }
 
   // 選択中イベントが multi なら、セッション一覧を取得
@@ -19656,6 +20773,9 @@ function PageQR(){
       dept: participant?.dept || '',
       avatar: participant?.name ? participant.name.charAt(0) : '?',
       sessionCount: app ? app.regs.length : 0,
+      // (Phase 17.S-fix) 同伴者 (= 全 reg 同じ JSON のため max。 受付の総来場人数算出用)
+      companionsCount: app ? app.regs.reduce(function(mx, r){ return Math.max(mx, Number(r.companionsCount) || 0); }, 0) : 0,
+      companions: app ? ((app.regs.find(function(r){ return r.companions && r.companions.length > 0; }) || {}).companions || []) : [],
     });
 
     if (!app) {
@@ -19820,6 +20940,50 @@ function PageQR(){
     setManualQuery("");
   }
 
+  // (QR拡張) 直近の受付を取り消す — 誤スキャンのリカバリ
+  async function handleUndo(result) {
+    if (!result || !Array.isArray(result.regIds) || result.regIds.length === 0) return;
+    // 現在 'チェックイン済' / 'チェックイン保留' の reg だけを対象 (セッション指定中はそのセッションのみ)
+    const targetIds = registrations
+      .filter(r =>
+        result.regIds.indexOf(r.id) >= 0 &&
+        (r.status === 'チェックイン済' || r.status === 'チェックイン保留') &&
+        (!(isMultiEvent && selectedSessionId) || r.sessionId === selectedSessionId)
+      )
+      .map(r => r.id);
+    if (targetIds.length === 0) {
+      window.toast.info('取り消せる受付がありません');
+      return;
+    }
+    const ok = await window.confirmDialog({
+      title: 'この受付を取り消しますか?',
+      body: `${result.name || ''} さんのチェックインを取り消します (${targetIds.length} 件)。\n受付前のステータス (申込済み / 決済済み) に戻します。`,
+      confirmLabel: '取り消す',
+      cancelLabel: 'やめる',
+      warn: true,
+    });
+    if (!ok) return;
+    setUndoing(true);
+    try {
+      const res = await Promise.all(targetIds.map(id => window.postData('admin.uncheckin', { regId: id })));
+      const byId = {};
+      res.forEach(x => { if (x && x.regId) byId[x.regId] = x; });
+      setRegistrations(prev => prev.map(r => {
+        const x = byId[r.id];
+        if (!x) return r;
+        return { ...r, status: x.newStatus || r.status, paid: x.newStatus === '決済済み' ? r.paid : r.paid };
+      }));
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      playUndo();
+      setLastResult({ ...result, type: 'duplicate', message: '受付を取り消しました', detail: `${targetIds.length} 件を受付前に戻しました`, regIds: [] });
+      window.toast.success('受付を取り消しました');
+    } catch (err) {
+      window.toast.error('取り消しに失敗しました: ' + (err.message || err));
+    } finally {
+      setUndoing(false);
+    }
+  }
+
   // 終了時にカメラを止める
   useEffect(() => {
     return () => stopScan();
@@ -19837,6 +21001,13 @@ function PageQR(){
   // 「全 reg がチェックイン済」 を Application 単位の「受付済」 とみなす
   const checkedInCount = eventApplications.filter(app => app.regs.every(r => r.status === 'チェックイン済')).length;
   const totalRegCount = eventApplications.length;
+  // (QR拡張) リアルタイム受付状況の追加集計
+  const pendingCount = eventApplications.filter(app => app.regs.some(r => r.status === 'チェックイン保留')).length;
+  const remainingCount = Math.max(0, totalRegCount - checkedInCount);
+  const headcountFor = app => app.regs.reduce((mx, r) => Math.max(mx, Number(r.companionsCount) || 0), 0) + 1;
+  const checkedInHead = eventApplications.filter(app => app.regs.every(r => r.status === 'チェックイン済')).reduce((s, app) => s + headcountFor(app), 0);
+  const totalHead = eventApplications.reduce((s, app) => s + headcountFor(app), 0);
+  const checkinPct = totalRegCount > 0 ? Math.round(checkedInCount / totalRegCount * 100) : 0;
   const selectedEvent = events.find(e => e.id === selectedEventId);
   const visibleEvents = events.filter(e => e.status !== "アーカイブ");
   const selectedSession = sessions.find(s => s.id === selectedSessionId);
@@ -19945,6 +21116,38 @@ function PageQR(){
         </div>
       </div>
 
+      {/* (QR拡張) リアルタイム受付状況 — 進捗バー + 受付済 / 残り / 保留 / 来場 */}
+      {selectedEvent && (
+        <div className="card mb16">
+          <div className="card-body">
+            <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.14em',textTransform:'uppercase',color:'var(--jb-ink-soft)'}}>
+                リアルタイム受付状況
+                {isMultiEvent && selectedSession && <span style={{color:'var(--jb-blue)',fontWeight:700}}> · Day {selectedSession.order}</span>}
+                {isMultiEvent && !selectedSession && <span style={{color:'var(--jb-shouwa)',fontWeight:700}}> · 全 Day</span>}
+              </div>
+              <div style={{fontFamily:'var(--jb-display)',fontSize:18,fontWeight:800,letterSpacing:'-0.01em'}}>
+                <span style={{color:'var(--green)'}}>{checkedInCount}</span>
+                <span style={{color:'var(--ink5)',fontSize:13,margin:'0 3px'}}>/ {totalRegCount} 組</span>
+                <span style={{color:'var(--ink4)',fontSize:12,marginLeft:6}}>{checkinPct}%</span>
+              </div>
+            </div>
+            <div style={{height:12,borderRadius:999,background:'var(--line)',overflow:'hidden',position:'relative'}}>
+              <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${checkinPct}%`,background:'var(--green)',borderRadius:999,transition:'width .35s ease'}}></div>
+              {pendingCount > 0 && totalRegCount > 0 && (
+                <div style={{position:'absolute',top:0,bottom:0,left:`${checkinPct}%`,width:`${Math.round(pendingCount/totalRegCount*100)}%`,background:'var(--amber)',opacity:.55}}></div>
+              )}
+            </div>
+            <div style={{display:'flex',gap:18,flexWrap:'wrap',marginTop:12,fontSize:12}}>
+              <div><span style={{color:'var(--ink4)'}}>受付済</span> <b style={{color:'var(--green)'}}>{checkedInCount}</b> 組</div>
+              <div><span style={{color:'var(--ink4)'}}>残り</span> <b>{remainingCount}</b> 組</div>
+              {pendingCount > 0 && <div><span style={{color:'var(--ink4)'}}>決済保留</span> <b style={{color:'var(--amber)'}}>{pendingCount}</b> 組</div>}
+              {totalHead !== totalRegCount && <div><span style={{color:'var(--ink4)'}}>来場</span> <b>{checkedInHead}</b> / {totalHead} 名</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid-ab">
         <div className="card">
           <div className="card-head">
@@ -20019,6 +21222,12 @@ function PageQR(){
                   {lastResult.name && <div style={{fontFamily:'var(--serif)',fontSize:18,letterSpacing:'-.015em',marginBottom:4}}>{lastResult.name}</div>}
                   {lastResult.regId && <div style={{fontSize:11,color:'var(--ink4)'}} className="mono">{lastResult.regId}</div>}
                   {lastResult.detail && <div style={{fontSize:11,color:'var(--ink3)',marginTop:4}}>{lastResult.detail}</div>}
+                  {(lastResult.type === 'success' || lastResult.type === 'warn') && Array.isArray(lastResult.regIds) && lastResult.regIds.length > 0 && (
+                    <button className="btn btn-sm" style={{marginTop:10,borderColor:'var(--red-100)',color:'var(--red)'}}
+                      onClick={() => handleUndo(lastResult)} disabled={undoing}>
+                      <Icon n="x" s={12}/> {undoing ? '取り消し中…' : 'この受付を取り消す'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -20413,7 +21622,7 @@ function QRResultOverlay({ result, onClose }) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: '#fff',
+          background: 'var(--white)',
           borderRadius: 18,
           maxWidth: 460, width: '100%',
           overflow: 'hidden',
@@ -20431,7 +21640,7 @@ function QRResultOverlay({ result, onClose }) {
           <div style={{
             width: 64, height: 64,
             margin: '0 auto 14px',
-            background: '#fff',
+            background: 'var(--white)',
             borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: palette.accent,
@@ -20494,6 +21703,35 @@ function QRResultOverlay({ result, onClose }) {
                 )}
               </div>
             </div>
+
+            {/* (Phase 17.S-fix) 同伴者あり → 総来場人数を強調 (受付の入場人数確認用) */}
+            {result.companionsCount > 0 && (
+              <div style={{
+                display:'flex',alignItems:'center',gap:12,
+                padding:'14px 16px',marginBottom:12,
+                background:'#eef2ff',border:'1.5px solid #c7d2fe',borderRadius:10,
+              }}>
+                <div style={{
+                  width:44,height:44,flexShrink:0,
+                  background:'#3730a3',color:'#fff',borderRadius:'50%',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  fontSize:18,fontWeight:800,fontFamily:'var(--serif)',
+                }}>{result.companionsCount + 1}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:800,color:'#3730a3',lineHeight:1.3}}>
+                    総来場人数 {result.companionsCount + 1} 名
+                  </div>
+                  <div style={{fontSize:12,color:'#4f46e5',marginTop:2}}>
+                    本人 + 同伴者 {result.companionsCount} 名
+                    {result.companions && result.companions.length > 0 && (
+                      <span style={{color:'#6b7280'}}>
+                        {' '}({result.companions.map(function(c){ return c.name || ''; }).filter(Boolean).join('、 ')})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* イベント情報 */}
             {result.eventTitle && (
@@ -20563,7 +21801,7 @@ function QRResultOverlay({ result, onClose }) {
         <div style={{padding: '14px 20px', borderTop: '1px solid var(--line)', textAlign: 'center'}}>
           <button onClick={onClose} style={{
             padding: '8px 24px',
-            background: '#fff',
+            background: 'var(--white)',
             border: '1px solid var(--line)',
             borderRadius: 6,
             fontSize: 12, fontWeight: 600,
@@ -22562,7 +23800,7 @@ function ParticipantAnalyticsSection({ participants, registrations, events, depa
             left:`calc(${p.x}% - 5px)`,
             top:`${p.y - 5}px`,
             width:10, height:10, borderRadius:'50%',
-            background:'#fff',
+            background:'var(--white)',
             border:`2px solid ${PRIMARY}`,
             boxShadow:'0 2px 6px rgba(0, 168, 225, 0.25)',
             pointerEvents:'auto',
@@ -22628,7 +23866,7 @@ function ParticipantAnalyticsSection({ participants, registrations, events, depa
       {analytics.insights.length > 0 && (
         <div style={{
           padding:'18px 22px',marginBottom:24,
-          background:'#fff',border:'1px solid var(--line)',borderRadius:10,
+          background:'var(--white)',border:'1px solid var(--line)',borderRadius:10,
         }}>
           <div style={{
             fontSize:11,letterSpacing:'0.16em',color:'var(--ink3)',
@@ -22663,7 +23901,7 @@ function ParticipantAnalyticsSection({ participants, registrations, events, depa
         gap:20,marginBottom:24,
       }} className="resp-grid-2">
         <div style={{
-          padding:'20px 24px',background:'#fff',
+          padding:'20px 24px',background:'var(--white)',
           border:'1px solid var(--line)',borderRadius:10,
         }}>
           <div style={{
@@ -22721,7 +23959,7 @@ function ParticipantAnalyticsSection({ participants, registrations, events, depa
         </div>
 
         <div style={{
-          padding:'20px 24px',background:'#fff',
+          padding:'20px 24px',background:'var(--white)',
           border:'1px solid var(--line)',borderRadius:10,
         }}>
           <div style={{
@@ -23832,7 +25070,7 @@ function PageHeroSettings({ isMobile = false } = {}){
                           position:'absolute',top:2,
                           left: slide.enabled ? 26 : 2,
                           width:20,height:20,
-                          background:'#fff',borderRadius:'50%',
+                          background:'var(--white)',borderRadius:'50%',
                           transition:'left .2s',
                           boxShadow:'0 1px 3px rgba(0,0,0,0.2)',
                         }}/>
@@ -24752,7 +25990,7 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api, onPublis
                     position:'absolute',top:2,
                     left: enabled ? 22 : 2,
                     width:20,height:20,
-                    background:'#fff',borderRadius:'50%',
+                    background:'var(--white)',borderRadius:'50%',
                     transition:'left .2s',
                     boxShadow:'0 1px 3px rgba(0,0,0,0.2)',
                   }}/>
@@ -24921,8 +26159,8 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api, onPublis
                         {item.type === 'text' ? '📝 テキスト' : item.type === 'circle' ? '● 丸' : item.type === 'rect' ? '■ 四角' : item.type === 'triangle' ? '▲ 三角' : '🖼 画像'}
                       </div>
                       <div style={{display:'flex',gap:4}}>
-                        <button type="button" onClick={duplicate} title="複製 (Cmd+D)" style={{padding:'2px 6px',fontSize:11,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>複製</button>
-                        <button type="button" onClick={remove} title="削除 (Delete)" style={{padding:'2px 6px',fontSize:11,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer',color:'var(--jb-shouwa)'}}>削除</button>
+                        <button type="button" onClick={duplicate} title="複製 (Cmd+D)" style={{padding:'2px 6px',fontSize:11,border:'1px solid var(--line)',borderRadius:4,background:'var(--white)',cursor:'pointer'}}>複製</button>
+                        <button type="button" onClick={remove} title="削除 (Delete)" style={{padding:'2px 6px',fontSize:11,border:'1px solid var(--line)',borderRadius:4,background:'var(--white)',cursor:'pointer',color:'var(--jb-shouwa)'}}>削除</button>
                       </div>
                     </div>
 
@@ -25081,10 +26319,10 @@ function HeroSlideEditor({mode, slide, onSave, onCancel, isMobile, api, onPublis
 
                     {/* レイヤー操作 */}
                     <div style={{display:'flex',gap:4,marginBottom:6}}>
-                      <button type="button" onClick={()=>moveLayer(-99)} title="最背面" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>⤓最背面</button>
-                      <button type="button" onClick={()=>moveLayer(-1)} title="背面へ" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>↓背面</button>
-                      <button type="button" onClick={()=>moveLayer(1)} title="前面へ" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>↑前面</button>
-                      <button type="button" onClick={()=>moveLayer(99)} title="最前面" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'#fff',cursor:'pointer'}}>⤒最前面</button>
+                      <button type="button" onClick={()=>moveLayer(-99)} title="最背面" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'var(--white)',cursor:'pointer'}}>⤓最背面</button>
+                      <button type="button" onClick={()=>moveLayer(-1)} title="背面へ" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'var(--white)',cursor:'pointer'}}>↓背面</button>
+                      <button type="button" onClick={()=>moveLayer(1)} title="前面へ" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'var(--white)',cursor:'pointer'}}>↑前面</button>
+                      <button type="button" onClick={()=>moveLayer(99)} title="最前面" style={{flex:1,padding:'3px',fontSize:10,border:'1px solid var(--line)',borderRadius:4,background:'var(--white)',cursor:'pointer'}}>⤒最前面</button>
                     </div>
 
                     {/* アニメーション */}
@@ -26065,7 +27303,7 @@ function PageNewsFront(){
       {/* (Phase 7.3) 検索 + フィルタバー */}
       <div style={{
         display:'flex', flexWrap:'wrap', gap:12, alignItems:'center',
-        padding:'14px 16px', background:'#fff', border:'1px solid var(--line)', borderRadius:12,
+        padding:'14px 16px', background:'var(--white)', border:'1px solid var(--line)', borderRadius:12,
         marginBottom:14, maxWidth:1120,
       }}>
         {/* 検索 */}
@@ -26118,7 +27356,7 @@ function PageNewsFront(){
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          style={{padding:'8px 12px', border:'1px solid var(--line)', borderRadius:999, fontSize:12, background:'#fff', cursor:'pointer'}}
+          style={{padding:'8px 12px', border:'1px solid var(--line)', borderRadius:999, fontSize:12, background:'var(--white)', cursor:'pointer'}}
         >
           <option value="all">すべてのステータス</option>
           <option value="公開中">公開中</option>
@@ -26165,7 +27403,7 @@ function PageNewsFront(){
               style={{
                 display:'flex', alignItems:'center', gap:14,
                 padding:'14px 16px',
-                background:'#fff',
+                background:'var(--white)',
                 border: isDragOver ? '2px solid var(--jb-blue-deep)' : '1px solid var(--line)',
                 borderRadius:12,
                 opacity: isDragging ? 0.4 : (n.showOnFront ? 1 : 0.7),
@@ -26309,7 +27547,7 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
       zIndex:1000, padding:24,
     }} onClick={onCancel}>
       <div style={{
-        background:'#fff', borderRadius:16, maxWidth:680, width:'100%',
+        background:'var(--white)', borderRadius:16, maxWidth:680, width:'100%',
         maxHeight:'90vh', overflowY:'auto',
       }} onClick={(e) => e.stopPropagation()}>
         <div style={{padding:'20px 24px', borderBottom:'1px solid var(--line)', display:'flex', alignItems:'center'}}>
@@ -27260,6 +28498,7 @@ const PAGES = {
   qr:             () => renderPage('PageQR'),
   schedule:       () => renderPage('PageSchedule'),
   satisfaction:   () => renderPage('PageSatisfaction'),
+  "post-event":   () => renderPage('PagePostEvent'),
 
   // ----- コミュニケーション (Phase 2新-B) -----
   mail:           () => renderPage('PageMail'),
