@@ -1682,8 +1682,7 @@ svg{display:block}
       <a href="#registrations" class="nav-item" data-nav="registrations"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>申込一覧</a>
       <a href="#qr" class="nav-item" data-nav="qr"><svg class="ic" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg>QR照会 / 受付</a>
       <a href="#schedule" class="nav-item" data-nav="schedule"><svg class="ic" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>スケジュール</a>
-      <a href="#satisfaction" class="nav-item" data-nav="satisfaction"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>満足度調査</a>
-      <a href="#post-event" class="nav-item" data-nav="post-event"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/><path d="M3 12h.01M3 18h.01M3 6h.01"/></svg>イベント後のこと</a>
+      <a href="#post-event" class="nav-item" data-nav="post-event"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/><path d="M3 12h.01M3 18h.01M3 6h.01"/></svg>満足度調査・イベント後</a>
     </div>
 
     <div class="nav-section">
@@ -5609,9 +5608,17 @@ function PagePostEvent(){
   const [eventId, setEventId] = useState("");
   const [sessions, setSessions] = useState([]);
   const [surveys, setSurveys] = useState([]);
+  const [responses, setResponses] = useState([]);       // 選択イベントの全回答
+  const [registrations, setRegistrations] = useState([]); // 回答率の母数 (チェックイン済)
+  const [analytics, setAnalytics] = useState({});         // surveyId -> 集計
+  const [analyticsLoading, setAnalyticsLoading] = useState({});
+  const [expandedSurvey, setExpandedSurvey] = useState(null);
+  const [filter, setFilter] = useState("active");        // active / archived / all
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editingSurvey, setEditingSurvey] = useState(null); // {mode, initialValues}
+  const [responseModal, setResponseModal] = useState(null); // survey or null
+  const [builderSurvey, setBuilderSurvey] = useState(null); // survey or null
 
   useEffect(() => {
     window.fetchData('listEvents')
@@ -5624,12 +5631,65 @@ function PagePostEvent(){
   const isMulti = !!selectedEvent && (selectedEvent.format === 'multi' || sessions.length > 0);
 
   const loadDetail = useCallback(() => {
-    if (!eventId) { setSessions([]); setSurveys([]); return; }
+    if (!eventId) { setSessions([]); setSurveys([]); setResponses([]); setRegistrations([]); setAnalytics({}); setExpandedSurvey(null); return; }
     window.fetchData('listEventSessions', { eventId }).then(s => setSessions(Array.isArray(s) ? s : [])).catch(() => setSessions([]));
-    window.fetchData('listSurveys').then(all => setSurveys((Array.isArray(all) ? all : []).filter(s => s.eventId === eventId))).catch(() => setSurveys([]));
+    Promise.all([
+      window.fetchData('listSurveys'),
+      window.fetchData('listRegistrations').catch(() => []),
+    ]).then(([all, regs]) => {
+      const evSurveys = (Array.isArray(all) ? all : []).filter(s => s.eventId === eventId);
+      setSurveys(evSurveys);
+      setRegistrations(Array.isArray(regs) ? regs : []);
+      setAnalytics({});
+      Promise.all(evSurveys.map(s =>
+        window.fetchData('listSurveyResponses', { surveyId: s.id }).catch(() => [])
+      )).then(arrs => {
+        setResponses([].concat(...arrs.map(r => Array.isArray(r) ? r : [])));
+      });
+    }).catch(() => { setSurveys([]); setResponses([]); });
   }, [eventId]);
   useEffect(() => { loadDetail(); }, [loadDetail]);
 
+  // ===== 集計ヘルパー (満足度調査ページから統合) =====
+  function getResponsesFor(surveyId) { return responses.filter(r => r.surveyId === surveyId); }
+  function checkedInForSurvey(s) {
+    if (!s) return 0;
+    return registrations.filter(r =>
+      r.eventId === s.eventId && (s.sessionId ? r.sessionId === s.sessionId : true) && r.status === 'チェックイン済'
+    ).length;
+  }
+  function calcNps(resps) {
+    const valid = resps.filter(r => r.nps !== null && r.nps !== undefined);
+    if (valid.length === 0) return null;
+    const promoters = valid.filter(r => r.nps >= 9).length;
+    const detractors = valid.filter(r => r.nps <= 6).length;
+    return Math.round((promoters - detractors) / valid.length * 100);
+  }
+  function calcCsat(resps) {
+    const valid = resps.filter(r => r.csat !== null && r.csat !== undefined);
+    if (valid.length === 0) return null;
+    return (valid.reduce((a, r) => a + r.csat, 0) / valid.length).toFixed(1);
+  }
+  async function loadAnalytics(surveyId) {
+    if (analytics[surveyId] || analyticsLoading[surveyId]) return;
+    setAnalyticsLoading(m => ({ ...m, [surveyId]: true }));
+    try {
+      const res = await window.fetchData('getSurveyAnalytics', { surveyId });
+      setAnalytics(m => ({ ...m, [surveyId]: res }));
+    } catch (e) { window.toast.error('集計の取得に失敗しました'); }
+    finally { setAnalyticsLoading(m => ({ ...m, [surveyId]: false })); }
+  }
+  function toggleExpand(s) {
+    const next = expandedSurvey === s.id ? null : s.id;
+    setExpandedSurvey(next);
+    if (next) loadAnalytics(s.id);
+  }
+
+  const totalResponses = responses.length;
+  const overallNps = calcNps(responses);
+  const overallCsat = calcCsat(responses);
+
+  // ===== アクション =====
   async function saveSessionMemento(sess, url, publishAt) {
     setBusy(true);
     try {
@@ -5669,22 +5729,43 @@ function PagePostEvent(){
     window.toast.success('アンケートを更新しました');
     loadDetail();
   }
-  async function handleSurveyStatus(surveyId, status) {
+  async function handleStatusChange(surveyId, status) {
     try {
       await window.postData('updateSurvey', { surveyId, fields: { status } });
       window.toast.success(`ステータスを「${status}」に変更しました`);
       loadDetail();
     } catch (e) { window.toast.error('変更に失敗: ' + (e.message || e)); }
   }
+  async function handleDelete(surveyId, title) {
+    if (!await window.confirmDialog({ title: `「${title}」をアーカイブしますか?`, body: '行は残り、ステータスが「アーカイブ」に変わります。後で復元できます。', danger: true, confirmLabel: 'アーカイブ' })) return;
+    try { await window.postData('deleteSurvey', { surveyId }); window.toast.success('アーカイブしました'); loadDetail(); }
+    catch (e) { window.toast.error('削除に失敗しました: ' + (e.message || e)); }
+  }
+  async function handleResponseCreate(payload) {
+    await window.postData('createSurveyResponse', payload);
+    setResponseModal(null);
+    window.toast.success('回答を登録しました');
+    loadDetail();
+  }
+  async function handleResponseDelete(responseId) {
+    if (!await window.confirmDialog({ title: '回答を削除しますか?', body: '物理削除されます。元に戻せません。', danger: true, confirmLabel: '削除' })) return;
+    try { await window.postData('deleteSurveyResponse', { responseId }); window.toast.success('削除しました'); loadDetail(); }
+    catch (e) { window.toast.error('削除に失敗しました: ' + (e.message || e)); }
+  }
 
   const activeEvents = events.filter(e => e.status !== 'アーカイブ');
+  const visibleSurveys = surveys.filter(s => {
+    if (filter === 'active') return s.status !== 'アーカイブ';
+    if (filter === 'archived') return s.status === 'アーカイブ';
+    return true;
+  });
 
   return (
     <div className="page">
       <div className="ph">
         <div>
-          <div className="ph-title">イベント後のこと</div>
-          <div className="ph-sub">記念写真の公開設定（複数日はセッションごと）と満足度調査を、イベント単位でまとめて管理します。</div>
+          <div className="ph-title">満足度調査・イベント後</div>
+          <div className="ph-sub">記念写真の公開設定（複数日はセッションごと）と、満足度調査の作成・公開・集計（NPS / 満足度 / 回答率 / 個別回答）を、イベント単位でまとめて管理します。</div>
         </div>
       </div>
 
@@ -5704,7 +5785,7 @@ function PagePostEvent(){
       </div>
 
       {!eventId ? (
-        <div className="card"><div className="card-body" style={{textAlign:'center',color:'var(--ink4)',fontSize:13,padding:'30px'}}>イベントを選ぶと、記念写真とアンケートの設定が表示されます。</div></div>
+        <div className="card"><div className="card-body" style={{textAlign:'center',color:'var(--ink4)',fontSize:13,padding:'30px'}}>イベントを選ぶと、記念写真とアンケートの設定・集計が表示されます。</div></div>
       ) : (
         <React.Fragment>
           {/* 記念写真 */}
@@ -5730,29 +5811,128 @@ function PagePostEvent(){
             </div>
           </div>
 
-          {/* 満足度調査 */}
-          <div className="card">
-            <div className="card-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          {/* 満足度調査 (集計まで統合) */}
+          <div className="card" style={{marginBottom:16}}>
+            <div className="card-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
               <div className="card-title">⭐ 満足度調査</div>
-              <button className="btn btn-pri btn-sm" onClick={()=>setEditingSurvey({mode:'create', initialValues:{ eventId }})}>
-                <Icon n="plus" s={13}/> アンケートを作成
-              </button>
+              {window.canDo('surveys.create') && (
+                <button className="btn btn-pri btn-sm" onClick={()=>setEditingSurvey({mode:'create', initialValues:{ eventId }})}>
+                  <Icon n="plus" s={13}/> アンケートを作成
+                </button>
+              )}
             </div>
             <div className="card-body">
-              {surveys.length === 0 ? (
-                <div style={{fontSize:13,color:'var(--ink4)',textAlign:'center',padding:'18px'}}>このイベントのアンケートはまだありません。</div>
+              <div className="kpi-grid" style={{marginBottom:14}}>
+                <MiniStat label="アンケート数" value={String(surveys.filter(s=>s.status!=='アーカイブ').length)} sub="公開中 + 下書き" icon="star" color="indigo"/>
+                <MiniStat label="総回答数" value={String(totalResponses)} sub="このイベント合計" icon="users" color="teal"/>
+                <MiniStat label="NPS" value={overallNps !== null ? String(overallNps) : '—'} sub="推奨者-批判者(%)" icon="trend" color="green"/>
+                <MiniStat label="平均満足度" value={overallCsat !== null ? `${overallCsat}/10` : '—'} sub="10段階評価" icon="check2" color="violet"/>
+              </div>
+
+              <div className="tabs" style={{marginBottom:12}}>
+                {[["active","公開中・下書き", surveys.filter(s=>s.status!=='アーカイブ').length], ["archived","アーカイブ", surveys.filter(s=>s.status==='アーカイブ').length], ["all","全部", surveys.length]].map(([k,l,c]) => (
+                  <div key={k} className={clsx("tab", filter===k && "active")} onClick={()=>setFilter(k)}>{l}<span className="count">{c}</span></div>
+                ))}
+              </div>
+
+              {visibleSurveys.length === 0 ? (
+                <div style={{fontSize:13,color:'var(--ink4)',textAlign:'center',padding:'24px'}}>このイベントのアンケートはまだありません。「アンケートを作成」から登録できます。</div>
               ) : (
-                <div className="stack" style={{gap:8}}>
-                  {surveys.map(s => (
-                    <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',border:'1px solid var(--line)',borderRadius:8,flexWrap:'wrap'}}>
-                      <span className={clsx('badge', s.status === '公開中' ? 'badge-green' : s.status === 'アーカイブ' ? 'badge-ink' : 'badge-amber')} style={{fontSize:11}}>{s.status}</span>
-                      <span style={{flex:1,fontSize:13,fontWeight:600,minWidth:140}}>{s.title}</span>
-                      {s.status !== '公開中'
-                        ? <button className="btn btn-soft btn-sm" onClick={()=>handleSurveyStatus(s.id, '公開中')}>公開</button>
-                        : <button className="btn btn-soft btn-sm" onClick={()=>handleSurveyStatus(s.id, '下書き')}>下書きに戻す</button>}
-                      <button className="btn btn-ghost btn-sm" onClick={()=>setEditingSurvey({mode:'edit', initialValues:s})}>編集</button>
-                    </div>
-                  ))}
+                <div className="stack" style={{gap:12}}>
+                  {visibleSurveys.map(s => {
+                    const resps = getResponsesFor(s.id);
+                    const sNps = calcNps(resps);
+                    const sCsat = calcCsat(resps);
+                    const sCheckedIn = checkedInForSurvey(s);
+                    const sRate = sCheckedIn > 0 ? Math.round(resps.length / sCheckedIn * 100) : null;
+                    const isExpanded = expandedSurvey === s.id;
+                    return (
+                      <div key={s.id} className="card" style={{boxShadow:'none',border:'1px solid var(--line)'}}>
+                        <div className="card-head" style={{cursor:'pointer'}} onClick={()=>toggleExpand(s)}>
+                          <div style={{flex:1,display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+                            <div style={{width:4,height:32,background:`var(--${s.eventAccent || 'indigo'})`,borderRadius:2}}></div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                                {s.title}
+                                {s.kind === 'session' && s.sessionId && (
+                                  <span style={{fontSize:10,padding:'2px 7px',background:'var(--violet-50)',color:'var(--violet)',borderRadius:10,fontWeight:600,border:'1px solid var(--violet-100)'}}>セッション別</span>
+                                )}
+                              </div>
+                              <div style={{fontSize:11,color:'var(--ink4)'}}>
+                                <span className="mono">{s.id}</span>{s.publishedAt && ` · 公開: ${s.publishedAt}`}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                            <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'var(--ink4)'}}>回答</div><div style={{fontFamily:'var(--serif)',fontSize:18}}>{resps.length}</div></div>
+                            <div style={{textAlign:'right'}} title={sCheckedIn > 0 ? `回答 ${resps.length} / チェックイン ${sCheckedIn}` : 'チェックイン人数が未取得'}>
+                              <div style={{fontSize:11,color:'var(--ink4)'}}>回答率</div>
+                              <div style={{fontFamily:'var(--serif)',fontSize:18,color: sRate !== null ? 'var(--indigo)' : 'var(--ink4)'}}>{sRate !== null ? sRate + '%' : '—'}</div>
+                            </div>
+                            <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'var(--ink4)'}}>NPS</div>
+                              <div style={{fontFamily:'var(--serif)',fontSize:18,color: sNps !== null ? (sNps >= 0 ? 'var(--green)' : 'var(--coral)') : 'var(--ink4)'}}>{sNps !== null ? sNps : '—'}</div></div>
+                            <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'var(--ink4)'}}>満足度</div>
+                              <div style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--violet)'}}>{sCsat !== null ? sCsat : '—'}</div></div>
+                            {window.canDo('surveys.update') && s.status === '下書き' && (
+                              <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '公開中');}} style={{color:'var(--green)'}}><Icon n="check" s={12}/> 公開</button>
+                            )}
+                            {window.canDo('surveys.update') && s.status === '公開中' && (
+                              <>
+                                <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '終了');}}>終了</button>
+                                <button className="btn btn-ghost btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '下書き');}}>下書き</button>
+                              </>
+                            )}
+                            {window.canDo('surveys.update') && s.status === '終了' && (
+                              <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '公開中');}} style={{color:'var(--green)'}}><Icon n="check" s={12}/> 再公開</button>
+                            )}
+                            <span className={clsx("badge", s.status==="公開中"?"badge-green":s.status==="下書き"?"badge-amber":"badge-ink")}><span className="badge-dot"></span>{s.status}</span>
+                            <Icon n={isExpanded ? "chevDown" : "chevRight"} s={14}/>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div style={{borderTop:'1px solid var(--line)'}}>
+                            <div style={{padding:14,background:'var(--bg2)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                              <div style={{fontSize:12,color:'var(--ink3)'}}>
+                                回答 <b>{resps.length}</b>
+                                {sCheckedIn > 0
+                                  ? <> / チェックイン <b>{sCheckedIn}</b> 名 · 回答率 <b style={{color:'var(--indigo)'}}>{sRate}%</b></>
+                                  : <span style={{color:'var(--ink5)'}}> · チェックイン人数なし</span>}
+                              </div>
+                              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                                {window.canDo('surveys.update') && (<button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); setBuilderSurvey(s);}}><Icon n="edit" s={12}/> 質問を編集</button>)}
+                                {window.canDo('surveys.update') && (<button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); setResponseModal(s);}}><Icon n="plus" s={12}/> 回答登録</button>)}
+                                {window.canDo('surveys.update') && (<button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); setEditingSurvey({mode:'edit', initialValues:s});}}><Icon n="edit" s={12}/> 設定</button>)}
+                                {s.status !== 'アーカイブ' && window.canDo('surveys.delete') && (<button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleDelete(s.id, s.title);}} style={{color:'var(--coral)'}}><Icon n="trash" s={12}/></button>)}
+                              </div>
+                            </div>
+                            <SurveyAnalytics analytics={analytics[s.id]} loading={analyticsLoading[s.id]}/>
+                            <div style={{padding:'10px 14px',fontSize:11,color:'var(--ink4)',borderTop:'1px solid var(--line)',background:'var(--bg2)',fontWeight:600}}>個別回答</div>
+                            {resps.length === 0 ? (
+                              <div className="empty" style={{padding:'30px 20px'}}><div style={{fontSize:12}}>まだ回答がありません</div><div style={{fontSize:11,color:'var(--ink5)',marginTop:4}}>「回答登録」から登録できます</div></div>
+                            ) : (
+                              <table className="tbl">
+                                <thead><tr><th>ID</th><th>回答者</th><th className="right">NPS</th><th className="right">満足度</th><th>自由回答</th><th>日時</th><th></th></tr></thead>
+                                <tbody>
+                                  {resps.map(r => (
+                                    <tr key={r.id}>
+                                      <td className="mono" style={{fontSize:11}}>{r.id}</td>
+                                      <td>{r.userId || <span style={{color:'var(--ink5)'}}>匿名</span>}</td>
+                                      <td className="right num">{r.nps !== null ? (<span style={{color: r.nps >= 9 ? 'var(--green)' : r.nps >= 7 ? 'var(--amber)' : 'var(--coral)', fontWeight:700}}>{r.nps}</span>) : '—'}</td>
+                                      <td className="right num">{r.csat !== null ? <b style={{color:'var(--violet)'}}>{r.csat}</b> : '—'}</td>
+                                      <td style={{fontSize:12,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={r.free}>{r.free || <span style={{color:'var(--ink5)'}}>—</span>}</td>
+                                      <td className="mono" style={{fontSize:11,color:'var(--ink4)'}}>{r.answeredAt}</td>
+                                      <td>{window.canDo('surveys.delete') && (<button className="btn btn-ghost btn-sm btn-icon" onClick={()=>handleResponseDelete(r.id)} title="削除" style={{color:'var(--coral)'}}><Icon n="trash" s={12}/></button>)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -5770,6 +5950,12 @@ function PagePostEvent(){
             : handleSurveySave}
           onCancel={()=>setEditingSurvey(null)}
         />
+      )}
+      {responseModal && (
+        <ResponseModal survey={responseModal} onSave={handleResponseCreate} onCancel={()=>setResponseModal(null)}/>
+      )}
+      {builderSurvey && (
+        <QuestionBuilderModal survey={builderSurvey} onClose={()=>setBuilderSurvey(null)} onSaved={()=>loadDetail()}/>
       )}
     </div>
   );
@@ -8841,6 +9027,9 @@ function PageEventAdminDetail() {
   const [activityModal, setActivityModal] = useState(null);  // (Phase 17.K) {mode, activity?, defaultSessionId?}
   const [bulkMailOpen, setBulkMailOpen] = useState(false);  // (Phase 17.M-B4)
   const [bulkMailPreset, setBulkMailPreset] = useState(null);  // (満足度調査) 送信プリセット or null
+  const [surveyPublishOpen, setSurveyPublishOpen] = useState(false);  // (満足度調査) 公開モーダル
+  const [camLive, setCamLive] = useState(null);          // (QRライブ) livePoll 結果
+  const [camBannerDismissed, setCamBannerDismissed] = useState(false);
   const [trendPattern, setTrendPattern] = useState(null);  // (Phase 17.N-2) 過去パターン
   const [promos, setPromos] = useState([]);  // (Phase 17.O) 広報イベント
   const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
@@ -8866,6 +9055,18 @@ function PageEventAdminDetail() {
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
+  }, [eventId]);
+
+  // (QRライブ受付連携) このイベントの受付カメラ作動を ~3秒ポーリングで検知
+  useEffect(() => {
+    if (!eventId) return;
+    let timer = null;
+    const tick = () => {
+      window.postData('qr.livePoll', { eventId }).then(res => { setCamLive(res); }).catch(() => {});
+    };
+    tick();
+    timer = setInterval(tick, 3000);
+    return () => { if (timer) clearInterval(timer); };
   }, [eventId]);
 
   const loadAll = async () => {
@@ -9206,24 +9407,17 @@ function PageEventAdminDetail() {
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {/* (Phase 17.M-A1) 編集 — #events?edit=EVT-001 で 該当イベントを直接編集 */}
-            <button className="jb-btn jb-btn-primary" onClick={() => { window.location.hash = `events?edit=${event.id}`; }}>
+            {/* (Phase 17.M-A1 fix) 編集 — 実在する編集ルート #event-create?id= へ */}
+            <button className="jb-btn jb-btn-primary" onClick={() => { window.location.hash = `event-create?id=${event.id}`; }}>
               <Icon n="edit" s={12}/> 編集
             </button>
             {/* (Phase 17.M-B4) 一斉メール送信 */}
             <button className="jb-btn" onClick={() => { setBulkMailPreset(null); setBulkMailOpen(true); }}>
               <Icon n="mail" s={12}/> 一斉メール
             </button>
-            {/* (満足度調査) アンケート依頼メール — チェックイン済のみ、 マイページ導線を事前充填 */}
-            <button className="jb-btn" onClick={() => {
-              setBulkMailPreset({
-                subject: `【connec+a】 ${event.title || '{{event}}'} アンケートのお願い`,
-                body: `{{name}} 様\n\n先日は {{event}} にご参加いただきありがとうございました。\nよりよいイベントづくりのため、 満足度アンケートにご協力ください (所要 1〜2 分)。\n\n下記マイページからご回答いただけます。\nhttps://connectahubis-source.github.io/event\n\nご回答お待ちしております。\nconnec+a`,
-                statuses: ['チェックイン済'],
-              });
-              setBulkMailOpen(true);
-            }}>
-              <Icon n="star" s={12}/> 満足度調査を送信
+            {/* (満足度調査) アンケートを公開 — 公開すると登録者のマイページに表示+プッシュ通知。複数日は対象日を選んで公開 */}
+            <button className="jb-btn" onClick={() => setSurveyPublishOpen(true)} title="満足度調査を公開して、対象登録者のマイページに表示し、プッシュ通知を送ります">
+              <Icon n="star" s={12}/> 満足度調査を公開
             </button>
             {/* (満足度調査) マイページ (回答導線) リンクをコピー */}
             <button className="jb-btn" onClick={() => {
@@ -9245,6 +9439,27 @@ function PageEventAdminDetail() {
           </div>
         </div>
       </section>
+
+      {/* (QRライブ受付連携) 受付カメラ作動の検知バナー */}
+      {camLive && camLive.cameraActive && !camBannerDismissed && (
+        <div style={{margin:'0 0 14px',padding:'14px 18px',borderRadius:12,background:'linear-gradient(135deg, var(--jb-blue-deep, #0a2960) 0%, var(--jb-blue, #00a8e1) 100%)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap',boxShadow:'0 10px 30px -12px rgba(0,168,225,0.5)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,minWidth:0}}>
+            <div style={{fontSize:22}}>📷</div>
+            <div>
+              <div style={{fontWeight:800,fontSize:15}}>入場のカメラが作動しました</div>
+              <div style={{fontSize:12,opacity:0.92,marginTop:2}}>QRの詳細ステータス管理モードに移りますか？{camLive.device ? `（${camLive.device}）` : ''}</div>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:8,flexShrink:0}}>
+            <button className="jb-btn" style={{background:'#fff',color:'var(--jb-blue-deep, #0a2960)',fontWeight:700}} onClick={() => { window.location.hash = `qr-live?eventId=${event.id}`; }}>
+              管理モードへ移る
+            </button>
+            <button className="jb-btn" style={{background:'rgba(255,255,255,0.18)',color:'#fff'}} onClick={() => setCamBannerDismissed(true)}>
+              後で
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* (Phase 17.M-B2) 印刷専用 CSS */}
       <style>{`
@@ -9523,6 +9738,13 @@ function PageEventAdminDetail() {
           appCount={apps.length}
           preset={bulkMailPreset}
           onClose={() => { setBulkMailOpen(false); setBulkMailPreset(null); }}
+        />
+      )}
+      {surveyPublishOpen && (
+        <SurveyPublishModal
+          event={event}
+          sessions={sessions}
+          onClose={() => setSurveyPublishOpen(false)}
         />
       )}
     </div>
@@ -9971,6 +10193,132 @@ function FormRow({ label, children }) {
 }
 
 // =============================================================================
+// (満足度調査) SurveyPublishModal — イベントのアンケートを「公開」する。複数日は対象日を選んで公開。
+//   公開 (status=公開中) すると updateSurvey 経由で notifySurveyPublished_ が走り、対象登録者へ Web Push + 通知センターが届く。
+function SurveyPublishModal({ event, sessions, onClose }) {
+  const [surveys, setSurveys] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState("");
+
+  const sessionMap = {};
+  (sessions || []).forEach(s => { sessionMap[s.id] = s; });
+
+  const todayStr = (() => {
+    const d = new Date(); const z = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+  })();
+
+  function load() {
+    setLoading(true);
+    window.fetchData('listSurveys')
+      .then(all => {
+        const list = (Array.isArray(all) ? all : []).filter(s => s.eventId === event.id);
+        list.sort((a, b) => {
+          const sa = sessionMap[a.sessionId], sb = sessionMap[b.sessionId];
+          const oa = sa ? (sa.order || 0) : 0, ob = sb ? (sb.order || 0) : 0;
+          return oa - ob;
+        });
+        setSurveys(list);
+      })
+      .catch(() => setSurveys([]))
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => { load(); }, []);
+
+  function dayInfo(s) {
+    const sess = s.sessionId ? sessionMap[s.sessionId] : null;
+    if (!sess) return { label: '全体', date: '', isToday: false };
+    return { label: `Day ${sess.order || ''}${sess.name ? ' ・ ' + sess.name : ''}`, date: sess.date || '', isToday: (sess.date || '') === todayStr };
+  }
+
+  async function publish(s, toPublish) {
+    const di = dayInfo(s);
+    if (toPublish) {
+      const ok = await window.confirmDialog({
+        title: `「${s.title}」を公開しますか?`,
+        body: `公開すると、対象登録者${di.date ? `（${di.label} / ${di.date}）` : ''}のマイページに表示され、プッシュ通知と通知センターに配信されます。`,
+        confirmLabel: '公開する', warn: true,
+      });
+      if (!ok) return;
+    }
+    setBusyId(s.id);
+    try {
+      await window.postData('updateSurvey', { surveyId: s.id, fields: { status: toPublish ? '公開中' : '下書き' } });
+      window.toast.success(toPublish ? '公開しました。対象登録者へプッシュ通知を送信しました' : '下書きに戻しました');
+      load();
+    } catch (e) {
+      window.toast.error('変更に失敗しました: ' + (e.message || e));
+    } finally { setBusyId(""); }
+  }
+
+  const isMulti = event && (event.format === 'multi' || (sessions && sessions.length > 0));
+
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(30,50,71,0.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:120,padding:20}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'var(--jb-paper)',borderRadius:12,width:640,maxWidth:'96%',maxHeight:'92vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0, 168, 225, 0.25)'}}>
+        <div style={{padding:'22px 26px 18px',background:'linear-gradient(135deg, var(--jb-blue-deep) 0%, var(--jb-blue) 100%)',color:'var(--jb-paper)',borderRadius:'12px 12px 0 0'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.2em',textTransform:'uppercase',opacity:0.85}}>SURVEY PUBLISH</div>
+              <div style={{fontFamily:'var(--jb-display)',fontSize:22,fontWeight:800,marginTop:6,letterSpacing:'-0.01em'}}>満足度調査を公開</div>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,opacity:0.9,marginTop:4}}>{event.title}{isMulti ? ' · 複数日（対象日を選んで公開）' : ''}</div>
+            </div>
+            <button onClick={onClose} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:'50%',width:30,height:30,cursor:'pointer',fontSize:18}}>×</button>
+          </div>
+        </div>
+        <div style={{padding:'18px 26px 24px'}}>
+          <div style={{fontSize:12,color:'var(--jb-ink-soft, #5a6b7b)',lineHeight:1.7,marginBottom:14,padding:'10px 12px',background:'var(--jb-blue-soft, #eef6fb)',borderRadius:8}}>
+            公開すると、対象登録者のマイページにアンケートが表示され、プッシュ通知（と通知センター）に配信されます。{isMulti ? '複数日イベントは、日（セッション）ごとに公開できます。本日開催分には【本日】を表示しています。' : ''}
+            <br/>プッシュ通知の受信には、対象者が事前に通知を許可している必要があります（未許可の人には通知センターのみ）。
+          </div>
+
+          {loading ? (
+            <div style={{textAlign:'center',color:'var(--jb-ink-soft, #889)',fontSize:13,padding:'30px'}}>読み込み中…</div>
+          ) : surveys.length === 0 ? (
+            <div style={{textAlign:'center',color:'var(--jb-ink-soft, #889)',fontSize:13,padding:'24px'}}>
+              このイベントのアンケートがまだありません。<br/>
+              ナビ「満足度調査・イベント後」でこのイベントを選び、アンケートを作成してください。
+            </div>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {surveys.map(s => {
+                const di = dayInfo(s);
+                const isLive = s.status === '公開中';
+                const isArchived = s.status === 'アーカイブ';
+                return (
+                  <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',border:'1px solid var(--jb-line, #e3eaf0)',borderRadius:10,flexWrap:'wrap',background: di.isToday ? 'var(--jb-blue-soft, #eef6fb)' : 'transparent'}}>
+                    <div style={{flex:1,minWidth:160}}>
+                      <div style={{fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        {s.title}
+                        {di.isToday && <span style={{fontSize:10,padding:'2px 8px',background:'var(--jb-blue, #00a8e1)',color:'#fff',borderRadius:10,fontWeight:700}}>本日</span>}
+                      </div>
+                      <div style={{fontSize:11,color:'var(--jb-ink-soft, #889)',marginTop:3}}>
+                        {di.label}{di.date ? ' ・ ' + di.date : ''} · <span className="mono">{s.id}</span>
+                      </div>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:10, background: isLive ? 'var(--jb-success-soft, #e6f7ee)' : isArchived ? '#eceff2' : '#fff6e5', color: isLive ? 'var(--jb-success, #1a9d5a)' : isArchived ? '#7a8694' : '#a86b00', border:'1px solid currentColor'}}>{s.status}</span>
+                    {isArchived ? (
+                      <span style={{fontSize:11,color:'var(--jb-ink-soft, #889)'}}>アーカイブ済</span>
+                    ) : isLive ? (
+                      <button className="jb-btn" disabled={busyId===s.id} onClick={() => publish(s, false)}>
+                        {busyId===s.id ? '…' : '下書きに戻す'}
+                      </button>
+                    ) : (
+                      <button className="jb-btn jb-btn-primary" disabled={busyId===s.id} onClick={() => publish(s, true)}>
+                        {busyId===s.id ? '公開中…' : '公開してプッシュ送信'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // (Phase 17.M-B4) BulkMailModal — 同イベントの 全申込者へ一斉メール送信
 // =============================================================================
 function BulkMailModal({ event, appCount, preset, onClose }) {
@@ -20574,7 +20922,14 @@ function PageQR(){
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedEventId, setSelectedEventId] = useState("");
+  const [selectedEventId, setSelectedEventId] = useState(() => {
+    try {
+      const h = window.location.hash || '';
+      const i = h.indexOf('?');
+      if (i < 0) return '';
+      return new URLSearchParams(h.substring(i + 1)).get('eventId') || '';
+    } catch (e) { return ''; }
+  });
   const [selectedSessionId, setSelectedSessionId] = useState("");   // multi イベント時のサブセレクター (Phase 6)
   const [sessions, setSessions] = useState([]);                     // 選択中イベントのセッション一覧
   const [scanning, setScanning] = useState(false);
@@ -20589,6 +20944,19 @@ function PageQR(){
   const audioCtxRef = useRef(null);
   // (S144) 直近スキャン記録 (重複ガード強化版)
   const lastScannedRef = useRef({ data: null, time: 0 });
+  // (QRライブ受付連携) 全画面カメラモード = スキャナ端末。読み取り結果を詳細ステータス管理端末へ中継。
+  const [cameraMode, setCameraMode] = useState(false);
+  const [camLastSent, setCamLastSent] = useState(null);   // {name, at}
+  const cameraBeatRef = useRef(null);
+  const overlayVideoRef = useRef(null);
+  const deviceLabelRef = useRef('');
+  if (!deviceLabelRef.current) {
+    try {
+      let d = sessionStorage.getItem('qr-device-label');
+      if (!d) { d = '受付端末-' + Math.random().toString(36).slice(2, 6); sessionStorage.setItem('qr-device-label', d); }
+      deviceLabelRef.current = d;
+    } catch (e) { deviceLabelRef.current = '受付端末'; }
+  }
 
   // 音生成 — Web Audio API
   function ensureAudioCtx() {
@@ -20718,6 +21086,43 @@ function PageQR(){
     setScanning(false);
   }
 
+  // (QRライブ受付連携) 全画面カメラモード開始 — スキャナ端末として cameraStart + ハートビート開始
+  async function enterCameraMode() {
+    if (!selectedEventId) { window.toast.warn('先にイベントを選択してください'); return; }
+    if (!scanning) { await startScan(); }
+    try { await window.postData('qr.cameraStart', { eventId: selectedEventId, device: deviceLabelRef.current }); }
+    catch (e) { window.toast.error('受付連携の開始に失敗: ' + (e.message || e)); return; }
+    setCameraMode(true);
+    window.toast.success('受付連携モードを開始しました（読み取りは管理画面に表示されます）');
+    if (cameraBeatRef.current) clearInterval(cameraBeatRef.current);
+    cameraBeatRef.current = setInterval(async () => {
+      try {
+        const res = await window.postData('qr.cameraBeat', { eventId: selectedEventId, device: deviceLabelRef.current });
+        if (res && res.stopRequested) { exitCameraMode(true); }
+      } catch (e) {}
+    }, 8000);
+  }
+  function exitCameraMode(remote) {
+    if (cameraBeatRef.current) { clearInterval(cameraBeatRef.current); cameraBeatRef.current = null; }
+    try { window.postData('qr.cameraStop', { eventId: selectedEventId }); } catch (e) {}
+    setCameraMode(false);
+    setCamLastSent(null);
+    stopScan();
+    if (remote) window.toast.info('管理画面からカメラが停止されました');
+  }
+  // 全画面オーバーレイの video に同じストリームを接続 (検出は元の hidden video で継続)
+  useEffect(() => {
+    if (cameraMode && overlayVideoRef.current && streamRef.current) {
+      try {
+        overlayVideoRef.current.srcObject = streamRef.current;
+        overlayVideoRef.current.setAttribute('playsinline', 'true');
+        overlayVideoRef.current.play();
+      } catch (e) {}
+    }
+  }, [cameraMode, scanning]);
+  // アンマウント時のクリーンアップ
+  useEffect(() => () => { if (cameraBeatRef.current) clearInterval(cameraBeatRef.current); }, []);
+
   // QR検出処理
   function detectQR() {
     const video = videoRef.current;
@@ -20752,6 +21157,21 @@ function PageQR(){
     const app = window.findApplicationByRegId(applications, data);
     const participant = app ? participants.find(p => p.id === app.userId) : null;
     const evMatch = app ? events.find(e => e.id === app.eventId) : null;
+
+    // (QRライブ受付連携) カメラモード時は「中継」のみ。入場判断・チェックインは詳細ステータス管理端末で行う。
+    if (cameraMode) {
+      if (!app) { playError(); window.toast.error('申込が見つかりません'); return; }
+      if (app.eventId !== selectedEventId) { playError(); window.toast.error('別イベントの申込です'); return; }
+      try {
+        await window.postData('qr.pushScan', { eventId: selectedEventId, regId: data, by: deviceLabelRef.current });
+        playSuccess();
+        setCamLastSent({ name: app.userName || (participant && participant.name) || data, at: Date.now() });
+      } catch (e) {
+        playError();
+        window.toast.error('中継に失敗しました: ' + (e.message || e));
+      }
+      return;
+    }
 
     // 共通: 結果オブジェクトを構築
     const buildResult = (type, message, detail) => ({
@@ -21009,11 +21429,66 @@ function PageQR(){
   const totalHead = eventApplications.reduce((s, app) => s + headcountFor(app), 0);
   const checkinPct = totalRegCount > 0 ? Math.round(checkedInCount / totalRegCount * 100) : 0;
   const selectedEvent = events.find(e => e.id === selectedEventId);
+
+  // (QR詳細) リピーター判定 — 全登録から userId が 2 イベント以上に出現すれば リピーター
+  const repeaterUserIds = React.useMemo(() => {
+    const byUser = {};
+    (registrations || []).forEach(r => {
+      if (!r.userId) return;
+      if (r.status === 'キャンセル' || r.status === '返金' || r.status === '返金待ち') return;
+      (byUser[r.userId] = byUser[r.userId] || new Set()).add(r.eventId);
+    });
+    const s = new Set();
+    Object.keys(byUser).forEach(uid => { if (byUser[uid].size >= 2) s.add(uid); });
+    return s;
+  }, [registrations]);
+
+  // (QR詳細) Application 単位の 決済+受付 ステータスラベル — イベント詳細「申込者」と同じ粒度
+  function rosterStatus(app) {
+    const rs = app.regs || [];
+    const active = rs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+    if (active.length === 0) return { label: 'キャンセル', cls: 'badge-ink' };
+    if (active.length > 0 && active.every(r => r.status === 'チェックイン済')) return { label: 'チェックイン済', cls: 'badge-green' };
+    const notes = rs.map(r => String(r.note || '') + ' ' + String(r.actualPaymentMethod || '')).join(' ');
+    const isPrepay = /PayPay.*事前|事前決済|事前/.test(notes);
+    const isDayPay = /現金|当日/.test(notes);
+    const isPaid = rs.some(r => r.paid === true || r.paid === 'TRUE')
+      || rs.some(r => { const s = String(r.status || ''); return s === '決済済' || s === '決済済み'; });
+    if (isPaid) return isPrepay ? { label: '前払い済', cls: 'badge-green' } : { label: '当日決済済', cls: 'badge-green' };
+    if (isPrepay) return { label: '前払い待ち', cls: 'badge-amber' };
+    if (isDayPay) return { label: '当日払い予定', cls: 'badge-amber' };
+    return { label: '申込済', cls: 'badge-amber' };
+  }
   const visibleEvents = events.filter(e => e.status !== "アーカイブ");
   const selectedSession = sessions.find(s => s.id === selectedSessionId);
 
   return (
     <div className="jb-page" data-page="qr">
+
+      {/* ===== (QRライブ受付連携) 全画面カメラモード オーバーレイ ===== */}
+      {cameraMode && (
+        <div style={{position:'fixed',inset:0,zIndex:2147483000,background:'#06122b',display:'flex',flexDirection:'column'}}>
+          <div style={{flex:1,position:'relative',overflow:'hidden'}}>
+            <video ref={overlayVideoRef} playsInline muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
+            {/* 中央の読み取りガイド枠 */}
+            <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:'min(70vw,320px)',height:'min(70vw,320px)',border:'3px solid rgba(255,255,255,0.85)',borderRadius:20,boxShadow:'0 0 0 9999px rgba(0,0,0,0.35)'}}/>
+            <div style={{position:'absolute',top:16,left:0,right:0,textAlign:'center',color:'#fff',fontSize:14,fontWeight:700,textShadow:'0 1px 4px rgba(0,0,0,0.6)'}}>
+              受付連携モード · {selectedEvent ? selectedEvent.title : ''}
+            </div>
+            <div style={{position:'absolute',bottom:16,left:0,right:0,textAlign:'center',color:'#dbeafe',fontSize:12,textShadow:'0 1px 4px rgba(0,0,0,0.6)'}}>
+              {camLastSent
+                ? `送信: ${camLastSent.name} さん（管理画面で入場確定）`
+                : 'QRを枠内にかざしてください。読み取り結果は管理画面に表示されます'}
+            </div>
+          </div>
+          <div style={{padding:'14px 16px',background:'#0a1f4d',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+            <div style={{color:'#9fb6d6',fontSize:11}}>端末: {deviceLabelRef.current}</div>
+            <button className="jb-btn jb-btn-accent" onClick={() => exitCameraMode(false)}>
+              <Icon n="x" s={12}/> カメラを終了
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ===== 表紙 ===== */}
       <header className="jb-cover">
@@ -21032,12 +21507,17 @@ function PageQR(){
             {scanning ? '●' : '○'}
           </span>
           <div>{scanning ? 'SCANNING' : 'READY'}</div>
-          <div style={{marginTop:20}}>
+          <div style={{marginTop:20,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
             {scanning ? (
               <button className="jb-btn jb-btn-accent" onClick={stopScan}><Icon n="x" s={12}/> 受付終了</button>
             ) : (
               <button className="jb-btn jb-btn-primary" onClick={startScan} disabled={!selectedEventId}>
                 <Icon n="camera" s={12}/> カメラ開始
+              </button>
+            )}
+            {!cameraMode && (
+              <button className="jb-btn" onClick={enterCameraMode} disabled={!selectedEventId} title="全画面カメラで読み取り、結果を詳細ステータス管理画面に中継します（入場確定は管理画面側）">
+                <Icon n="qr" s={12}/> 受付連携モード（全画面）
               </button>
             )}
           </div>
@@ -21254,13 +21734,14 @@ function PageQR(){
             ) : (
               <table className="tbl">
                 <thead><tr>
-                  <th>申込</th><th>申込者</th><th>状態</th>
+                  <th>申込</th><th>申込者 / フリガナ</th><th className="right">年齢</th><th>属性</th><th>決済・受付</th>
                 </tr></thead>
                 <tbody>
                   {eventApplications.map(app => {
-                    // Application の集約状態: 全 reg checked-in → チェックイン済 / それ以外 → 申込済み
-                    const allCheckedIn = app.regs.every(r => r.status === 'チェックイン済');
-                    const aStatus = allCheckedIn ? 'チェックイン済' : '申込済み';
+                    const rs = rosterStatus(app);
+                    const kana = (app.regs.find(r => r.userKana) || {}).userKana || '';
+                    const ageVal = (() => { const r = app.regs.find(r => r.age != null); return r ? r.age : null; })();
+                    const isRepeater = repeaterUserIds.has(app.userId);
                     return (
                       <tr key={app.applicationId}>
                         <td className="mono" style={{fontSize:11}}>
@@ -21271,11 +21752,18 @@ function PageQR(){
                         </td>
                         <td style={{fontWeight:600}}>
                           {app.userName}
-                          <span style={{fontSize:11,color:'var(--ink4)',fontWeight:400,marginLeft:6}}>{app.userEmail}</span>
+                          {kana && <div style={{fontSize:10,color:'var(--ink4)',fontWeight:400,marginTop:1}}>{kana}</div>}
+                          <div style={{fontSize:10,color:'var(--ink5)',fontWeight:400}}>{app.userEmail}</div>
+                        </td>
+                        <td className="right num" style={{fontSize:12}}>{ageVal != null ? ageVal : '—'}</td>
+                        <td>
+                          {isRepeater
+                            ? <span className="badge badge-violet" style={{fontSize:10}}>リピーター</span>
+                            : <span style={{fontSize:10,color:'var(--ink5)'}}>初参加</span>}
                         </td>
                         <td>
-                          <span className={clsx("badge", aStatus === 'チェックイン済' ? "badge-green" : "badge-amber")}>
-                            <span className="badge-dot"></span>{aStatus}
+                          <span className={clsx("badge", rs.cls)}>
+                            <span className="badge-dot"></span>{rs.label}
                           </span>
                         </td>
                       </tr>
@@ -21290,6 +21778,207 @@ function PageQR(){
     </div>
   );
 }
+
+// -------------------- (QRライブ受付連携) PageQRLive — 詳細ステータス管理モード --------------------
+// イベント詳細から遷移。スキャナ端末が読み取った人を ~1.5秒ポーリングで即時表示し、
+// 入場（決済確認）を確定する。管理端末からカメラ停止も可能。
+function PageQRLive(){
+  const eventId = (() => {
+    try { const h = window.location.hash || ''; const i = h.indexOf('?'); if (i < 0) return ''; return new URLSearchParams(h.substring(i + 1)).get('eventId') || ''; }
+    catch (e) { return ''; }
+  })();
+  const [registrations, setRegistrations] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [poll, setPoll] = useState(null);        // 最新 livePoll 結果
+  const [current, setCurrent] = useState(null);  // {regId, seq}
+  const [busy, setBusy] = useState(false);
+  const [doneSeqs, setDoneSeqs] = useState({});   // seq -> 'admitted'
+  const lastSeqRef = useRef(0);
+  const pollTimerRef = useRef(null);
+
+  function loadData() {
+    return Promise.all([
+      window.fetchData('listRegistrations').catch(() => []),
+      window.fetchData('listEvents').catch(() => []),
+      window.fetchData('listEventSessions', { eventId }).catch(() => []),
+    ]).then(([regs, evs, sess]) => {
+      setRegistrations(Array.isArray(regs) ? regs : []);
+      setEvents(Array.isArray(evs) ? evs : []);
+      setSessions(Array.isArray(sess) ? sess : []);
+    });
+  }
+  useEffect(() => { loadData().finally(() => setLoading(false)); }, []);
+
+  // ~1.5秒ポーリング
+  useEffect(() => {
+    if (!eventId) return;
+    function tick() {
+      window.postData('qr.livePoll', { eventId }).then(res => {
+        setPoll(res);
+        if (res && res.lastScan && res.lastScan.seq && res.lastScan.seq !== lastSeqRef.current) {
+          lastSeqRef.current = res.lastScan.seq;
+          setCurrent({ regId: res.lastScan.regId, seq: res.lastScan.seq });
+        }
+      }).catch(() => {});
+    }
+    tick();
+    pollTimerRef.current = setInterval(tick, 1500);
+    return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
+  }, [eventId]);
+
+  const event = events.find(e => e.id === eventId) || null;
+  const repeaterUserIds = React.useMemo(() => {
+    const byUser = {};
+    (registrations || []).forEach(r => {
+      if (!r.userId) return;
+      if (r.status === 'キャンセル' || r.status === '返金' || r.status === '返金待ち') return;
+      (byUser[r.userId] = byUser[r.userId] || new Set()).add(r.eventId);
+    });
+    const s = new Set();
+    Object.keys(byUser).forEach(uid => { if (byUser[uid].size >= 2) s.add(uid); });
+    return s;
+  }, [registrations]);
+
+  // current.regId を解決
+  const applications = React.useMemo(() => window.groupRegistrationsByApplication(registrations), [registrations]);
+  const app = current ? window.findApplicationByRegId(applications, current.regId) : null;
+  const appRegs = app ? (app.regs || []) : [];
+  const activeRegs = appRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+  const allCheckedIn = activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済');
+  const isPaid = appRegs.some(r => r.paid === true || r.paid === 'TRUE') || appRegs.some(r => { const s = String(r.status || ''); return s === '決済済' || s === '決済済み'; });
+  const kana = (appRegs.find(r => r.userKana) || {}).userKana || '';
+  const ageVal = (() => { const r = appRegs.find(r => r.age != null); return r ? r.age : null; })();
+  const isRepeater = app ? repeaterUserIds.has(app.userId) : false;
+  const wrongEvent = app && app.eventId !== eventId;
+  const admittedThis = current && doneSeqs[current.seq];
+
+  async function admit(confirmPay) {
+    if (!app) return;
+    setBusy(true);
+    try {
+      const targets = activeRegs.filter(r => r.status !== 'チェックイン済');
+      for (const r of targets) { await window.postData('admin.checkin', { regId: r.id }); }
+      if (confirmPay) {
+        for (const r of targets) { try { await window.postData('admin.confirmPayment', { regId: r.id, paymentMethod: r.actualPaymentMethod || '' }); } catch (e) {} }
+      }
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      await loadData();
+      setDoneSeqs(m => ({ ...m, [current.seq]: 'admitted' }));
+      window.toast.success(`${app.userName} さんを入場確定しました`);
+    } catch (e) {
+      window.toast.error('入場確定に失敗: ' + (e.message || e));
+    } finally { setBusy(false); }
+  }
+
+  async function stopCamera() {
+    try { await window.postData('qr.cameraStop', { eventId }); window.toast.success('スキャナのカメラを停止しました'); }
+    catch (e) { window.toast.error('停止に失敗: ' + (e.message || e)); }
+  }
+
+  const camActive = poll && poll.cameraActive;
+
+  return (
+    <div className="jb-page" data-page="qr-live">
+      <div className="page-head">
+        <div className="ph-left">
+          <div className="ph-crumbs"><span>イベント</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>QR詳細ステータス管理</span></div>
+          <h1>QR詳細 <i>ステータス管理</i></h1>
+          <div className="ph-sub">{event ? event.title : (eventId || 'イベント未指定')} · スキャナ端末が読み取った人を即時表示します</div>
+        </div>
+        <div className="ph-right" style={{display:'flex',gap:8,alignItems:'center'}}>
+          <span className="badge" style={{background: camActive ? 'var(--green-50)' : '#eceff2', color: camActive ? 'var(--green)' : 'var(--ink4)', border:'1px solid currentColor'}}>
+            <span className="badge-dot"></span>{camActive ? `カメラ作動中${poll.device ? '（' + poll.device + '）' : ''}` : 'カメラ停止中'}
+          </span>
+          {camActive && <button className="jb-btn jb-btn-accent" onClick={stopCamera}><Icon n="x" s={12}/> カメラ停止</button>}
+          <button className="jb-btn" onClick={() => { window.location.hash = `event-detail?id=${eventId}`; }}>← イベント詳細</button>
+        </div>
+      </div>
+
+      {!eventId ? (
+        <div className="card"><div className="card-body" style={{padding:30,textAlign:'center',color:'var(--ink4)'}}>イベントが指定されていません。イベント詳細から開いてください。</div></div>
+      ) : !camActive && !current ? (
+        <div className="card"><div className="card-body" style={{padding:40,textAlign:'center'}}>
+          <div style={{fontSize:40,marginBottom:10}}>📷</div>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>スキャナ端末のカメラ作動を待っています</div>
+          <div style={{fontSize:12,color:'var(--ink4)'}}>受付端末で「受付連携モード（全画面）」を開始すると、ここに読み取り結果が表示されます。</div>
+        </div></div>
+      ) : !current ? (
+        <div className="card"><div className="card-body" style={{padding:40,textAlign:'center'}}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>QRの読み取りを待っています…</div>
+          <div style={{fontSize:12,color:'var(--ink4)'}}>受付端末でQRをかざすと、ここに対象者が表示されます。</div>
+        </div></div>
+      ) : !app ? (
+        <div className="card"><div className="card-body" style={{padding:30}}>
+          <div style={{fontSize:15,fontWeight:700,color:'var(--coral)'}}>申込が見つかりません</div>
+          <div style={{fontSize:12,color:'var(--ink4)',marginTop:6}}>読み取りコード: <span className="mono">{current.regId}</span></div>
+        </div></div>
+      ) : (
+        <div className="card">
+          <div className="card-body" style={{padding:'0'}}>
+            {/* 大きなステータスヘッダー */}
+            <div style={{padding:'20px 22px',background: allCheckedIn ? 'var(--green-50)' : isPaid ? 'var(--blue-soft, #eef6fb)' : '#fff6e5', borderBottom:'1px solid var(--line)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                <div style={{fontSize:26,fontWeight:800,color:'var(--ink1)'}}>{app.userName}</div>
+                {kana && <div style={{fontSize:14,color:'var(--ink3)'}}>{kana}</div>}
+                {isRepeater
+                  ? <span className="badge badge-violet">リピーター</span>
+                  : <span className="badge badge-ink">初参加</span>}
+                {ageVal != null && <span className="badge badge-ink">{ageVal} 歳</span>}
+              </div>
+              <div style={{marginTop:10,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                {allCheckedIn
+                  ? <span className="badge badge-green" style={{fontSize:13}}><span className="badge-dot"></span>受付済（チェックイン済）</span>
+                  : isPaid
+                    ? <span className="badge badge-green" style={{fontSize:13}}><span className="badge-dot"></span>決済済み</span>
+                    : <span className="badge badge-amber" style={{fontSize:13}}><span className="badge-dot"></span>未決済</span>}
+                {wrongEvent && <span className="badge badge-coral">別イベントの申込</span>}
+                <span style={{fontSize:11,color:'var(--ink4)'}} className="mono">{app.representativeRegId}{appRegs.length > 1 ? ` · ${appRegs.length} セッション` : ''}</span>
+              </div>
+            </div>
+
+            {/* 申込明細 */}
+            <div style={{padding:'14px 22px',fontSize:12,color:'var(--ink3)',borderBottom:'1px solid var(--line)'}}>
+              <div>メール: {app.userEmail || '—'}</div>
+              {appRegs.length > 1 && (
+                <div style={{marginTop:6}}>
+                  {appRegs.map(r => {
+                    const sess = sessions.find(s => s.id === r.sessionId);
+                    return <div key={r.id} style={{fontSize:11}}>・{sess ? `Day ${sess.order || ''} ${sess.date || ''}` : (r.sessionId || '全体')} — {r.status}{r.paid ? ' / 決済済' : ''}</div>;
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 入場確定アクション */}
+            <div style={{padding:'18px 22px',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+              {admittedThis || allCheckedIn ? (
+                <div style={{fontSize:15,fontWeight:700,color:'var(--green)'}}>✓ 入場確定済み — 次のQRをどうぞ</div>
+              ) : wrongEvent ? (
+                <div style={{fontSize:13,color:'var(--coral)'}}>このイベントの申込ではありません。受付できません。</div>
+              ) : isPaid ? (
+                <button className="jb-btn jb-btn-primary" disabled={busy} onClick={() => admit(false)} style={{fontSize:15,padding:'12px 22px'}}>
+                  {busy ? '処理中…' : '✓ 入場を確定（決済済み）'}
+                </button>
+              ) : (
+                <>
+                  <button className="jb-btn jb-btn-primary" disabled={busy} onClick={() => admit(true)} style={{fontSize:15,padding:'12px 22px',background:'var(--green)'}}>
+                    {busy ? '処理中…' : '決済を確認して入場'}
+                  </button>
+                  <button className="jb-btn" disabled={busy} onClick={() => admit(false)} title="決済は保留のまま受付（後で決済確認）">
+                    保留で受付
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+window.PageQRLive = PageQRLive;
 
 // -------------------- PageSchedule --------------------
 
@@ -28496,8 +29185,10 @@ const PAGES = {
   "event-detail": () => renderPage('PageEventAdminDetail'),
   registrations:  () => renderPage('PageRegistrations'),
   qr:             () => renderPage('PageQR'),
+  "qr-live":      () => renderPage('PageQRLive'),
   schedule:       () => renderPage('PageSchedule'),
-  satisfaction:   () => renderPage('PageSatisfaction'),
+  // (統合) 旧「満足度調査」ページは「満足度調査・イベント後」に一本化。#satisfaction は統合ページへ。
+  satisfaction:   () => renderPage('PagePostEvent'),
   "post-event":   () => renderPage('PagePostEvent'),
 
   // ----- コミュニケーション (Phase 2新-B) -----
