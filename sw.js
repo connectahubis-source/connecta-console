@@ -1,68 +1,67 @@
-// connec+a Console — Service Worker
-// 目的: PWA として機能させ、オフライン時に最低限のキャッシュを返す
-// 戦略: Network First (常に最新を取得し、失敗時のみキャッシュ)
-//
-// 重要: 新バージョンをデプロイする度に、CACHE_NAME のサフィックスを更新すること。
-// これを怠ると、ユーザーは古いキャッシュを使い続けてしまう。
+/* connec+a Service Worker (P2: PWA + Web Push)
+ * 配置: participants-index.html と同じディレクトリ (例: リポジトリ直下) に置く。
+ * 登録: navigator.serviceWorker.register('./sw.js')  ← 相対指定で GitHub Pages のサブパスでも動作。
+ */
+const CACHE_NAME = 'cca-cache-v2';
 
-const CACHE_NAME = 'connecta-console-v2-9-1';   // 新バージョン毎に更新
-const STATIC_RESOURCES = [
-  './',
-  './index.html',
-];
+self.addEventListener('install', (e) => { self.skipWaiting(); });
+self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
 
-// インストール: 静的リソースをキャッシュ
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_RESOURCES)).catch(()=>{})
-  );
-  self.skipWaiting();
-});
-
-// アクティベート: 古いキャッシュを削除
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+// 静的アセットのみ cache-first。HTML / GAS API はキャッシュしない (常に最新)。
+self.addEventListener('fetch', (e) => {
+  if (e.request.url.indexOf('script.google.com') >= 0) return;
+  if (e.request.url.indexOf('googleusercontent.com') >= 0) return;
+  if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  const isStatic = /\.(woff2?|ttf|otf|png|jpg|jpeg|gif|svg|webp|ico|css|js)(\?|$)/i.test(url.pathname);
+  if (!isStatic) return;
+  e.respondWith(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(e.request).then((cached) => {
+        const fetchPromise = fetch(e.request).then((networkRes) => {
+          if (networkRes && networkRes.ok) cache.put(e.request, networkRes.clone());
+          return networkRes;
+        }).catch(() => cached);
+        return cached || fetchPromise;
+      })
     )
   );
-  self.clients.claim();
 });
 
-// フェッチ: GET のみ Network First
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-
-  // GAS / 外部 API はそのままネットワーク (キャッシュしない)
-  const url = new URL(event.request.url);
-  if (url.hostname.includes('script.google.com') || url.hostname.includes('googleapis.com')) {
-    return;
+// --- Web Push ---
+// 送信側 (P2-2: web-push) が JSON ペイロードを送る想定:
+// { title, body, url, tag, icon, badge }
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (err) {
+    try { data = { title: 'connec+a', body: event.data ? event.data.text() : '' }; } catch (e2) { data = {}; }
   }
+  const title = data.title || 'connec+a';
+  const options = {
+    body: data.body || '',
+    icon: data.icon || './icons/icon-192.png',
+    badge: data.badge || './icons/badge-72.png',
+    data: { url: data.url || './' },
+    tag: data.tag || undefined,
+    renotify: !!data.tag,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
 
-  // HTML (.html, /, ?query) は常にネットワーク優先 + キャッシュしない
-  // → 新しい index.html がアップロードされたら即反映される
-  const isHtml = event.request.destination === 'document' ||
-                 url.pathname.endsWith('.html') ||
-                 url.pathname.endsWith('/');
-
-  if (isHtml) {
-    event.respondWith(
-      fetch(event.request, { cache: 'no-store' })
-        .catch(() => caches.match(event.request))   // オフラインのみキャッシュにフォールバック
-    );
-    return;
-  }
-
-  // それ以外 (CSS/JS/フォントなど) は通常の Network First
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response && response.ok && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(()=>{});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) {
+          if (c.navigate) { try { c.navigate(target); } catch (e) {} }
+          return c.focus();
         }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+    })
   );
 });
