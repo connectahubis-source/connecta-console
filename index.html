@@ -28401,7 +28401,7 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
   const [status, setStatus] = useState(news?.status || '下書き');
   const [showOnFront, setShowOnFront] = useState(!!news?.showOnFront);
   const [displayOrder, setDisplayOrder] = useState(news?.displayOrder === '' || news?.displayOrder == null ? '' : String(news.displayOrder));
-  const [publishAt, setPublishAt] = useState(news?.publishAt ? String(news.publishAt).slice(0, 16) : '');
+  const [publishAt, setPublishAt] = useState(news?.publishAt ? String(news.publishAt).replace(' ', 'T').slice(0, 16) : '');
   const [ctaText, setCtaText] = useState(news?.ctaText || '詳細を見る');
   const [ctaLink, setCtaLink] = useState(news?.ctaLink || '');
   // (Phase 7.8) 多言語
@@ -28495,6 +28495,14 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
             </select>
           </FieldRow>
 
+          <FieldRow label="公開予約日時 (任意)">
+            <input type="datetime-local" value={publishAt} onChange={e => setPublishAt(e.target.value)}
+              style={{padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14}}/>
+            <div style={{fontSize:11, color:'var(--ink5)', marginTop:4}}>
+              ステータスを「予約」にし、この日時を設定すると、その日時に自動公開＋本番参加者へ通知します(テスター除外)。 日時を変更すると、最後に設定した日時で送信されます。 {publishAt ? '現在の保存値: ' + publishAt.replace('T', ' ') : '未設定'}
+            </div>
+          </FieldRow>
+
           {/* 画像 (一覧カバー / サムネ / 詳細・ホーム用) */}
           <FieldRow label="画像">
             <div style={{display:'flex', flexDirection:'column', gap:12}}>
@@ -28542,11 +28550,6 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
                 <FieldRow label="表示順序 (1=最初、空=末尾)">
                   <input type="number" value={displayOrder} onChange={e => setDisplayOrder(e.target.value)}
                     style={{padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14, width:120}}/>
-                </FieldRow>
-
-                <FieldRow label="公開予約日時 (任意)">
-                  <input type="datetime-local" value={publishAt} onChange={e => setPublishAt(e.target.value)}
-                    style={{padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14}}/>
                 </FieldRow>
 
                 <FieldRow label="CTA文言">
