@@ -5644,7 +5644,7 @@ function PagePostEvent(){
       Promise.all(evSurveys.map(s =>
         window.fetchData('listSurveyResponses', { surveyId: s.id }).catch(() => [])
       )).then(arrs => {
-        setResponses([].concat(...arrs.map(r => Array.isArray(r) ? r : [])));
+        setResponses([].concat(...arrs.map(r => Array.isArray(r) ? r : [])).filter(r => !r.isTest));
       });
     }).catch(() => { setSurveys([]); setResponses([]); });
   }, [eventId]);
@@ -5655,7 +5655,7 @@ function PagePostEvent(){
   function checkedInForSurvey(s) {
     if (!s) return 0;
     return registrations.filter(r =>
-      r.eventId === s.eventId && (s.sessionId ? r.sessionId === s.sessionId : true) && r.status === 'チェックイン済'
+      r.eventId === s.eventId && (s.sessionId ? r.sessionId === s.sessionId : true) && r.status === 'チェックイン済' && !r.isTest
     ).length;
   }
   function calcNps(resps) {
@@ -8803,6 +8803,8 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
     if (isDayPayApp) return '当日払い予定';
     return '申込済';
   };
+  // (テストデータ) 申込がテスト参加者のものか — 集計から除外する判定
+  const isTestApp = (a) => getRegsForApp(a).some(r => r.isTest);
   // (Phase 17.N-13) フィルタリング
   const filteredApps = React.useMemo(() => {
     return apps.filter(a => {
@@ -8835,8 +8837,8 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
 
   // ステータス別件数 (= タブ表示用)
   const statusCounts = React.useMemo(() => {
-    const m = { all: apps.length, '申込済': 0, '当日払い予定': 0, '前払い待ち': 0, '当日決済済': 0, '前払い済': 0, 'チェックイン済': 0, '一部キャンセル': 0, '返金待ち': 0, 'キャンセル': 0 };
-    apps.forEach(a => { m[getStatus(a)]++; });
+    const m = { all: 0, '申込済': 0, '当日払い予定': 0, '前払い待ち': 0, '当日決済済': 0, '前払い済': 0, 'チェックイン済': 0, '一部キャンセル': 0, '返金待ち': 0, 'キャンセル': 0 };
+    apps.forEach(a => { if (isTestApp(a)) return; m.all++; m[getStatus(a)]++; });
     return m;
   }, [apps]);
 
@@ -8988,7 +8990,10 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
                   >
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
                       <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.08em',color:'var(--jb-blue)',fontWeight:700}}>{a.applicationId}</span>
-                      <span style={{padding:'1px 7px',background:'var(--jb-paper-mist)',color:stateColor,fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.08em',fontWeight:700,borderRadius:999}}>{status}</span>
+                      <div style={{display:'flex',gap:5,alignItems:'center'}}>
+                        {isTestApp(a) && <span style={{padding:'1px 7px',background:'#fde68a',color:'#92400e',fontSize:9,fontWeight:800,borderRadius:999,letterSpacing:'0.05em'}}>テスト</span>}
+                        <span style={{padding:'1px 7px',background:'var(--jb-paper-mist)',color:stateColor,fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.08em',fontWeight:700,borderRadius:999}}>{status}</span>
+                      </div>
                     </div>
                     <div style={{fontFamily:'var(--jb-sans)',fontSize:13,fontWeight:700,color:'var(--jb-ink)',marginBottom:2}}>{p ? p.name : a.userId}</div>
                     <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',letterSpacing:'0.04em'}}>
@@ -9195,7 +9200,13 @@ function PageEventAdminDetail() {
     }
     let activeAppCount = 0, paidAppCount = 0, refundPendingCount = 0, cancelledAppCount = 0;
     let totalRevenue = 0, totalRefunded = 0;
-    apps.forEach(a => {
+    // (テストデータ) 集計からテスト申込/登録を除外
+    const _testAppIds = new Set((regs || []).filter(r => r.isTest).map(r => r.applicationId));
+    const _isTestApp = (a) => _testAppIds.has(a.applicationId) || (a.regs && a.regs.some(r => r.isTest));
+    const _appsNT = apps.filter(a => !_isTestApp(a));
+    const _regsNT = regs.filter(r => !r.isTest);
+    const _nonTestAppTotal = _appsNT.length;
+    _appsNT.forEach(a => {
       if (a.isAllCancelled) cancelledAppCount++;
       else activeAppCount++;
       if (a.hasPendingRefund) refundPendingCount++;
@@ -9203,19 +9214,19 @@ function PageEventAdminDetail() {
       totalRevenue += Number(a.totalPaid || 0);
       totalRefunded += Number(a.totalRefunded || 0);
     });
-    const activeRegs = regs.filter(r =>
+    const activeRegs = _regsNT.filter(r =>
       r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち'
     );
     // (Phase 17.Q) 追加 KPI
     const toDate = s => { if (!s) return null; if (s instanceof Date) return s; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
     // (1) キャンセル率
-    const cancelRate = apps.length > 0 ? cancelledAppCount / apps.length : 0;
+    const cancelRate = _nonTestAppTotal > 0 ? cancelledAppCount / _nonTestAppTotal : 0;
     // (2) 平均申込日数 — regOpenDate → 申込までの平均
     let avgDaysFromOpen = null;
     if (event.regOpenDate) {
       const openDate = toDate(event.regOpenDate);
       if (openDate) {
-        const diffs = regs
+        const diffs = _regsNT
           .filter(r => r.status !== 'キャンセル')
           .map(r => {
             const ad = toDate(r.appliedAt || r.createdAt);
@@ -9228,7 +9239,7 @@ function PageEventAdminDetail() {
     }
     // (3) リピーター率 — participant.participantCount >= 2 を リピーター扱い
     let repeaterCount = 0;
-    apps.forEach(a => {
+    _appsNT.forEach(a => {
       if (a.isAllCancelled) return;
       const p = participantMap[a.userId];
       if (p && Number(p.participantCount || 0) >= 2) repeaterCount++;
@@ -9240,7 +9251,7 @@ function PageEventAdminDetail() {
     // (5) 日次申込ペース — 直近 7 日の 1 日平均
     const now = new Date();
     const sevenAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const recentReg = regs.filter(r => {
+    const recentReg = _regsNT.filter(r => {
       const ad = toDate(r.appliedAt || r.createdAt);
       return ad && ad >= sevenAgo && r.status !== 'キャンセル';
     });
@@ -9324,7 +9335,7 @@ function PageEventAdminDetail() {
     }
     return {
       // 基本
-      totalApps: apps.length,
+      totalApps: _nonTestAppTotal,
       activeApps: activeAppCount,
       cancelledApps: cancelledAppCount,
       activeRegs: activeRegs.length,
@@ -9356,7 +9367,7 @@ function PageEventAdminDetail() {
   // Day 別 申込数集計 (multi 用)
   const sessionStats = useMemo(() => {
     return sessions.map(s => {
-      const sRegs = regs.filter(r => r.sessionId === s.id);
+      const sRegs = regs.filter(r => r.sessionId === s.id && !r.isTest);
       const active = sRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
       const paid = active.filter(r => r.paid);
       const checkedIn = active.filter(r => r.status === 'チェックイン済');
@@ -20947,6 +20958,8 @@ function PageQR(){
   // (QRライブ受付連携) 全画面カメラモード = スキャナ端末。読み取り結果を詳細ステータス管理端末へ中継。
   const [cameraMode, setCameraMode] = useState(false);
   const [camLastSent, setCamLastSent] = useState(null);   // {name, at}
+  const [testCred, setTestCred] = useState(null);          // 作成したテスターの資格情報
+  const [creatingTester, setCreatingTester] = useState(false);
   const cameraBeatRef = useRef(null);
   const overlayVideoRef = useRef(null);
   const deviceLabelRef = useRef('');
@@ -21084,6 +21097,17 @@ function PageQR(){
       streamRef.current = null;
     }
     setScanning(false);
+  }
+
+  // (テストデータ) ログインできるテスターを作成。資格情報を表示し、参加者アプリでログインしてQR/満足度を検証。
+  async function createTester() {
+    setCreatingTester(true);
+    try {
+      const res = await window.postData('admin.createTestParticipant', {});
+      setTestCred(res);
+      window.toast.success('テスターを作成しました: ' + res.name);
+    } catch (e) { window.toast.error('作成に失敗: ' + (e.message || e)); }
+    finally { setCreatingTester(false); }
   }
 
   // (QRライブ受付連携) 全画面カメラモード開始 — スキャナ端末として cameraStart + ハートビート開始
@@ -21418,15 +21442,18 @@ function PageQR(){
   });
   // 申込 (Application) 単位にグループ化
   const eventApplications = window.groupRegistrationsByApplication(eventRegs);
+  // (テストデータ) 集計はテストを除外 (一覧にはバッジ付きで表示)
+  const appIsTest = (app) => app.regs.some(r => r.isTest);
+  const countApps = eventApplications.filter(app => !appIsTest(app));
   // 「全 reg がチェックイン済」 を Application 単位の「受付済」 とみなす
-  const checkedInCount = eventApplications.filter(app => app.regs.every(r => r.status === 'チェックイン済')).length;
-  const totalRegCount = eventApplications.length;
+  const checkedInCount = countApps.filter(app => app.regs.every(r => r.status === 'チェックイン済')).length;
+  const totalRegCount = countApps.length;
   // (QR拡張) リアルタイム受付状況の追加集計
-  const pendingCount = eventApplications.filter(app => app.regs.some(r => r.status === 'チェックイン保留')).length;
+  const pendingCount = countApps.filter(app => app.regs.some(r => r.status === 'チェックイン保留')).length;
   const remainingCount = Math.max(0, totalRegCount - checkedInCount);
   const headcountFor = app => app.regs.reduce((mx, r) => Math.max(mx, Number(r.companionsCount) || 0), 0) + 1;
-  const checkedInHead = eventApplications.filter(app => app.regs.every(r => r.status === 'チェックイン済')).reduce((s, app) => s + headcountFor(app), 0);
-  const totalHead = eventApplications.reduce((s, app) => s + headcountFor(app), 0);
+  const checkedInHead = countApps.filter(app => app.regs.every(r => r.status === 'チェックイン済')).reduce((s, app) => s + headcountFor(app), 0);
+  const totalHead = countApps.reduce((s, app) => s + headcountFor(app), 0);
   const checkinPct = totalRegCount > 0 ? Math.round(checkedInCount / totalRegCount * 100) : 0;
   const selectedEvent = events.find(e => e.id === selectedEventId);
 
@@ -21436,6 +21463,7 @@ function PageQR(){
     (registrations || []).forEach(r => {
       if (!r.userId) return;
       if (r.status === 'キャンセル' || r.status === '返金' || r.status === '返金待ち') return;
+      if (r.isTest) return;
       (byUser[r.userId] = byUser[r.userId] || new Set()).add(r.eventId);
     });
     const s = new Set();
@@ -21519,6 +21547,29 @@ function PageQR(){
               <button className="jb-btn" onClick={enterCameraMode} disabled={!selectedEventId} title="全画面カメラで読み取り、結果を詳細ステータス管理画面に中継します（入場確定は管理画面側）">
                 <Icon n="qr" s={12}/> 受付連携モード（全画面）
               </button>
+            )}
+          </div>
+
+          {/* (テストデータ) ログインできるテスター作成 */}
+          <div style={{marginTop:14,padding:'12px 14px',border:'1px dashed var(--jb-line, #cdd8e3)',borderRadius:10,maxWidth:520,marginLeft:'auto',marginRight:'auto'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+              <div style={{fontSize:12,color:'var(--jb-ink-soft, #5a6b7b)'}}>検証用テスター（集計に載りません）</div>
+              <button className="jb-btn" onClick={createTester} disabled={creatingTester}>
+                {creatingTester ? '作成中…' : 'テスターを作成'}
+              </button>
+            </div>
+            {testCred && (
+              <div style={{marginTop:10,fontSize:12,background:'var(--jb-paper-mist, #f4f8fb)',borderRadius:8,padding:'10px 12px'}}>
+                <div style={{fontWeight:700,marginBottom:4}}>{testCred.name} <span style={{fontSize:10,background:'#fde68a',color:'#92400e',padding:'1px 6px',borderRadius:999,marginLeft:6}}>テスト</span></div>
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:11,lineHeight:1.8,wordBreak:'break-all'}}>
+                  メール: {testCred.email}<br/>
+                  パスワード: {testCred.password}
+                </div>
+                <button className="jb-btn btn-sm" style={{marginTop:8}} onClick={() => {
+                  try { navigator.clipboard.writeText(`email: ${testCred.email}\npassword: ${testCred.password}`); window.toast.success('資格情報をコピーしました'); } catch (e) {}
+                }}>資格情報をコピー</button>
+                <div style={{fontSize:10,color:'var(--jb-ink-soft, #889)',marginTop:6}}>この資格情報で参加者アプリにログイン→イベント申込→QR受付・満足度回答を検証できます。</div>
+              </div>
             )}
           </div>
         </div>
@@ -21757,6 +21808,7 @@ function PageQR(){
                         </td>
                         <td className="right num" style={{fontSize:12}}>{ageVal != null ? ageVal : '—'}</td>
                         <td>
+                          {app.regs.some(r => r.isTest) && <span className="badge" style={{fontSize:10,background:'#fde68a',color:'#92400e',border:'1px solid #f0c14b',marginRight:5}}>テスト</span>}
                           {isRepeater
                             ? <span className="badge badge-violet" style={{fontSize:10}}>リピーター</span>
                             : <span style={{fontSize:10,color:'var(--ink5)'}}>初参加</span>}
@@ -21834,6 +21886,7 @@ function PageQRLive(){
     (registrations || []).forEach(r => {
       if (!r.userId) return;
       if (r.status === 'キャンセル' || r.status === '返金' || r.status === '返金待ち') return;
+      if (r.isTest) return;
       (byUser[r.userId] = byUser[r.userId] || new Set()).add(r.eventId);
     });
     const s = new Set();
