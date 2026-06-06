@@ -5801,6 +5801,9 @@ function PagePostEvent(){
           <div className="card" style={{marginBottom:16}}>
             <div className="card-head"><div className="card-title">🎖 記念写真</div></div>
             <div className="card-body">
+              <div style={{display:'inline-flex',alignItems:'center',gap:6,marginBottom:10,padding:'5px 10px',borderRadius:999,background:'#fdf4ff',border:'1px dashed #c026d3',color:'#a21caf',fontSize:11.5,fontWeight:700}}>
+                テスト参加者は公開日時の前でも記念写真を表示できます（実機検証用）。本番参加者には公開日時どおりに表示されます。
+              </div>
               {isMulti ? (
                 <React.Fragment>
                   <div className="field-hint" style={{marginBottom:10}}>複数日イベントです。日（セッション）ごとに記念写真と公開予約を設定できます。空のセッションはイベント共通→ヒーロー画像にフォールバックします。</div>
@@ -11205,12 +11208,88 @@ function PageMail(){
 // (Phase 15.S35) 画像URLを表示可能な形式に正規化 (Google Drive 等の対応)
 function normalizeImageUrlForPreview(url) {
   if (!url || typeof url !== 'string') return url || '';
+  if (url.indexOf('data:') === 0) return url; // Base64 データURL はそのまま
   let m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
   if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w800';
   m = url.match(/drive\.google\.com\/uc.*?[?&]id=([^&]+)/);
   if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w800';
   return url;
 }
+
+// 画像ファイルを「シート1セル上限(50,000文字)」未満の Base64 データURLへ圧縮する。
+//   ブラウザ canvas で段階的にリサイズ+JPEG品質を下げ、48,000文字未満に収める。
+//   収まらない(大きすぎる)場合は reject。高解像度が要る場合は Drive 保存が適切。
+function compressImageToDataUrl_(file, maxLen, aspect) {
+  const LIMIT = maxLen || 48000;
+  return new Promise(function(resolve, reject) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = function() {
+      URL.revokeObjectURL(url);
+      // アスペクト指定があれば中央クロップの元矩形を決める (例: 16/9)
+      let sx = 0, sy = 0, sw = img.width, sh = img.height;
+      if (aspect && aspect > 0) {
+        const srcA = img.width / img.height;
+        if (srcA > aspect) { sw = Math.round(img.height * aspect); sx = Math.round((img.width - sw) / 2); sh = img.height; sy = 0; }
+        else { sh = Math.round(img.width / aspect); sy = Math.round((img.height - sh) / 2); sw = img.width; sx = 0; }
+      }
+      const baseW = sw, baseH = sh;
+      const dims = [1280, 1024, 800, 640, 512, 420, 320];
+      const quals = [0.72, 0.6, 0.5, 0.42, 0.35];
+      let best = null;
+      for (let di = 0; di < dims.length; di++) {
+        const maxDim = dims[di];
+        const scale = Math.min(1, maxDim / Math.max(baseW, baseH));
+        const w = Math.max(1, Math.round(baseW * scale));
+        const h = Math.max(1, Math.round(baseH * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); // 透過PNG対策に白背景
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h); // 中央クロップして描画
+        for (let qi = 0; qi < quals.length; qi++) {
+          const durl = canvas.toDataURL('image/jpeg', quals[qi]);
+          if (durl.length <= LIMIT) { resolve(durl); return; }
+          if (!best || durl.length < best.length) best = durl;
+        }
+      }
+      reject(new Error('画像が大きすぎてシートに収まりません(約' + Math.round((best ? best.length : 0) / 1000) + 'k文字)。 小さい画像にするか、 URL/Drive をご利用ください。'));
+    };
+    img.onerror = function() { URL.revokeObjectURL(url); reject(new Error('画像を読み込めませんでした')); };
+    img.src = url;
+  });
+}
+
+// 「アップロード」ボタン部品。選んだ画像を圧縮して onChange(dataUrl) で返す。手入力欄と併用可。
+function ImageUploadButton({ onChange, aspect }) {
+  const inputRef = React.useRef(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  function pick() { if (inputRef.current) inputRef.current.click(); }
+  async function onFile(e) {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!/^image\//.test(f.type)) { setErr('画像ファイルを選んでください'); return; }
+    setBusy(true); setErr('');
+    try { const durl = await compressImageToDataUrl_(f, undefined, aspect); onChange(durl); }
+    catch (ex) { setErr(ex.message || '処理に失敗しました'); }
+    finally { setBusy(false); }
+  }
+  return (
+    <React.Fragment>
+      <input ref={inputRef} type="file" accept="image/*" onChange={onFile} style={{display:'none'}}/>
+      <button type="button" className="btn btn-soft btn-sm" onClick={pick} disabled={busy} style={{whiteSpace:'nowrap'}}>
+        <Icon n="img" s={13}/> {busy ? '処理中…' : 'アップロード'}
+      </button>
+      {err && <span style={{color:'var(--coral,#e11d48)', fontSize:11, marginLeft:8}}>{err}</span>}
+    </React.Fragment>
+  );
+}
+// 別の babel ブロック (NewsFrontEditor 等) からも使えるよう window に公開
+window.ImageUploadButton = ImageUploadButton;
+window.compressImageToDataUrl_ = compressImageToDataUrl_;
+window.normalizeImageUrlForPreview = normalizeImageUrlForPreview;
 
 function NewsModal({mode, initialValues, onSave, onCancel}){
   const init = initialValues || {};
@@ -11227,6 +11306,7 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
   // (Phase 15.S35) 画像 URL
   const [coverImageUrl, setCoverImageUrl] = useState(init.coverImageUrl || "");
   const [thumbnailImageUrl, setThumbnailImageUrl] = useState(init.thumbnailImageUrl || "");
+  const [detailImageUrl, setDetailImageUrl] = useState(init.imageUrl || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -11243,6 +11323,7 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
         status: publishStatus || status,
         coverImageUrl: coverImageUrl.trim(),
         thumbnailImageUrl: thumbnailImageUrl.trim(),
+        imageUrl: detailImageUrl.trim(),
         title_easy: titleEasy.trim(),
         title_en: titleEn.trim(),
         body_easy: bodyEasy.trim(),
@@ -11345,6 +11426,19 @@ function NewsModal({mode, initialValues, onSave, onCancel}){
               {thumbnailImageUrl && (
                 <div style={{marginTop:8}}>
                   <img src={normalizeImageUrlForPreview(thumbnailImageUrl)} alt="" style={{width:'100%', maxHeight:80, objectFit:'cover', border:'1px solid var(--line)', borderRadius:4}} onError={(e)=>{e.currentTarget.style.display='none';}}/>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* 詳細/ホーム用 独立画像 (空ならカバー画像にフォールバック) */}
+          <div className="grid-2" style={{gap:14}}>
+            <div className="field">
+              <label className="field-label">詳細/ホーム用 画像URL <span style={{color:'var(--ink-mute,#6b7280)',fontSize:11}}>(任意)</span></label>
+              <input className="input" value={detailImageUrl} onChange={e=>setDetailImageUrl(e.target.value)} placeholder="記事詳細ヒーロー・ホーム新着用 (空ならカバー画像を使用)"/>
+              <div className="field-hint">記事詳細のヒーローとホームの新着で使う画像。 一覧カードのカバーと別の画像にしたい時に指定。 空ならカバー画像が使われます</div>
+              {detailImageUrl && (
+                <div style={{marginTop:8}}>
+                  <img src={normalizeImageUrlForPreview(detailImageUrl)} alt="" style={{width:'100%', maxHeight:120, objectFit:'cover', border:'1px solid var(--line)', borderRadius:4}} onError={(e)=>{e.currentTarget.style.display='none';}}/>
                 </div>
               )}
             </div>
@@ -12802,10 +12896,14 @@ function PageParticipants(){
     return true;
   });
 
-  const activeCount = participants.filter(p => p.status !== "アーカイブ").length;
-  const archivedCount = participants.filter(p => p.status === "アーカイブ").length;
-  const leaderCount = participants.filter(p => (p.tags || []).includes("リーダー") && p.status !== "アーカイブ").length;
-  const newCount = participants.filter(p => (p.tags || []).includes("新規") && p.status !== "アーカイブ").length;
+  // (件数のテスト除外) 既定はテスター除外。トグルで含める切替が可能 (一覧は常にテスターをバッジ表示)。
+  const [countIncludeTesters, setCountIncludeTesters] = useState(false);
+  const _countBase = countIncludeTesters ? participants : participants.filter(p => !p.isTest);
+  const activeCount = _countBase.filter(p => p.status !== "アーカイブ").length;
+  const archivedCount = _countBase.filter(p => p.status === "アーカイブ").length;
+  const leaderCount = _countBase.filter(p => (p.tags || []).includes("リーダー") && p.status !== "アーカイブ").length;
+  const newCount = _countBase.filter(p => (p.tags || []).includes("新規") && p.status !== "アーカイブ").length;
+  const _testerCount = participants.filter(p => p.isTest).length;
 
   return (
     <div className="jb-page" data-page="participants">
@@ -12842,8 +12940,15 @@ function PageParticipants(){
         </div>
       )}
 
+      <div style={{display:'flex', justifyContent:'flex-end', alignItems:'center', gap:8, margin:'2px 2px 8px'}}>
+        <span style={{fontSize:12, color:'var(--ink3)'}}>テスター {_testerCount} 名</span>
+        <label style={{display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink2)', cursor:'pointer', userSelect:'none'}}>
+          <input type="checkbox" checked={countIncludeTesters} onChange={e=>setCountIncludeTesters(e.target.checked)} style={{cursor:'pointer'}}/>
+          件数にテスターを含める
+        </label>
+      </div>
       <div className="jb-stat-grid">
-        <MiniStat label="総参加者 (在籍)" value={loading ? '…' : String(activeCount)} sub="" icon="users" color="indigo"/>
+        <MiniStat label={countIncludeTesters ? "総参加者 (在籍・テスト含)" : "総参加者 (在籍)"} value={loading ? '…' : String(activeCount)} sub="" icon="users" color="indigo"/>
         <MiniStat label="リーダー" value={loading ? '…' : String(leaderCount)} sub="" icon="star" color="coral"/>
         <MiniStat label="新規" value={loading ? '…' : String(newCount)} sub="" icon="sparkle" color="green"/>
         <MiniStat label="アーカイブ" value={loading ? '…' : String(archivedCount)} sub="" icon="clock" color="amber"/>
@@ -28287,6 +28392,8 @@ function PageNewsFront(){
 // NewsFrontEditor — ニュース編集モーダル (Phase 6.9)
 // =================================================================
 function NewsFrontEditor({mode, news, onSave, onCancel}) {
+  const ImageUploadButton = window.ImageUploadButton; // 別ブロック定義をこのスコープへ取り込む
+  const normalizeImageUrlForPreview = window.normalizeImageUrlForPreview;
   const isEdit = mode === 'edit';
   const [title, setTitle] = useState(news?.title || '');
   const [category, setCategory] = useState(news?.category || 'お知らせ');
@@ -28302,6 +28409,10 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
   const [titleEn, setTitleEn] = useState(news?.title_en || '');
   const [bodyEasy, setBodyEasy] = useState(news?.body_easy || '');
   const [bodyEn, setBodyEn] = useState(news?.body_en || '');
+  // 画像 (カバー=一覧、サムネイル=一覧小、詳細/ホーム用=記事詳細ヒーロー・ホーム新着。空ならカバーにフォールバック)
+  const [coverImageUrl, setCoverImageUrl] = useState(news?.coverImageUrl || '');
+  const [thumbnailImageUrl, setThumbnailImageUrl] = useState(news?.thumbnailImageUrl || '');
+  const [detailImageUrl, setDetailImageUrl] = useState(news?.imageUrl || '');
   const [savingState, setSavingState] = useState(false);
 
   function submit() {
@@ -28322,6 +28433,10 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
       title_en: titleEn.trim(),
       body_easy: bodyEasy,
       body_en: bodyEn,
+      // 画像
+      coverImageUrl: coverImageUrl.trim(),
+      thumbnailImageUrl: thumbnailImageUrl.trim(),
+      imageUrl: detailImageUrl.trim(),
     });
   }
 
@@ -28378,6 +28493,40 @@ function NewsFrontEditor({mode, news, onSave, onCancel}) {
               style={{padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14}}>
               <option>下書き</option><option>公開中</option><option>予約</option><option>非公開</option>
             </select>
+          </FieldRow>
+
+          {/* 画像 (一覧カバー / サムネ / 詳細・ホーム用) */}
+          <FieldRow label="画像">
+            <div style={{display:'flex', flexDirection:'column', gap:12}}>
+              <div>
+                <div style={{fontSize:12, fontWeight:700, color:'var(--ink2)', marginBottom:4}}>カバー画像URL</div>
+                <div style={{display:'flex', gap:8, alignItems:'flex-start'}}>
+                  <input type="text" value={coverImageUrl} onChange={e=>setCoverImageUrl(e.target.value)} placeholder="https://... / Drive / アップロード"
+                    style={{flex:1, padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14}}/>
+                  <ImageUploadButton onChange={setCoverImageUrl} aspect={16/9}/>
+                </div>
+                {coverImageUrl && <div style={{marginTop:6}}><img src={normalizeImageUrlForPreview(coverImageUrl)} alt="" style={{width:'100%', maxHeight:120, objectFit:'cover', border:'1px solid var(--line)', borderRadius:6}} onError={(e)=>{e.currentTarget.style.display='none';}}/></div>}
+              </div>
+              <div>
+                <div style={{fontSize:12, fontWeight:700, color:'var(--ink2)', marginBottom:4}}>サムネイル画像URL <span style={{fontWeight:400,color:'var(--ink5)',fontSize:11}}>(任意・空ならカバー)</span></div>
+                <div style={{display:'flex', gap:8, alignItems:'flex-start'}}>
+                  <input type="text" value={thumbnailImageUrl} onChange={e=>setThumbnailImageUrl(e.target.value)} placeholder="一覧カード用の小さいサムネ"
+                    style={{flex:1, padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14}}/>
+                  <ImageUploadButton onChange={setThumbnailImageUrl} aspect={16/9}/>
+                </div>
+                {thumbnailImageUrl && <div style={{marginTop:6}}><img src={normalizeImageUrlForPreview(thumbnailImageUrl)} alt="" style={{width:'100%', maxHeight:80, objectFit:'cover', border:'1px solid var(--line)', borderRadius:6}} onError={(e)=>{e.currentTarget.style.display='none';}}/></div>}
+              </div>
+              <div>
+                <div style={{fontSize:12, fontWeight:700, color:'var(--ink2)', marginBottom:4}}>詳細/ホーム用 画像URL <span style={{fontWeight:400,color:'var(--ink5)',fontSize:11}}>(任意・空ならカバー)</span></div>
+                <div style={{display:'flex', gap:8, alignItems:'flex-start'}}>
+                  <input type="text" value={detailImageUrl} onChange={e=>setDetailImageUrl(e.target.value)} placeholder="記事詳細の大きな写真・ホーム新着用"
+                    style={{flex:1, padding:'10px 12px', border:'1px solid var(--line)', borderRadius:8, fontSize:14}}/>
+                  <ImageUploadButton onChange={setDetailImageUrl} aspect={16/9}/>
+                </div>
+                <div style={{fontSize:11, color:'var(--ink5)', marginTop:4}}>記事詳細のヒーロー(大きい写真)とホーム新着で使う画像。 一覧カバーと別にしたい時に指定。 空ならカバー画像を使用。</div>
+                {detailImageUrl && <div style={{marginTop:6}}><img src={normalizeImageUrlForPreview(detailImageUrl)} alt="" style={{width:'100%', maxHeight:120, objectFit:'cover', border:'1px solid var(--line)', borderRadius:6}} onError={(e)=>{e.currentTarget.style.display='none';}}/></div>}
+              </div>
+            </div>
           </FieldRow>
 
           <div style={{padding:16, background:'#f9fafb', borderRadius:8, display:'flex', flexDirection:'column', gap:12}}>
