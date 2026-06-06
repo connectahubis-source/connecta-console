@@ -20958,10 +20958,13 @@ function PageQR(){
   // (QRライブ受付連携) 全画面カメラモード = スキャナ端末。読み取り結果を詳細ステータス管理端末へ中継。
   const [cameraMode, setCameraMode] = useState(false);
   const [camLastSent, setCamLastSent] = useState(null);   // {name, at}
+  const [camSentCount, setCamSentCount] = useState(0);     // 中継した件数 (診断・可視化)
   const [testCred, setTestCred] = useState(null);          // 作成したテスターの資格情報
   const [creatingTester, setCreatingTester] = useState(false);
   const cameraBeatRef = useRef(null);
   const overlayVideoRef = useRef(null);
+  const cameraModeRef = useRef(false);          // (stale closure 対策) スキャンループから参照
+  const selectedEventIdRef = useRef('');
   const deviceLabelRef = useRef('');
   if (!deviceLabelRef.current) {
     try {
@@ -21116,6 +21119,7 @@ function PageQR(){
     if (!scanning) { await startScan(); }
     try { await window.postData('qr.cameraStart', { eventId: selectedEventId, device: deviceLabelRef.current }); }
     catch (e) { window.toast.error('受付連携の開始に失敗: ' + (e.message || e)); return; }
+    cameraModeRef.current = true;
     setCameraMode(true);
     window.toast.success('受付連携モードを開始しました（読み取りは管理画面に表示されます）');
     if (cameraBeatRef.current) clearInterval(cameraBeatRef.current);
@@ -21129,11 +21133,15 @@ function PageQR(){
   function exitCameraMode(remote) {
     if (cameraBeatRef.current) { clearInterval(cameraBeatRef.current); cameraBeatRef.current = null; }
     try { window.postData('qr.cameraStop', { eventId: selectedEventId }); } catch (e) {}
+    cameraModeRef.current = false;
     setCameraMode(false);
     setCamLastSent(null);
     stopScan();
     if (remote) window.toast.info('管理画面からカメラが停止されました');
   }
+  // (stale closure 対策) スキャンループ内の handleScannedCode が最新値を読めるよう ref に同期
+  useEffect(() => { cameraModeRef.current = cameraMode; }, [cameraMode]);
+  useEffect(() => { selectedEventIdRef.current = selectedEventId; }, [selectedEventId]);
   // 全画面オーバーレイの video に同じストリームを接続 (検出は元の hidden video で継続)
   useEffect(() => {
     if (cameraMode && overlayVideoRef.current && streamRef.current) {
@@ -21182,14 +21190,15 @@ function PageQR(){
     const participant = app ? participants.find(p => p.id === app.userId) : null;
     const evMatch = app ? events.find(e => e.id === app.eventId) : null;
 
-    // (QRライブ受付連携) カメラモード時は「中継」のみ。入場判断・チェックインは詳細ステータス管理端末で行う。
-    if (cameraMode) {
-      if (!app) { playError(); window.toast.error('申込が見つかりません'); return; }
-      if (app.eventId !== selectedEventId) { playError(); window.toast.error('別イベントの申込です'); return; }
+    // (QRライブ受付連携) カメラモード時は「中継」のみ。申込解決・入場判断は管理端末側で行う。
+    // ローカルに登録が無くても regId をそのまま中継する (管理端末が解決・再取得する)。
+    if (cameraModeRef.current) {
+      const evId = selectedEventIdRef.current;
       try {
-        await window.postData('qr.pushScan', { eventId: selectedEventId, regId: data, by: deviceLabelRef.current });
+        await window.postData('qr.pushScan', { eventId: evId, regId: data, by: deviceLabelRef.current });
         playSuccess();
-        setCamLastSent({ name: app.userName || (participant && participant.name) || data, at: Date.now() });
+        setCamSentCount(c => c + 1);
+        setCamLastSent({ name: (app && (app.userName || (participant && participant.name))) || data, at: Date.now() });
       } catch (e) {
         playError();
         window.toast.error('中継に失敗しました: ' + (e.message || e));
@@ -21505,7 +21514,7 @@ function PageQR(){
             </div>
             <div style={{position:'absolute',bottom:16,left:0,right:0,textAlign:'center',color:'#dbeafe',fontSize:12,textShadow:'0 1px 4px rgba(0,0,0,0.6)'}}>
               {camLastSent
-                ? `送信: ${camLastSent.name} さん（管理画面で入場確定）`
+                ? `送信(${camSentCount}): ${camLastSent.name} さん（管理画面で入場確定）`
                 : 'QRを枠内にかざしてください。読み取り結果は管理画面に表示されます'}
             </div>
           </div>
