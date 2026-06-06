@@ -2990,24 +2990,26 @@ function PageDashboard(){
   }, []);
 
   // ========== KPI 集計 ==========
+  // (テストデータ) テスト参加者を全KPIから除外。テスト userId 集合を作り、登録/決済/NPS で除外する。
+  const _testUserIds = new Set((participants || []).filter(p => p.isTest).map(p => p.id));
   const activeEvents = events.filter(e => e.status !== "アーカイブ");
-  const activeRegs = registrations.filter(r => r.status !== "キャンセル");
+  const activeRegs = registrations.filter(r => r.status !== "キャンセル" && !r.isTest);
   const totalRegistrations = activeRegs.length;
 
-  // 今月の収益: 決済「成功」ステータスの金額合計 (今月分)
+  // 今月の収益: 決済「成功」ステータスの金額合計 (今月分) — テスト参加者の決済は除外
   const today = new Date();
   const thisYearMonth = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
-  const successPayments = payments.filter(p => p.status === "成功");
+  const successPayments = payments.filter(p => p.status === "成功" && !_testUserIds.has(p.userId));
   const monthRevenue = successPayments.reduce((s, p) => s + (p.amount || 0), 0);
 
-  // 出席率: チェックイン済み / (確定 + チェックイン済み)
+  // 出席率: チェックイン済み / (確定 + チェックイン済み) — activeRegs は既にテスト除外済み
   const checkedIn = activeRegs.filter(r => r.status === "チェックイン済").length;
   const confirmed = activeRegs.filter(r => r.status === "確定").length;
   const attendBase = checkedIn + confirmed;
   const attendRate = attendBase > 0 ? Math.round(checkedIn / attendBase * 100) : null;
 
-  // NPS: Participants の NPS の平均
-  const npsValues = participants.filter(p => p.nps && p.status !== "アーカイブ").map(p => p.nps);
+  // NPS: Participants の NPS の平均 — テスト参加者を除外
+  const npsValues = participants.filter(p => p.nps && p.status !== "アーカイブ" && !p.isTest).map(p => p.nps);
   const avgNps = npsValues.length > 0 ? Math.round(npsValues.reduce((s, v) => s + v, 0) / npsValues.length) : null;
 
   // ========== 直近のイベント (公開中のみ、日付昇順、4件) ==========
@@ -3072,7 +3074,7 @@ function PageDashboard(){
           <p style={{fontFamily:'var(--jb-sans)',fontSize:13,color:'var(--jb-ink-soft)',marginTop:18,maxWidth:520,lineHeight:1.7}}>
             {loading
               ? 'データを読み込んでいます…'
-              : `現在、 ${activeEvents.length} 件のイベントと ${participants.filter(p=>p.status!=='アーカイブ').length} 名の参加者を管理しています。`}
+              : `現在、 ${activeEvents.length} 件のイベントと ${participants.filter(p=>p.status!=='アーカイブ' && !p.isTest).length} 名の参加者を管理しています。`}
           </p>
         </div>
         <div className="jb-cover-meta">
@@ -3237,7 +3239,7 @@ function PageDashboard(){
                     詳細 →
                   </a>
                 </div>
-                <div style={{fontFamily:'var(--jb-serif)',fontSize:32,fontWeight:700,marginTop:6}}>{participants.filter(p=>p.status!=='アーカイブ').length}</div>
+                <div style={{fontFamily:'var(--jb-serif)',fontSize:32,fontWeight:700,marginTop:6}}>{participants.filter(p=>p.status!=='アーカイブ' && !p.isTest).length}</div>
               </div>
             </div>
           </aside>
@@ -3294,7 +3296,7 @@ function PageDashboard(){
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,border:'1px solid var(--jb-line)',borderRadius:4,overflow:'hidden',background:'var(--jb-paper)'}}>
               {[
                 {icon:'qr', label:'QR照会', sub:'当日受付',                   href:'#qr'},
-                {icon:'send', label:'メール配信', sub:`${participants.filter(p=>p.status!=='アーカイブ').length} 名`, href:'#mail'},
+                {icon:'send', label:'メール配信', sub:`${participants.filter(p=>p.status!=='アーカイブ' && !p.isTest).length} 名`, href:'#mail'},
                 {icon:'card', label:'決済管理', sub:`${successPayments.length} 件成功`, href:'#payments'},
                 {icon:'megaphone', label:'ニュース', sub:'お知らせ',           href:'#news'},
               ].map((q, i) => (
@@ -5736,6 +5738,13 @@ function PagePostEvent(){
       loadDetail();
     } catch (e) { window.toast.error('変更に失敗: ' + (e.message || e)); }
   }
+  async function handleSurveyTestPublish(surveyId, on) {
+    try {
+      await window.postData('setSurveyTestPublish', { surveyId, on });
+      window.toast.success(on ? 'テスト公開にしました (テスト参加者にだけ配信されます)' : 'テスト公開を解除しました');
+      loadDetail();
+    } catch (e) { window.toast.error('変更に失敗: ' + (e.message || e)); }
+  }
   async function handleDelete(surveyId, title) {
     if (!await window.confirmDialog({ title: `「${title}」をアーカイブしますか?`, body: '行は残り、ステータスが「アーカイブ」に変わります。後で復元できます。', danger: true, confirmLabel: 'アーカイブ' })) return;
     try { await window.postData('deleteSurvey', { surveyId }); window.toast.success('アーカイブしました'); loadDetail(); }
@@ -5884,6 +5893,16 @@ function PagePostEvent(){
                             )}
                             {window.canDo('surveys.update') && s.status === '終了' && (
                               <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleStatusChange(s.id, '公開中');}} style={{color:'var(--green)'}}><Icon n="check" s={12}/> 再公開</button>
+                            )}
+                            {window.canDo('surveys.update') && (
+                              <button className="btn btn-soft btn-sm" onClick={(e)=>{e.stopPropagation(); handleSurveyTestPublish(s.id, !s.testOnly);}}
+                                style={{color: s.testOnly ? '#a21caf' : 'var(--ink3)', borderColor: s.testOnly ? '#e9d5ff' : undefined}}
+                                title="テスト参加者だけに配信して回答UIを確認します。本番参加者には表示されません。">
+                                <Icon n="star" s={12}/> {s.testOnly ? 'テスト公開を解除' : 'テスターに公開'}
+                              </button>
+                            )}
+                            {s.testOnly && (
+                              <span className="badge" style={{background:'#fdf4ff', color:'#a21caf', borderColor:'#e9d5ff'}}><span className="badge-dot" style={{background:'#c026d3'}}></span>テスト公開</span>
                             )}
                             <span className={clsx("badge", s.status==="公開中"?"badge-green":s.status==="下書き"?"badge-amber":"badge-ink")}><span className="badge-dot"></span>{s.status}</span>
                             <Icon n={isExpanded ? "chevDown" : "chevRight"} s={14}/>
@@ -21075,12 +21094,20 @@ function PageQR(){
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}});
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+      } catch (e1) {
+        // 一部 Android/端末では facingMode 指定で失敗するため素の video へフォールバック
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
-        videoRef.current.play();
+        videoRef.current.muted = true;
+        const pr = videoRef.current.play();
+        if (pr && pr.catch) pr.catch(() => {});
       }
       setScanning(true);
       // QR検出ループ
@@ -21917,21 +21944,25 @@ function PageQRLive(){
   const admittedThis = current && doneSeqs[current.seq];
 
   async function admit(confirmPay) {
-    if (!app) return;
-    setBusy(true);
-    try {
-      const targets = activeRegs.filter(r => r.status !== 'チェックイン済');
-      for (const r of targets) { await window.postData('admin.checkin', { regId: r.id }); }
-      if (confirmPay) {
-        for (const r of targets) { try { await window.postData('admin.confirmPayment', { regId: r.id, paymentMethod: r.actualPaymentMethod || '' }); } catch (e) {} }
+    if (!app || !current) return;
+    const seq = current.seq;
+    const targets = activeRegs.filter(r => r.status !== 'チェックイン済');
+    // 楽観的更新: 即「入場確定済み（次のQRをどうぞ）」にして、実処理はバックグラウンドで実行。
+    setDoneSeqs(m => ({ ...m, [seq]: 'admitted' }));
+    window.toast.success(`${app.userName} さんを入場確定しました`);
+    (async () => {
+      try {
+        await Promise.all(targets.map(r => window.postData('admin.checkin', { regId: r.id })));
+        if (confirmPay) {
+          await Promise.all(targets.map(r => window.postData('admin.confirmPayment', { regId: r.id, paymentMethod: r.actualPaymentMethod || '' }).catch(() => {})));
+        }
+        if (window.invalidateCache) window.invalidateCache('listRegistrations');
+        loadData();  // 反映確認のため背景で再読込（UIはブロックしない）
+      } catch (e) {
+        window.toast.error('入場確定の反映に失敗: ' + (e.message || e) + '（再読込してください）');
+        setDoneSeqs(m => { const n = { ...m }; delete n[seq]; return n; });  // 失敗時は戻す
       }
-      if (window.invalidateCache) window.invalidateCache('listRegistrations');
-      await loadData();
-      setDoneSeqs(m => ({ ...m, [current.seq]: 'admitted' }));
-      window.toast.success(`${app.userName} さんを入場確定しました`);
-    } catch (e) {
-      window.toast.error('入場確定に失敗: ' + (e.message || e));
-    } finally { setBusy(false); }
+    })();
   }
 
   async function stopCamera() {
@@ -23828,7 +23859,7 @@ function PageAnalytics(){
   }
 
   // ========== 集計 (Phase 15.S140 Registrations ベース + S143 申込操作単位) ==========
-  const activeRegs = registrations.filter(r => r.status !== "キャンセル" && r.status !== "返金");
+  const activeRegs = registrations.filter(r => r.status !== "キャンセル" && r.status !== "返金" && !r.isTest);
   const periodRegs = activeRegs.filter(r => inPeriod(r.appliedAt));
   const periodEvents = events.filter(e => inPeriod(e.date) && e.status !== "アーカイブ");
   // (S140) 期間内の決済済み Registrations
@@ -23860,7 +23891,7 @@ function PageAnalytics(){
   const checkedIn = checkedInOps.size;
   const attendBase = uniqueOps.size;
   const attendRate = attendBase > 0 ? Math.round(checkedIn / attendBase * 100) : null;
-  const npsValues = participants.filter(p => p.nps && p.status !== "アーカイブ").map(p => p.nps);
+  const npsValues = participants.filter(p => p.nps && p.status !== "アーカイブ" && !p.isTest).map(p => p.nps);
   const avgNps = npsValues.length > 0 ? Math.round(npsValues.reduce((s, v) => s + v, 0) / npsValues.length) : null;
 
   // ========== カテゴリ別 (Phase 15.S141 + S142 + S143: アクティブ部署マスタのみ) ==========
@@ -24223,6 +24254,9 @@ window.PageParticipantAnalytics = PageParticipantAnalytics;
 // (Phase 15.S137 / S138 / S139) ParticipantAnalyticsSection — 落ち着いたデザイン
 // =============================================================================
 function ParticipantAnalyticsSection({ participants, registrations, events, departments, period, periodLabel, inPeriod }) {
+  // (テストデータ) テスト参加者/登録を全分析から除外 (この再代入で配下の集計すべてがテスト除外になる)
+  participants = (participants || []).filter(p => !p.isTest);
+  registrations = (registrations || []).filter(r => !r.isTest);
   // ========== 集計 (S138 と同じロジック) ==========
   const analytics = React.useMemo(() => {
     // (Phase 15.S142) archived された部署名のセット
