@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-07 P3i'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-07 P3j'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1652,7 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3i</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3j</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -5672,6 +5672,7 @@ function SessionMementoRow({ sess, busy, onSave }){
   const [sealPosY, setSealPosY] = useState(_sealInit.y);
   const sealDragRef = React.useRef(false);
   const sealPrevRef = React.useRef(null);
+  const [prevLandscape, setPrevLandscape] = useState(false);  // (R5) この日の主写真が横長(4:3)か
   // (未保存判定の基準) 保存に成功した値そのものを基準にする。 これで保存→読戻しのフォーマット/タイムゾーン差に左右されず、 保存後は確実に未保存が解消する。 初期は sess 由来。
   const [savedSnap, setSavedSnap] = useState({ url: savedUrlInit, publishAt: savedPubInit, gallery: savedGalleryInit, sealType: savedSealTypeInit, sealPos: savedSealPosInit });
   const savedGallery = savedSnap.gallery;
@@ -5861,8 +5862,10 @@ function SessionMementoRow({ sess, busy, onSave }){
         onPointerDown={(e)=>{ sealDragRef.current=true; const r=sealPrevRef.current.getBoundingClientRect(); setSealPosX(Math.max(0.05,Math.min(0.95,(e.clientX-r.left)/r.width))); setSealPosY(Math.max(0.05,Math.min(0.95,(e.clientY-r.top)/r.height))); }}
         onPointerMove={(e)=>{ if(!sealDragRef.current) return; const r=sealPrevRef.current.getBoundingClientRect(); setSealPosX(Math.max(0.05,Math.min(0.95,(e.clientX-r.left)/r.width))); setSealPosY(Math.max(0.05,Math.min(0.95,(e.clientY-r.top)/r.height))); }}
         onPointerUp={()=>{ sealDragRef.current=false; }} onPointerLeave={()=>{ sealDragRef.current=false; }}
-        style={{position:'relative',width:'100%',maxWidth:190,aspectRatio:'3 / 4',borderRadius:10,overflow:'hidden',margin:'0 auto 8px',cursor:'crosshair',touchAction:'none',border:'1px solid var(--line,#e5e7eb)',backgroundImage:url?('url('+url+')'):'none',backgroundSize:'cover',backgroundPosition:'center',backgroundColor:'#0d2347',backgroundRepeat:'no-repeat'}}>
-        {!url ? <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',color:'rgba(255,255,255,0.6)',fontSize:11,textAlign:'center',padding:8}}>この日の主写真を設定すると<br/>背景に表示されます</div> : null}
+        style={{position:'relative',width:'100%',maxWidth:(prevLandscape?248:190),aspectRatio:(prevLandscape?'4 / 3':'3 / 4'),borderRadius:10,overflow:'hidden',margin:'0 auto 8px',cursor:'crosshair',touchAction:'none',border:'1px solid var(--line,#e5e7eb)',backgroundColor:'#0d2347'}}>
+        {url
+          ? <img key={url} src={(window.imgSized ? window.imgSized(url, 800) : url)} alt="" onLoad={(e)=>{ const im=e.target; if(im.naturalWidth && im.naturalHeight) setPrevLandscape(im.naturalWidth > im.naturalHeight); }} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',pointerEvents:'none'}}/>
+          : <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',color:'rgba(255,255,255,0.6)',fontSize:11,textAlign:'center',padding:8}}>この日の主写真を設定すると<br/>背景に表示されます</div>}
         <div style={{position:'absolute',left:(sealPosX*100)+'%',top:(sealPosY*100)+'%',transform:'translate(-50%,-50%)',pointerEvents:'none',filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.4))'}}>
           {SealPrev ? <SealPrev variant={sealEffective} date={sess.date||''} size={56}/> : null}
         </div>
