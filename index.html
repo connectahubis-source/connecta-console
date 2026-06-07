@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-07 P3c'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-07 P3g'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1652,7 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3c</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3g</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -9405,6 +9405,27 @@ function PageEventAdminDetail() {
     setTimeout(() => URL.revokeObjectURL(u), 4000);
   }
 
+  // (公開終了) イベントを公開一覧から外す/再公開する。 記念写真コレクションは reg ベースのためステータスに影響されず残る。
+  const PUBLIC_EVENT_STATUSES = ['公開中', '満員', '公開', 'published', 'public', 'open'];
+  async function handleTogglePublication() {
+    if (!event) return;
+    const ending = PUBLIC_EVENT_STATUSES.indexOf(event.status) >= 0;
+    const ok = await window.confirmDialog({
+      title: ending ? 'イベントの公開を終了しますか?' : 'イベントを再公開しますか?',
+      body: ending
+        ? '公開一覧・募集ページから外します。参加者の「参加記念コレクション」や記念写真は引き続き表示されます。'
+        : '公開一覧に再度表示します。',
+      confirmLabel: ending ? '公開を終了' : '再公開',
+    });
+    if (!ok) return;
+    const newStatus = ending ? '終了' : '公開中';
+    try {
+      await window.postData('updateEvent', { eventId: event.id, fields: { status: newStatus } });
+      setEvent(prev => (prev ? { ...prev, status: newStatus } : prev));
+      window.toast.success(ending ? '公開を終了しました（記念写真は残ります）' : '再公開しました');
+    } catch (e) { window.toast.error('変更に失敗: ' + (e.message || e)); }
+  }
+
   const loadAll = async () => {
     if (!eventId) { setLoading(false); return; }
     setLoading(true);
@@ -9929,6 +9950,10 @@ function PageEventAdminDetail() {
             <a href={`#qr?eventId=${event.id}`} className="jb-btn">
               <Icon n="qr" s={12}/> QR
             </a>
+            {/* (公開終了) 公開一覧から外す/再公開。 記念写真は残る */}
+            {event.status === '終了'
+              ? <button className="jb-btn" onClick={handleTogglePublication}>再公開する</button>
+              : <button className="jb-btn" onClick={handleTogglePublication} title="公開一覧・募集ページから外します。記念写真コレクションは残ります" style={{borderColor:'var(--jb-line)',color:'var(--jb-shouwa, #b94a48)'}}>公開を終了</button>}
           </div>
         </div>
       </section>
@@ -19518,6 +19543,10 @@ function PageEventCreate(){
   // (2d) 参加記念コレクション設定
   const [mementoPhotoUrl, setMementoPhotoUrl] = useState("");
   const [sealType, setSealType] = useState("");
+  const [sealPosX, setSealPosX] = useState(0.26);  // (R5) スタンプ初期位置(中心比率)。 プレビューでドラッグ
+  const [sealPosY, setSealPosY] = useState(0.80);
+  const sealPosDragRef = React.useRef(false);
+  const sealPreviewRef = React.useRef(null);
   const [mementoPublishAt, setMementoPublishAt] = useState("");
   const [mementoUploading, setMementoUploading] = useState(false);
   // (Phase 7.2) ヒーローオーバーレイ — 画像上に重ねるテキスト/図形
@@ -19657,6 +19686,13 @@ function PageEventCreate(){
         // (2d) 参加記念
         setMementoPhotoUrl(ev.mementoPhotoUrl || "");
         setSealType(ev.sealType || "");
+        // (R5) スタンプ初期位置 "x,y" を読み込み (なければ既定 左下)
+        (function(){
+          const parts = String(ev.sealPos || '').split(',');
+          const px = parseFloat(parts[0]), py = parseFloat(parts[1]);
+          setSealPosX(isNaN(px) ? 0.26 : Math.max(0.05, Math.min(0.95, px)));
+          setSealPosY(isNaN(py) ? 0.80 : Math.max(0.05, Math.min(0.95, py)));
+        })();
         setMementoPublishAt(String(ev.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
         // (Phase 7.2) heroOverlay読み込み — JSON文字列または配列を受け取る
         try {
@@ -19794,6 +19830,7 @@ function PageEventCreate(){
       heroImageUrl: heroImageUrl || '',
       mementoPhotoUrl: mementoPhotoUrl || '',
       sealType: sealType || '',
+      sealPos: sealPosX.toFixed(3) + ',' + sealPosY.toFixed(3),
       mementoPublishAt: mementoPublishAt || '',
       heroOverlay: JSON.stringify(heroOverlay || []),
       // (Phase 7.4) イベントタグ
@@ -21179,8 +21216,8 @@ function PageEventCreate(){
                   </div>
 
                   {/* WYSIWYG: マイページでの参加記念プレビュー */}
-                  <div style={{marginTop:14,marginBottom:5,fontSize:11,color:'var(--ink2)'}}>マイページでの表示プレビュー</div>
-                  <div style={{
+                  <div style={{marginTop:14,marginBottom:5,fontSize:11,color:'var(--ink2)'}}>マイページでの表示プレビュー（印をドラッグで初期位置を設定）</div>
+                  <div ref={sealPreviewRef} style={{
                     position:'relative', width:'100%', maxWidth:320, aspectRatio:'16/9',
                     background: (mementoPhotoUrl||heroImageUrl||posterUrl)
                       ? 'var(--jb-blue-deep) url('+(mementoPhotoUrl||heroImageUrl||posterUrl)+') center/cover no-repeat'
@@ -21188,7 +21225,12 @@ function PageEventCreate(){
                     borderRadius:10, border:'1px solid var(--line)', overflow:'hidden',
                   }}>
                     <div style={{position:'absolute', inset:6, border:'1.5px solid rgba(255,255,255,0.45)', borderRadius:7, pointerEvents:'none'}}/>
-                    <div style={{position:'absolute', left:'5%', bottom:'9%', filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.55))'}}>
+                    <div
+                      onPointerDown={(e)=>{ e.preventDefault(); e.stopPropagation(); sealPosDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch(_){} }}
+                      onPointerMove={(e)=>{ if(!sealPosDragRef.current) return; e.preventDefault(); const fr = sealPreviewRef.current; if(!fr) return; const r = fr.getBoundingClientRect(); if(!r.width||!r.height) return; let x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height; x=Math.max(0.05,Math.min(0.95,x)); y=Math.max(0.05,Math.min(0.95,y)); setSealPosX(x); setSealPosY(y); }}
+                      onPointerUp={(e)=>{ sealPosDragRef.current=false; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch(_){} }}
+                      onPointerCancel={()=>{ sealPosDragRef.current=false; }}
+                      style={{position:'absolute', left:(sealPosX*100)+'%', top:(sealPosY*100)+'%', transform:'translate(-50%,-50%)', filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.55))', touchAction:'none', cursor:'grab', userSelect:'none', WebkitUserSelect:'none'}}>
                       <MementoSealPreview variant={sealType || autoSealForCategory(category)} date={date || ''} size={78}/>
                     </div>
                   </div>
