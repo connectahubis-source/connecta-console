@@ -5271,11 +5271,11 @@ const SURVEY_Q_TYPES = [
 
 function blankQuestion(type) {
   const t = type || 'text';
-  if (t === 'nps')   return { type: 'nps',   label: 'このイベントを他の人に勧めたいと思いますか?', role: 'nps',  options: [], required: true,  min: 0, max: 10 };
-  if (t === 'scale') return { type: 'scale', label: '今回の体験にどれくらい満足しましたか?',     role: 'csat', options: [], required: true,  min: 1, max: 5 };
-  if (t === 'single')return { type: 'single',label: '',                                          role: '',     options: [''], required: false, min: '', max: '' };
-  if (t === 'multi') return { type: 'multi', label: '',                                          role: '',     options: [''], required: false, min: '', max: '' };
-  return { type: 'text', label: '', role: '', options: [], required: false, min: '', max: '' };
+  if (t === 'nps')   return { type: 'nps',   label: 'このイベントを他の人に勧めたいと思いますか?', label_easy: '', label_en: '', role: 'nps',  options: [], options_easy: [], options_en: [], required: true,  min: 0, max: 10 };
+  if (t === 'scale') return { type: 'scale', label: '今回の体験にどれくらい満足しましたか?',     label_easy: '', label_en: '', role: 'csat', options: [], options_easy: [], options_en: [], required: true,  min: 1, max: 5 };
+  if (t === 'single')return { type: 'single',label: '',                                          label_easy: '', label_en: '', role: '',     options: [''], options_easy: [''], options_en: [''], required: false, min: '', max: '' };
+  if (t === 'multi') return { type: 'multi', label: '',                                          label_easy: '', label_en: '', role: '',     options: [''], options_easy: [''], options_en: [''], required: false, min: '', max: '' };
+  return { type: 'text', label: '', label_easy: '', label_en: '', role: '', options: [], options_easy: [], options_en: [], required: false, min: '', max: '' };
 }
 
 function QuestionBuilderModal({ survey, onClose, onSaved }) {
@@ -5289,17 +5289,29 @@ function QuestionBuilderModal({ survey, onClose, onSaved }) {
     window.fetchData('getSurveyQuestions', { surveyId: survey.id })
       .then(res => {
         if (!alive) return;
-        const arr = (Array.isArray(res) ? res : []).map(q => ({
-          // legacy 合成質問 (SV-xxx-legacy-*) は新規扱いにして実体化させる
-          id: (q.id && String(q.id).indexOf('-legacy-') < 0) ? q.id : undefined,
-          type: q.type || 'text',
-          label: q.label || '',
-          role: q.role || '',
-          options: Array.isArray(q.options) ? q.options.slice() : [],
-          required: !!q.required,
-          min: q.min != null ? q.min : '',
-          max: q.max != null ? q.max : '',
-        }));
+        const arr = (Array.isArray(res) ? res : []).map(q => {
+          const opts = Array.isArray(q.options) ? q.options.slice() : [];
+          const oe = Array.isArray(q.options_easy) ? q.options_easy.slice() : [];
+          const on = Array.isArray(q.options_en) ? q.options_en.slice() : [];
+          // easy/en を選択肢(ja)と同じ長さに揃える (不足は空文字)
+          while (oe.length < opts.length) oe.push('');
+          while (on.length < opts.length) on.push('');
+          return {
+            // legacy 合成質問 (SV-xxx-legacy-*) は新規扱いにして実体化させる
+            id: (q.id && String(q.id).indexOf('-legacy-') < 0) ? q.id : undefined,
+            type: q.type || 'text',
+            label: q.label || '',
+            label_easy: q.label_easy || '',
+            label_en: q.label_en || '',
+            role: q.role || '',
+            options: opts,
+            options_easy: oe,
+            options_en: on,
+            required: !!q.required,
+            min: q.min != null ? q.min : '',
+            max: q.max != null ? q.max : '',
+          };
+        });
         setQuestions(arr.length ? arr : [blankQuestion('nps')]);
         setLoading(false);
       })
@@ -5314,8 +5326,8 @@ function QuestionBuilderModal({ survey, onClose, onSaved }) {
     const def = blankQuestion(type);
     setQuestions(qs => qs.map((q, idx) => {
       if (idx !== i) return q;
-      // ラベルは維持、型依存項目はデフォルトへ
-      return { ...def, label: q.label || def.label, id: q.id };
+      // ラベル(3言語)は維持、型依存項目はデフォルトへ
+      return { ...def, label: q.label || def.label, label_easy: q.label_easy || '', label_en: q.label_en || '', id: q.id };
     }));
   }
   function move(i, dir) {
@@ -5330,11 +5342,32 @@ function QuestionBuilderModal({ survey, onClose, onSaved }) {
   function remove(i) { setQuestions(qs => qs.filter((_, idx) => idx !== i)); }
   function addQ(type) { setQuestions(qs => [...qs, blankQuestion(type)]); }
 
+  // 選択肢: ja / easy / en を同 index で同期
   function setOption(i, oi, val) {
     setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options: q.options.map((o, k) => k === oi ? val : o) } : q));
   }
-  function addOption(i) { setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options: [...q.options, ''] } : q)); }
-  function removeOption(i, oi) { setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options: q.options.filter((_, k) => k !== oi) } : q)); }
+  function setOptionEasy(i, oi, val) {
+    setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options_easy: (q.options_easy || []).map((o, k) => k === oi ? val : o) } : q));
+  }
+  function setOptionEn(i, oi, val) {
+    setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, options_en: (q.options_en || []).map((o, k) => k === oi ? val : o) } : q));
+  }
+  function addOption(i) {
+    setQuestions(qs => qs.map((q, idx) => idx === i ? {
+      ...q,
+      options: [...q.options, ''],
+      options_easy: [...(q.options_easy || []), ''],
+      options_en: [...(q.options_en || []), ''],
+    } : q));
+  }
+  function removeOption(i, oi) {
+    setQuestions(qs => qs.map((q, idx) => idx === i ? {
+      ...q,
+      options: q.options.filter((_, k) => k !== oi),
+      options_easy: (q.options_easy || []).filter((_, k) => k !== oi),
+      options_en: (q.options_en || []).filter((_, k) => k !== oi),
+    } : q));
+  }
 
   async function handleSave() {
     // クライアント検証
@@ -5356,8 +5389,12 @@ function QuestionBuilderModal({ survey, onClose, onSaved }) {
         id: q.id,
         type: q.type,
         label: q.label.trim(),
+        label_easy: (q.label_easy || '').trim(),
+        label_en: (q.label_en || '').trim(),
         role: q.role || '',
-        options: (q.type === 'single' || q.type === 'multi') ? q.options.filter(o => String(o).trim() !== '') : [],
+        options: (q.type === 'single' || q.type === 'multi') ? q.options : [],
+        options_easy: (q.type === 'single' || q.type === 'multi') ? (q.options_easy || []) : [],
+        options_en: (q.type === 'single' || q.type === 'multi') ? (q.options_en || []) : [],
         required: !!q.required,
         min: (q.type === 'scale' || q.type === 'nps') ? Number(q.min) : '',
         max: (q.type === 'scale' || q.type === 'nps') ? Number(q.max) : '',
@@ -5399,7 +5436,15 @@ function QuestionBuilderModal({ survey, onClose, onSaved }) {
                     <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>move(i,1)} disabled={i===questions.length-1} title="下へ"><Icon n="chevDown" s={13}/></button>
                     <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>remove(i)} title="削除" style={{color:'var(--coral)'}}><Icon n="trash" s={13}/></button>
                   </div>
-                  <input className="input" value={q.label} onChange={e=>patch(i,{label:e.target.value})} placeholder="質問文を入力" style={{marginBottom:8}}/>
+                  <input className="input" value={q.label} onChange={e=>patch(i,{label:e.target.value})} placeholder="質問文 (日本語)" style={{marginBottom:6}}/>
+                  <div style={{display:'flex',gap:6,marginBottom:8}}>
+                    <span style={{fontSize:10,fontWeight:700,color:'var(--ink4)',minWidth:30,alignSelf:'center'}}>EN</span>
+                    <input className="input" value={q.label_en||''} onChange={e=>patch(i,{label_en:e.target.value})} placeholder="Question (English)" style={{flex:1}}/>
+                  </div>
+                  <div style={{display:'flex',gap:6,marginBottom:8}}>
+                    <span style={{fontSize:10,fontWeight:700,color:'var(--ink4)',minWidth:30,alignSelf:'center'}}>やさしい</span>
+                    <input className="input" value={q.label_easy||''} onChange={e=>patch(i,{label_easy:e.target.value})} placeholder="しつもん (やさしい にほんご)" style={{flex:1}}/>
+                  </div>
 
                   {q.type === 'nps' && (
                     <div style={{fontSize:11,color:'var(--ink4)'}}>0-10 の推奨度。 ダッシュボードの NPS 指標として集計されます。</div>
@@ -5419,11 +5464,22 @@ function QuestionBuilderModal({ survey, onClose, onSaved }) {
                     </div>
                   )}
                   {(q.type === 'single' || q.type === 'multi') && (
-                    <div className="stack" style={{gap:6}}>
+                    <div className="stack" style={{gap:10}}>
                       {q.options.map((o, oi) => (
-                        <div key={oi} style={{display:'flex',gap:6,alignItems:'center'}}>
-                          <input className="input" value={o} onChange={e=>setOption(i,oi,e.target.value)} placeholder={`選択肢 ${oi+1}`}/>
-                          <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>removeOption(i,oi)} disabled={q.options.length<=1} style={{color:'var(--coral)'}}><Icon n="x" s={12}/></button>
+                        <div key={oi} style={{border:'1px solid var(--line)',borderRadius:8,padding:8,background:'var(--paper)'}}>
+                          <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+                            <span style={{fontSize:10,fontWeight:700,color:'var(--ink4)',minWidth:30}}>{oi+1}・JA</span>
+                            <input className="input" value={o} onChange={e=>setOption(i,oi,e.target.value)} placeholder={`選択肢 ${oi+1} (日本語)`} style={{flex:1}}/>
+                            <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>removeOption(i,oi)} disabled={q.options.length<=1} style={{color:'var(--coral)'}}><Icon n="x" s={12}/></button>
+                          </div>
+                          <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+                            <span style={{fontSize:10,fontWeight:700,color:'var(--ink4)',minWidth:30}}>EN</span>
+                            <input className="input" value={(q.options_en||[])[oi]||''} onChange={e=>setOptionEn(i,oi,e.target.value)} placeholder="Option (English)" style={{flex:1}}/>
+                          </div>
+                          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                            <span style={{fontSize:10,fontWeight:700,color:'var(--ink4)',minWidth:30}}>やさしい</span>
+                            <input className="input" value={(q.options_easy||[])[oi]||''} onChange={e=>setOptionEasy(i,oi,e.target.value)} placeholder="えらぶもの (やさしい)" style={{flex:1}}/>
+                          </div>
                         </div>
                       ))}
                       <button className="btn btn-soft btn-sm" onClick={()=>addOption(i)} style={{alignSelf:'flex-start'}}><Icon n="plus" s={12}/> 選択肢を追加</button>
@@ -9060,6 +9116,7 @@ function PageEventAdminDetail() {
   const [trendPattern, setTrendPattern] = useState(null);  // (Phase 17.N-2) 過去パターン
   const [promos, setPromos] = useState([]);  // (Phase 17.O) 広報イベント
   const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
+  const [arrivalOpen, setArrivalOpen] = useState(false);  // 未到着一覧の開閉
   // (Phase 17.S) タブ — 'overview' | 'apps' | 'payments' | 'analytics'
   const [tab, setTab] = useState(() => {
     try { return sessionStorage.getItem('event-detail-tab') || 'overview'; } catch (e) { return 'overview'; }
@@ -9094,6 +9151,26 @@ function PageEventAdminDetail() {
     tick();
     timer = setInterval(tick, 3000);
     return () => { if (timer) clearInterval(timer); };
+  }, [eventId]);
+
+  // (未到着一覧の追従) regs を ~6秒ごとに再取得し、 チェックインした人を一覧から外す。
+  useEffect(() => {
+    if (!eventId) return;
+    let timer = null, busy = false;
+    const refreshRegs = async () => {
+      if (busy || document.hidden) return;
+      busy = true;
+      try {
+        const detail = await window.fetchData('loadEventDetail', { eventId });
+        if (detail && Array.isArray(detail.regs)) setRegs(detail.regs);
+        if (detail && Array.isArray(detail.apps)) setApps(detail.apps);
+      } catch (e) {}
+      finally { busy = false; }
+    };
+    timer = setInterval(refreshRegs, 6000);
+    const onVis = () => { if (!document.hidden) refreshRegs(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { if (timer) clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
   }, [eventId]);
 
   const loadAll = async () => {
@@ -9421,6 +9498,60 @@ function PageEventAdminDetail() {
     <div style={{padding:'24px 28px',maxWidth:1100,margin:'0 auto'}}>
       {/* (Phase 17.S) タブ — 概要 / 申込者 / 決済 / 分析 */}
       <EventDetailTabsBar tab={tab} onChange={setTab} kpi={kpi}/>
+
+      {/* (受付・当日) 未到着 (未チェックイン) 一覧 — チェックインすると自動的に消える */}
+      {(() => {
+        const NOT_ARRIVED = ['申込済み', '決済済み', '確定'];
+        const seen = {};
+        const pending = [];
+        (regs || []).forEach(r => {
+          if (!r || NOT_ARRIVED.indexOf(r.status) < 0) return;        // チェックイン済/保留/キャンセル等は除外
+          const uid = String(r.userId || r.userName || '');
+          if (!uid || seen[uid]) return;
+          seen[uid] = true;
+          pending.push({ uid, name: r.userName || '(名前未登録)', status: r.status });
+        });
+        const activeTotal = (regs || []).filter(r => r && r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち').length;
+        const arrivedCount = Math.max(0, activeTotal - pending.length);
+        if (activeTotal === 0) return null;
+        const allHere = pending.length === 0;
+        return (
+          <section style={{
+            marginBottom: 18, borderRadius: 14, overflow: 'hidden',
+            border: '1px solid ' + (allHere ? 'var(--green-200, #bbf7d0)' : 'var(--amber-200, #fde68a)'),
+            background: allHere ? 'var(--green-50, #f0fdf4)' : 'var(--amber-50, #fffbeb)',
+          }}>
+            <button onClick={() => setArrivalOpen(o => !o)} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+              background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+            }}>
+              <span style={{ fontSize: 18 }}>{allHere ? '✅' : '🟡'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink, #0a1628)' }}>
+                  {allHere ? '全員チェックイン済み' : `未到着 ${pending.length}名`}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink3, #4b5563)', marginTop: 1 }}>
+                  到着 {arrivedCount} / {activeTotal}名{allHere ? '' : '（タップで未到着の一覧）'}
+                </div>
+              </div>
+              {!allHere && <Icon n={arrivalOpen ? 'chevUp' : 'chevDown'} s={16} />}
+            </button>
+            {!allHere && arrivalOpen && (
+              <div style={{ padding: '0 14px 14px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {pending.map(p => (
+                  <span key={p.uid} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999,
+                    background: 'var(--paper, #fff)', border: '1px solid var(--line, #e5e9f0)', fontSize: 13, fontWeight: 700, color: 'var(--ink, #0a1628)',
+                  }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.status === '決済済み' || p.status === '確定' ? 'var(--green, #16a34a)' : 'var(--amber, #f59e0b)' }} />
+                    {p.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* ヘッダー */}
       <section style={{marginBottom:24}}>
@@ -16910,6 +17041,56 @@ function PageApplications() {
 
   useEffect(() => { load(); }, []);
 
+  // (最適化) 申込のみを再取得する軽量更新。決済済化/返金ではイベント・参加者は変化しないため3本→1本に削減。
+  async function loadApps() {
+    try {
+      const apps = await window.fetchData('listApplications');
+      setApplications(Array.isArray(apps) ? apps : []);
+    } catch (e) { /* 失敗時は既存表示を維持 */ }
+  }
+
+  // (最適化) 決済済化の結果を即時にローカル反映 (体感ゼロ待ち)。直後に loadApps() で正規化する。
+  function applyMarkPaidLocally(res) {
+    if (!res || !res.applicationId) return;
+    const paidSet = {};
+    (res.paidRegIds || []).forEach(function(id) { paidSet[String(id)] = true; });
+    setApplications(function(prev) {
+      return (prev || []).map(function(a) {
+        if (String(a.applicationId) !== String(res.applicationId)) return a;
+        const next = Object.assign({}, a);
+        if (Array.isArray(a.registrations)) {
+          next.registrations = a.registrations.map(function(r) {
+            return paidSet[String(r.regId || r.RegID)] ? Object.assign({}, r, { paid: true, status: '決済済' }) : r;
+          });
+          const active = next.registrations.filter(function(r) { const s = String(r.status || ''); return s !== 'キャンセル' && s !== '返金' && s !== '返金待ち'; });
+          next._allPaid = active.length > 0 && active.every(function(r) { return r.paid === true || r.paid === 'TRUE'; });
+          next._anyPaid = active.some(function(r) { return r.paid === true || r.paid === 'TRUE'; });
+        } else {
+          next._anyPaid = true;
+        }
+        return next;
+      });
+    });
+  }
+
+  // (最適化) 返金の結果を即時にローカル反映。直後に loadApps() で正規化。
+  function applyRefundLocally(res) {
+    if (!res || !res.applicationId) return;
+    const refundedSet = {};
+    (res.refundedRegIds || []).forEach(function(id) { refundedSet[String(id)] = true; });
+    setApplications(function(prev) {
+      return (prev || []).map(function(a) {
+        if (String(a.applicationId) !== String(res.applicationId)) return a;
+        const next = Object.assign({}, a);
+        if (Array.isArray(a.registrations)) {
+          next.registrations = a.registrations.map(function(r) {
+            return refundedSet[String(r.regId || r.RegID)] ? Object.assign({}, r, { status: '返金' }) : r;
+          });
+        }
+        return next;
+      });
+    });
+  }
   // ヘルパー: イベントと参加者の名前を解決
   const eventMap = useMemo(() => {
     const m = {};
@@ -17048,7 +17229,7 @@ function PageApplications() {
           event={eventMap[selectedApp.eventId]}
           participant={participantMap[selectedApp.userId]}
           onClose={() => setSelectedApp(null)}
-          onReload={() => { setSelectedApp(null); load(); }}
+          onReload={(res) => { if (res && res.refundedRegIds) applyRefundLocally(res); else applyMarkPaidLocally(res); setSelectedApp(null); loadApps(); }}
         />
       )}
     </div>
@@ -17609,7 +17790,7 @@ function ApplicationDetailModal({ app, event, participant, onClose, onReload }) 
         <RefundExecModal
           app={app}
           onCancel={() => setRefundModal(false)}
-          onSubmit={() => { setRefundModal(false); onReload(); }}
+          onSubmit={(res) => { setRefundModal(false); onReload(res); }}
         />
       )}
 
@@ -17620,7 +17801,7 @@ function ApplicationDetailModal({ app, event, participant, onClose, onReload }) 
           appRegs={appRegs}
           sessionMap={sessionMap}
           onCancel={() => setMarkPaidModal(false)}
-          onSubmit={() => { setMarkPaidModal(false); onReload(); }}
+          onSubmit={(res) => { setMarkPaidModal(false); onReload(res); }}
         />
       )}
     </div>
@@ -21215,8 +21396,8 @@ function PageQR(){
         if (pr && pr.catch) pr.catch(() => {});
       }
       setScanning(true);
-      // QR検出ループ
-      scanIntervalRef.current = setInterval(() => detectQR(), 250);
+      // QR検出ループ (高頻度化で読み取りやすく)
+      scanIntervalRef.current = setInterval(() => detectQR(), 140);
     } catch (err) {
       window.toast.error('カメラへのアクセスが拒否されました: ' + (err.message || err));
     }
@@ -21287,20 +21468,26 @@ function PageQR(){
   // アンマウント時のクリーンアップ
   useEffect(() => () => { if (cameraBeatRef.current) clearInterval(cameraBeatRef.current); }, []);
 
-  // QR検出処理
+  // QR検出処理 (全フレーム走査。 高解像度は適正サイズへ縮小して高速化 + 読み取り安定化)
   function detectQR() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || video.readyState !== 4) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return;
+    // 長辺を最大 1000px に縮小 (検出は十分・処理は軽い)。
+    const MAXD = 1000;
+    const scale = Math.min(1, MAXD / Math.max(vw, vh));
+    const cw = Math.round(vw * scale), ch = Math.round(vh * scale);
+    canvas.width = cw;
+    canvas.height = ch;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, cw, ch);
+    const imageData = ctx.getImageData(0, 0, cw, ch);
 
     try {
-      const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+      const code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
       if (code && code.data) {
         handleScannedCode(code.data);
       }
@@ -21639,15 +21826,15 @@ function PageQR(){
         <div style={{position:'fixed',inset:0,zIndex:2147483000,background:'#06122b',display:'flex',flexDirection:'column'}}>
           <div style={{flex:1,position:'relative',overflow:'hidden'}}>
             <video ref={overlayVideoRef} playsInline muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
-            {/* 中央の読み取りガイド枠 */}
-            <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:'min(70vw,320px)',height:'min(70vw,320px)',border:'3px solid rgba(255,255,255,0.85)',borderRadius:20,boxShadow:'0 0 0 9999px rgba(0,0,0,0.35)'}}/>
+            {/* 中央の読み取りガイド枠 (大きめ・マスク薄め。 実際は画面全体を走査しているので枠外でも読めます) */}
+            <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:'min(92vw,620px)',height:'min(70vh,620px)',maxHeight:'min(92vw,620px)',border:'3px solid rgba(255,255,255,0.85)',borderRadius:24,boxShadow:'0 0 0 9999px rgba(0,0,0,0.18)'}}/>
             <div style={{position:'absolute',top:16,left:0,right:0,textAlign:'center',color:'#fff',fontSize:14,fontWeight:700,textShadow:'0 1px 4px rgba(0,0,0,0.6)'}}>
               受付連携モード · {selectedEvent ? selectedEvent.title : ''}
             </div>
             <div style={{position:'absolute',bottom:16,left:0,right:0,textAlign:'center',color:'#dbeafe',fontSize:12,textShadow:'0 1px 4px rgba(0,0,0,0.6)'}}>
               {camLastSent
                 ? `送信(${camSentCount}): ${camLastSent.name} さん（管理画面で入場確定）`
-                : 'QRを枠内にかざしてください。読み取り結果は管理画面に表示されます'}
+                : '画面にQRをかざしてください（枠より広く読み取れます）。結果は管理画面に表示されます'}
             </div>
           </div>
           <div style={{padding:'14px 16px',background:'#0a1f4d',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
@@ -21985,11 +22172,18 @@ function PageQRLive(){
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [poll, setPoll] = useState(null);        // 最新 livePoll 結果
-  const [current, setCurrent] = useState(null);  // {regId, seq}
-  const [busy, setBusy] = useState(false);
-  const [doneSeqs, setDoneSeqs] = useState({});   // seq -> 'admitted'
-  const lastSeqRef = useRef(0);
+  const [doneSeqs, setDoneSeqs] = useState({});   // seq -> 'admitted' (楽観的に一覧から除外)
   const pollTimerRef = useRef(null);
+  // (d) 受付待ち警告音
+  const [soundOn, setSoundOn] = useState(() => { try { return localStorage.getItem('qr_warn_sound') !== 'off'; } catch (e) { return true; } });
+  const soundOnRef = useRef(true);
+  useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
+  const warnedSeqsRef = useRef({});   // 既に警告音を鳴らした seq
+  const audioCtxRef = useRef(null);
+  // (c) 自動失効ログ参照
+  const [expiredOpen, setExpiredOpen] = useState(false);
+  const [expiredItems, setExpiredItems] = useState([]);
+  const [expiredLoading, setExpiredLoading] = useState(false);
 
   function loadData() {
     return Promise.all([
@@ -22004,22 +22198,98 @@ function PageQRLive(){
   }
   useEffect(() => { loadData().finally(() => setLoading(false)); }, []);
 
-  // ~1.5秒ポーリング
+  // ~1.5秒ポーリング (待ち行列を取得)
   useEffect(() => {
     if (!eventId) return;
     function tick() {
-      window.postData('qr.livePoll', { eventId }).then(res => {
-        setPoll(res);
-        if (res && res.lastScan && res.lastScan.seq && res.lastScan.seq !== lastSeqRef.current) {
-          lastSeqRef.current = res.lastScan.seq;
-          setCurrent({ regId: res.lastScan.regId, seq: res.lastScan.seq });
-        }
-      }).catch(() => {});
+      window.postData('qr.livePoll', { eventId }).then(res => { setPoll(res); }).catch(() => {});
     }
     tick();
     pollTimerRef.current = setInterval(tick, 1500);
     return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
   }, [eventId]);
+
+  // バッジ精度のため登録を ~8秒ごとに再取得 (毎回フル取得は避け、 一定間隔に抑える)
+  useEffect(() => {
+    if (!eventId) return;
+    let t = null, busy2 = false;
+    const refresh = () => {
+      if (busy2 || document.hidden) return;
+      busy2 = true;
+      window.fetchData('listRegistrations')
+        .then(regs => { setRegistrations(Array.isArray(regs) ? regs : []); })
+        .catch(() => {})
+        .then(() => { busy2 = false; });
+    };
+    t = setInterval(refresh, 8000);
+    return () => { if (t) clearInterval(t); };
+  }, [eventId]);
+
+  // (d) 自動再生制限対策: 最初の操作で音声を解錠
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+      } catch (e) {}
+      window.removeEventListener('pointerdown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
+
+  // (d) 受付待ち警告音 (2音)。 ミュート時は鳴らさない。
+  function playWarn() {
+    if (!soundOnRef.current) return;
+    try {
+      let ctx = audioCtxRef.current;
+      if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); audioCtxRef.current = ctx; }
+      if (ctx.state === 'suspended') ctx.resume();
+      const beep = (freq, start, dur) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = freq;
+        o.connect(g); g.connect(ctx.destination);
+        const t0 = ctx.currentTime + start;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.start(t0); o.stop(t0 + dur + 0.02);
+      };
+      beep(880, 0, 0.15); beep(660, 0.18, 0.2);
+    } catch (e) {}
+  }
+
+  // (d) 90秒超になった瞬間に一度だけ鳴らす (seqごとに既鳴フラグ。 毎ポーリングでは鳴らさない)
+  useEffect(() => {
+    const q = (poll && poll.queue) || [];
+    const now = Date.now();
+    q.forEach(item => {
+      if (!item || !item.seq) return;
+      if (doneSeqs[item.seq]) return;
+      const ageMs = item.at ? (now - new Date(item.at).getTime()) : 0;
+      if (ageMs > 90 * 1000 && !warnedSeqsRef.current[item.seq]) {
+        warnedSeqsRef.current[item.seq] = true;
+        playWarn();
+      }
+    });
+  }, [poll, doneSeqs]);
+
+  // (c) 失効ログ取得 (パネルを開いている間だけ。 即時＋30秒間隔。 閉じれば取得停止 → 無駄な取得を避ける)
+  useEffect(() => {
+    if (!eventId || !expiredOpen) return;
+    let t = null, busy3 = false;
+    const fetchLog = () => {
+      if (busy3 || document.hidden) return;
+      busy3 = true; setExpiredLoading(true);
+      window.postData('qr.expiredLog', { eventId })
+        .then(res => { setExpiredItems((res && res.items) || []); })
+        .catch(() => {})
+        .then(() => { busy3 = false; setExpiredLoading(false); });
+    };
+    fetchLog();
+    t = setInterval(fetchLog, 30000);
+    return () => { if (t) clearInterval(t); };
+  }, [eventId, expiredOpen]);
 
   const event = events.find(e => e.id === eventId) || null;
   const repeaterUserIds = React.useMemo(() => {
@@ -22035,39 +22305,58 @@ function PageQRLive(){
     return s;
   }, [registrations]);
 
-  // current.regId を解決
   const applications = React.useMemo(() => window.groupRegistrationsByApplication(registrations), [registrations]);
-  const app = current ? window.findApplicationByRegId(applications, current.regId) : null;
-  const appRegs = app ? (app.regs || []) : [];
-  const activeRegs = appRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
-  const allCheckedIn = activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済');
-  const isPaid = appRegs.some(r => r.paid === true || r.paid === 'TRUE') || appRegs.some(r => { const s = String(r.status || ''); return s === '決済済' || s === '決済済み'; });
-  const kana = (appRegs.find(r => r.userKana) || {}).userKana || '';
-  const ageVal = (() => { const r = appRegs.find(r => r.age != null); return r ? r.age : null; })();
-  const isRepeater = app ? repeaterUserIds.has(app.userId) : false;
-  const wrongEvent = app && app.eventId !== eventId;
-  const admittedThis = current && doneSeqs[current.seq];
 
-  async function admit(confirmPay) {
-    if (!app || !current) return;
-    const seq = current.seq;
-    const targets = activeRegs.filter(r => r.status !== 'チェックイン済');
-    // 楽観的更新: 即「入場確定済み（次のQRをどうぞ）」にして、実処理はバックグラウンドで実行。
-    setDoneSeqs(m => ({ ...m, [seq]: 'admitted' }));
+  // 待ち行列(未確定の到着者)。 確定済み(doneSeqs)は除外し、 新しい順に並べる。
+  const pending = ((poll && poll.queue) || [])
+    .filter(item => item && item.seq && !doneSeqs[item.seq])
+    .slice()
+    .sort((a, b) => b.seq - a.seq);
+
+  const nowMs = Date.now();
+  const QR_WARN_MS = 90 * 1000; // この時間を超えたら「受付待ちが長い」警告 (取り忘れ防止)
+  // 同一人物(userId)が複数行に出ているか集計 (二重受付の注意喚起)
+  const pendingUserIdCounts = {};
+  pending.forEach(item => {
+    const a = window.findApplicationByRegId(applications, item.regId);
+    const uid = a && a.userId;
+    if (uid) pendingUserIdCounts[uid] = (pendingUserIdCounts[uid] || 0) + 1;
+  });
+
+  // regId から表示情報を解決
+  function resolveArrival(item) {
+    const app = window.findApplicationByRegId(applications, item.regId);
+    const appRegs = app ? (app.regs || []) : [];
+    const activeRegs = appRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+    const allCheckedIn = activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済');
+    const isPaid = appRegs.some(r => r.paid === true || r.paid === 'TRUE') || appRegs.some(r => { const s = String(r.status || ''); return s === '決済済' || s === '決済済み'; });
+    const kana = (appRegs.find(r => r.userKana) || {}).userKana || '';
+    const ageVal = (() => { const r = appRegs.find(r => r.age != null); return r ? r.age : null; })();
+    const isRepeater = app ? repeaterUserIds.has(app.userId) : false;
+    const wrongEvent = app && app.eventId !== eventId;
+    return { app, appRegs, activeRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent };
+  }
+
+  // 入場確定 (楽観的)。 ボタンを押した瞬間に一覧から除去し、 checkin/決済確認はバックグラウンドで実行。
+  // → 決済済み化やバックエンドが遅くても操作はブロックされず、 次の人へすぐ進める。 失敗時のみ一覧へ戻す。
+  async function admit(item, confirmPay) {
+    const info = resolveArrival(item);
+    const app = info.app; if (!app) return;
+    const seq = item.seq;
+    const targets = info.activeRegs.filter(r => r.status !== 'チェックイン済');
+    setDoneSeqs(m => ({ ...m, [seq]: 'admitted' }));   // 即座に一覧から消す
     window.toast.success(`${app.userName} さんを入場確定しました`);
-    (async () => {
-      try {
-        await Promise.all(targets.map(r => window.postData('admin.checkin', { regId: r.id })));
-        if (confirmPay) {
-          await Promise.all(targets.map(r => window.postData('admin.confirmPayment', { regId: r.id, paymentMethod: r.actualPaymentMethod || '' }).catch(() => {})));
-        }
-        if (window.invalidateCache) window.invalidateCache('listRegistrations');
-        loadData();  // 反映確認のため背景で再読込（UIはブロックしない）
-      } catch (e) {
-        window.toast.error('入場確定の反映に失敗: ' + (e.message || e) + '（再読込してください）');
-        setDoneSeqs(m => { const n = { ...m }; delete n[seq]; return n; });  // 失敗時は戻す
+    try {
+      await Promise.all(targets.map(r => window.postData('admin.checkin', { regId: r.id })));
+      if (confirmPay) {
+        await Promise.all(targets.map(r => window.postData('admin.confirmPayment', { regId: r.id, paymentMethod: r.actualPaymentMethod || '' }).catch(() => {})));
       }
-    })();
+      try { await window.postData('qr.ackScan', { eventId, seq: seq, regId: item.regId }); } catch (e) {}
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+    } catch (e) {
+      window.toast.error('入場確定の反映に失敗: ' + (e.message || e) + '（一覧へ戻します）');
+      setDoneSeqs(m => { const n = { ...m }; delete n[seq]; return n; });  // 失敗時は戻す
+    }
   }
 
   async function stopCamera() {
@@ -22090,86 +22379,150 @@ function PageQRLive(){
             <span className="badge-dot"></span>{camActive ? `カメラ作動中${poll.device ? '（' + poll.device + '）' : ''}` : 'カメラ停止中'}
           </span>
           {camActive && <button className="jb-btn jb-btn-accent" onClick={stopCamera}><Icon n="x" s={12}/> カメラ停止</button>}
+          <button className="jb-btn" title="受付待ちが90秒を超えた時に音で知らせます" onClick={() => { const v = !soundOn; setSoundOn(v); try { localStorage.setItem('qr_warn_sound', v ? 'on' : 'off'); } catch (e) {} }}>{soundOn ? '🔔 警告音 ON' : '🔕 警告音 OFF'}</button>
           <button className="jb-btn" onClick={() => { window.location.hash = `event-detail?id=${eventId}`; }}>← イベント詳細</button>
         </div>
       </div>
 
       {!eventId ? (
         <div className="card"><div className="card-body" style={{padding:30,textAlign:'center',color:'var(--ink4)'}}>イベントが指定されていません。イベント詳細から開いてください。</div></div>
-      ) : !camActive && !current ? (
-        <div className="card"><div className="card-body" style={{padding:40,textAlign:'center'}}>
-          <div style={{fontSize:40,marginBottom:10}}>📷</div>
-          <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>スキャナ端末のカメラ作動を待っています</div>
-          <div style={{fontSize:12,color:'var(--ink4)'}}>受付端末で「受付連携モード（全画面）」を開始すると、ここに読み取り結果が表示されます。</div>
-        </div></div>
-      ) : !current ? (
-        <div className="card"><div className="card-body" style={{padding:40,textAlign:'center'}}>
-          <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>QRの読み取りを待っています…</div>
-          <div style={{fontSize:12,color:'var(--ink4)'}}>受付端末でQRをかざすと、ここに対象者が表示されます。</div>
-        </div></div>
-      ) : !app ? (
-        <div className="card"><div className="card-body" style={{padding:30}}>
-          <div style={{fontSize:15,fontWeight:700,color:'var(--coral)'}}>申込が見つかりません</div>
-          <div style={{fontSize:12,color:'var(--ink4)',marginTop:6}}>読み取りコード: <span className="mono">{current.regId}</span></div>
-        </div></div>
+      ) : pending.length === 0 ? (
+        !camActive ? (
+          <div className="card"><div className="card-body" style={{padding:40,textAlign:'center'}}>
+            <div style={{fontSize:40,marginBottom:10}}>📷</div>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>スキャナ端末のカメラ作動を待っています</div>
+            <div style={{fontSize:12,color:'var(--ink4)'}}>受付端末で「受付連携モード（全画面）」を開始すると、ここに読み取り結果が表示されます。</div>
+          </div></div>
+        ) : (
+          <div className="card"><div className="card-body" style={{padding:40,textAlign:'center'}}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>QRの読み取りを待っています…</div>
+            <div style={{fontSize:12,color:'var(--ink4)'}}>受付端末でQRをかざすと、ここに到着者が表示されます。連続で読み取っても順番に保持され、取りこぼしません。</div>
+          </div></div>
+        )
       ) : (
-        <div className="card">
-          <div className="card-body" style={{padding:'0'}}>
-            {/* 大きなステータスヘッダー */}
-            <div style={{padding:'20px 22px',background: allCheckedIn ? 'var(--green-50)' : isPaid ? 'var(--blue-soft, #eef6fb)' : '#fff6e5', borderBottom:'1px solid var(--line)'}}>
-              <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-                <div style={{fontSize:26,fontWeight:800,color:'var(--ink1)'}}>{app.userName}</div>
-                {kana && <div style={{fontSize:14,color:'var(--ink3)'}}>{kana}</div>}
-                {isRepeater
-                  ? <span className="badge badge-violet">リピーター</span>
-                  : <span className="badge badge-ink">初参加</span>}
-                {ageVal != null && <span className="badge badge-ink">{ageVal} 歳</span>}
-              </div>
-              <div style={{marginTop:10,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-                {allCheckedIn
-                  ? <span className="badge badge-green" style={{fontSize:13}}><span className="badge-dot"></span>受付済（チェックイン済）</span>
-                  : isPaid
-                    ? <span className="badge badge-green" style={{fontSize:13}}><span className="badge-dot"></span>決済済み</span>
-                    : <span className="badge badge-amber" style={{fontSize:13}}><span className="badge-dot"></span>未決済</span>}
-                {wrongEvent && <span className="badge badge-coral">別イベントの申込</span>}
-                <span style={{fontSize:11,color:'var(--ink4)'}} className="mono">{app.representativeRegId}{appRegs.length > 1 ? ` · ${appRegs.length} セッション` : ''}</span>
-              </div>
-            </div>
-
-            {/* 申込明細 */}
-            <div style={{padding:'14px 22px',fontSize:12,color:'var(--ink3)',borderBottom:'1px solid var(--line)'}}>
-              <div>メール: {app.userEmail || '—'}</div>
-              {appRegs.length > 1 && (
-                <div style={{marginTop:6}}>
-                  {appRegs.map(r => {
-                    const sess = sessions.find(s => s.id === r.sessionId);
-                    return <div key={r.id} style={{fontSize:11}}>・{sess ? `Day ${sess.order || ''} ${sess.date || ''}` : (r.sessionId || '全体')} — {r.status}{r.paid ? ' / 決済済' : ''}</div>;
-                  })}
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div>
+            <div style={{fontSize:12,color:'var(--ink3)',fontWeight:700}}>未確定の到着者 {pending.length}名（新しい順）</div>
+            <div style={{fontSize:11,color:'var(--ink4)',marginTop:2}}>約10分操作が無い項目は自動で消えます。同じ人を続けて読み取ると「再スキャン」、同一人物が複数件あると注意表示します。</div>
+          </div>
+          {pending.map(item => {
+            const { app, appRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent } = resolveArrival(item);
+            if (!app) {
+              return (
+                <div key={item.seq} className="card"><div className="card-body" style={{padding:'14px 18px'}}>
+                  <div style={{fontSize:14,fontWeight:700,color:'var(--coral)'}}>申込が見つかりません</div>
+                  <div style={{fontSize:12,color:'var(--ink4)',marginTop:4}}>読み取りコード: <span className="mono">{item.regId}</span></div>
+                  <div style={{marginTop:10}}><button className="jb-btn" onClick={() => admit(item, false)}>一覧から外す</button></div>
+                </div></div>
+              );
+            }
+            const scanCount = item.count || 1;
+            const ageMs = item.at ? (nowMs - new Date(item.at).getTime()) : 0;
+            const stale = ageMs > QR_WARN_MS && !allCheckedIn;
+            const ageLabel = ageMs < 60000 ? `${Math.max(0, Math.round(ageMs / 1000))}秒待ち` : `${Math.floor(ageMs / 60000)}分待ち`;
+            const dupUser = pendingUserIdCounts[app.userId] > 1;
+            const warnColor = allCheckedIn ? 'var(--coral)' : (dupUser || scanCount > 1 || stale) ? '#d98a00' : null;
+            return (
+              <div key={item.seq} className="card" style={warnColor ? { borderLeft: '4px solid ' + warnColor } : undefined}>
+                <div className="card-body" style={{padding:0}}>
+                  {/* ステータスヘッダー */}
+                  <div style={{padding:'16px 20px',background: allCheckedIn ? 'var(--green-50)' : isPaid ? 'var(--blue-soft, #eef6fb)' : '#fff6e5', borderBottom:'1px solid var(--line)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                      <div style={{fontSize:22,fontWeight:800,color:'var(--ink1)'}}>{app.userName}</div>
+                      {kana && <div style={{fontSize:13,color:'var(--ink3)'}}>{kana}</div>}
+                      {isRepeater
+                        ? <span className="badge badge-violet">リピーター</span>
+                        : <span className="badge badge-ink">初参加</span>}
+                      {ageVal != null && <span className="badge badge-ink">{ageVal} 歳</span>}
+                    </div>
+                    <div style={{marginTop:8,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                      {allCheckedIn
+                        ? <span className="badge badge-green"><span className="badge-dot"></span>受付済（チェックイン済）</span>
+                        : isPaid
+                          ? <span className="badge badge-green"><span className="badge-dot"></span>決済済み</span>
+                          : <span className="badge badge-amber"><span className="badge-dot"></span>未決済</span>}
+                      {wrongEvent && <span className="badge badge-coral">別イベントの申込</span>}
+                      {allCheckedIn && <span className="badge badge-coral">既に入場済み</span>}
+                      {dupUser && <span className="badge badge-coral">同一人物が複数件</span>}
+                      {scanCount > 1 && <span className="badge badge-amber">再スキャン ×{scanCount}</span>}
+                      {stale && <span className="badge badge-amber">受付待ち {ageLabel}</span>}
+                      <span style={{fontSize:11,color:'var(--ink4)'}} className="mono">{app.representativeRegId}{appRegs.length > 1 ? ` · ${appRegs.length} セッション` : ''}</span>
+                    </div>
+                  </div>
+                  {/* 入場確定アクション */}
+                  <div style={{padding:'14px 20px',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                    {allCheckedIn ? (
+                      <>
+                        <div style={{flex:1,fontSize:14,fontWeight:700,color:'var(--green)'}}>✓ すでに受付済み</div>
+                        <button className="jb-btn" onClick={() => admit(item, false)}>一覧から外す</button>
+                      </>
+                    ) : wrongEvent ? (
+                      <>
+                        <div style={{flex:1,fontSize:13,color:'var(--coral)'}}>このイベントの申込ではありません。</div>
+                        <button className="jb-btn" onClick={() => admit(item, false)}>一覧から外す</button>
+                      </>
+                    ) : isPaid ? (
+                      <button className="jb-btn jb-btn-primary" onClick={() => admit(item, false)} style={{fontSize:15,padding:'12px 22px'}}>✓ 入場を確定（決済済み）</button>
+                    ) : (
+                      <>
+                        <button className="jb-btn jb-btn-primary" onClick={() => admit(item, true)} style={{fontSize:15,padding:'12px 22px',background:'var(--green)'}}>決済を確認して入場</button>
+                        <button className="jb-btn" onClick={() => admit(item, false)} title="決済は保留のまま受付（後で決済確認）">保留で受付</button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-            {/* 入場確定アクション */}
-            <div style={{padding:'18px 22px',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
-              {admittedThis || allCheckedIn ? (
-                <div style={{fontSize:15,fontWeight:700,color:'var(--green)'}}>✓ 入場確定済み — 次のQRをどうぞ</div>
-              ) : wrongEvent ? (
-                <div style={{fontSize:13,color:'var(--coral)'}}>このイベントの申込ではありません。受付できません。</div>
-              ) : isPaid ? (
-                <button className="jb-btn jb-btn-primary" disabled={busy} onClick={() => admit(false)} style={{fontSize:15,padding:'12px 22px'}}>
-                  {busy ? '処理中…' : '✓ 入場を確定（決済済み）'}
-                </button>
-              ) : (
-                <>
-                  <button className="jb-btn jb-btn-primary" disabled={busy} onClick={() => admit(true)} style={{fontSize:15,padding:'12px 22px',background:'var(--green)'}}>
-                    {busy ? '処理中…' : '決済を確認して入場'}
-                  </button>
-                  <button className="jb-btn" disabled={busy} onClick={() => admit(false)} title="決済は保留のまま受付（後で決済確認）">
-                    保留で受付
-                  </button>
-                </>
-              )}
+      {/* (c) 自動失効ログ (未確定のまま消えた人の後追い確認) */}
+      {eventId && (
+        <div className="card" style={{marginTop:16}}>
+          <div className="card-body" style={{padding:'12px 16px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,cursor:'pointer'}} onClick={() => setExpiredOpen(o => !o)}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--ink2)'}}>
+                自動失効ログ（未確定のまま消えた人）{expiredItems.length > 0 ? ` · ${expiredItems.length}件` : ''}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                {expiredOpen && <span style={{fontSize:11,color:'var(--ink4)'}}>{expiredLoading ? '取得中…' : '30秒ごとに更新'}</span>}
+                <span style={{fontSize:12,color:'var(--ink4)'}}>{expiredOpen ? '▲ 閉じる' : '▼ 開く'}</span>
+              </div>
             </div>
+            {expiredOpen && (
+              <div style={{marginTop:10}}>
+                {expiredItems.length === 0 ? (
+                  <div style={{fontSize:12,color:'var(--ink4)',padding:'8px 0'}}>{expiredLoading ? '読み込み中…' : '自動失効した人はいません。'}</div>
+                ) : (
+                  <table className="jb-table" style={{width:'100%',fontSize:12}}>
+                    <thead><tr>
+                      <th style={{textAlign:'left'}}>失効日時</th>
+                      <th style={{textAlign:'left'}}>申込者</th>
+                      <th style={{textAlign:'right'}}>スキャン回数</th>
+                      <th style={{textAlign:'left'}}>端末</th>
+                    </tr></thead>
+                    <tbody>
+                      {expiredItems.map((it, i) => {
+                        const a = window.findApplicationByRegId(applications, it.regId);
+                        const name = (a && a.userName) || '';
+                        const dt = it.expiredAt ? new Date(it.expiredAt) : null;
+                        const dtLabel = dt ? `${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}` : '—';
+                        return (
+                          <tr key={i}>
+                            <td>{dtLabel}</td>
+                            <td>{name ? name : <span className="mono" style={{color:'var(--ink4)'}}>{it.regId}</span>}{name && <span className="mono" style={{color:'var(--ink4)',marginLeft:6,fontSize:11}}>{it.regId}</span>}</td>
+                            <td style={{textAlign:'right'}}>{it.count > 1 ? `×${it.count}` : '1'}</td>
+                            <td style={{color:'var(--ink4)'}}>{it.by || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+                <div style={{fontSize:11,color:'var(--ink4)',marginTop:8}}>約10分間、入場確定されずに残った読み取りが記録されます。誤スキャンや受付漏れの確認にご利用ください。</div>
+              </div>
+            )}
           </div>
         </div>
       )}
