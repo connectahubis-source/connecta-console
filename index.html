@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-07 P3c'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-07 P3b'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1652,7 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3c</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3b</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -5657,11 +5657,9 @@ function SessionMementoRow({ sess, busy, onSave }){
   const [galProg, setGalProg] = useState({ done: 0, total: 0 });
   const [draftRestored, setDraftRestored] = useState(draftDiffers);
   const [draftSavedAt, setDraftSavedAt] = useState(0);
-  // (未保存判定の基準) 保存に成功した値そのものを基準にする。 これで保存→読戻しのフォーマット/タイムゾーン差に左右されず、 保存後は確実に未保存が解消する。 初期は sess 由来。
-  const [savedSnap, setSavedSnap] = useState({ url: savedUrlInit, publishAt: savedPubInit, gallery: savedGalleryInit });
-  const savedGallery = savedSnap.gallery;
+  const savedGallery = savedGalleryInit;
   const galleryDirty = JSON.stringify(gallery) !== JSON.stringify(savedGallery);
-  const dirty = (url !== savedSnap.url) || (publishAt !== savedSnap.publishAt) || galleryDirty;
+  const dirty = (url !== savedUrlInit) || (publishAt !== savedPubInit) || galleryDirty;
 
   // (自動下書き保存) 変更が落ち着いたらブラウザに下書きを保存 (本体への書込なし=軽い)。 保存済みと一致したら下書きを消す。
   React.useEffect(() => {
@@ -5703,8 +5701,8 @@ function SessionMementoRow({ sess, busy, onSave }){
   }
   function removeItem(i) { setGallery(g => g.filter((_, j) => j !== i)); }
   // 参加者に「いま見えている」状態を保存済みの値から判定 (規則: 公開日時 未設定/過去=公開中, 未来=予約)
-  const savedUrl = savedSnap.url || "";
-  const savedPubRaw = String(savedSnap.publishAt || "");
+  const savedUrl = sess.mementoPhotoUrl || "";
+  const savedPubRaw = String(sess.mementoPublishAt || "");
   let savedPubD = null;
   if (savedPubRaw) { const d = new Date(savedPubRaw.replace(' ', 'T')); if (!isNaN(d.getTime())) savedPubD = d; }
   const hasAnyPhoto = !!savedUrl || savedGallery.length > 0;
@@ -5825,14 +5823,7 @@ function SessionMementoRow({ sess, busy, onSave }){
       <input type="datetime-local" className="input" style={{fontSize:12,marginBottom:4}} value={publishAt} onChange={e=>setPublishAt(e.target.value)}/>
       <div className="field-hint" style={{fontSize:11,marginBottom:8,color:'var(--ink4)'}}>空欄または過去の日時＝保存と同時に公開。未来の日時＝その日時まで参加者には非表示（テスト参加者は事前に確認可）。主写真・追加写真の両方に適用されます。</div>
       <div style={{display:'flex',justifyContent:'flex-end'}}>
-        <button className="btn btn-pri btn-sm" disabled={busy || galBusy || !dirty} onClick={async ()=>{
-          const ok = await onSave(sess, url, publishAt, gallery);
-          if (ok !== false) {
-            setSavedSnap({ url: url, publishAt: publishAt, gallery: gallery });  // 保存できた値を基準に固定 → 未保存が解消
-            try { localStorage.removeItem(draftKey); } catch (e) {}
-            setDraftRestored(false); setDraftSavedAt(0);
-          }
-        }}>
+        <button className="btn btn-pri btn-sm" disabled={busy || galBusy || !dirty} onClick={()=>onSave(sess, url, publishAt, gallery)}>
           {busy ? '保存中…' : (dirty ? '保存' : '保存済み')}
         </button>
       </div>
@@ -5936,10 +5927,9 @@ function PagePostEvent(){
         mementoGallery: JSON.stringify(Array.isArray(gallery) ? gallery : []),
       } });
       window.toast.success('セッションの記念写真を保存しました');
-      if (window.invalidateCache) window.invalidateCache('listEventSessions');  // 30秒キャッシュを無効化し、 再取得で保存値を確実に反映
+      if (window.invalidateCache) window.invalidateCache('listEventSessions');  // 30秒キャッシュを無効化し、 再取得で保存値を確実に反映 (未保存が残る不具合の対策)
       loadDetail();
-      return true;
-    } catch (e) { window.toast.error('保存に失敗: ' + (e.message || e)); return false; }
+    } catch (e) { window.toast.error('保存に失敗: ' + (e.message || e)); }
     finally { setBusy(false); }
   }
 
