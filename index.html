@@ -89,6 +89,8 @@
       }
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
+    // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
+    try { window.__APP_BUILD = '2026-06-07 P3'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1650,6 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -2315,6 +2318,13 @@ svg{display:block}
    * @param {string} opts.mimeType    出力 MIME (default: image/jpeg)
    * @returns {Promise<{dataBase64:string, mimeType:string, originalSize:number, compressedSize:number, ratio:number}>}
    */
+  // (R4 速度) Drive サムネイルURLの幅を差し替えて軽い縮小画像を得る。 外部/貼付URLはそのまま。
+  window.imgSized = function imgSized(url, w) {
+    if (!url || typeof url !== 'string') return url || '';
+    if (/[?&]sz=w\d+/i.test(url)) return url.replace(/([?&]sz=)w\d+/i, '$1w' + w);
+    return url;
+  };
+
   window.compressImage = async function compressImage(file, opts) {
     opts = opts || {};
     const maxLong = opts.maxLong || 2000;
@@ -5615,17 +5625,110 @@ function SurveyAnalytics({ analytics, loading }){
 }
 
 function SessionMementoRow({ sess, busy, onSave }){
-  const [url, setUrl] = useState(sess.mementoPhotoUrl || "");
-  const [publishAt, setPublishAt] = useState(String(sess.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
+  const draftKey = 'cca_admin_memento_draft_' + sess.id;
+  const savedUrlInit = sess.mementoPhotoUrl || "";
+  const savedPubInit = String(sess.mementoPublishAt || "").replace(' ', 'T').slice(0, 16);
+  const savedGalleryInit = Array.isArray(sess.mementoGallery) ? sess.mementoGallery : [];
+  // (自動下書き保存) ブラウザ保存された下書きを起動時に1度だけ読む
+  const initialDraftRef = React.useRef((function(){
+    try { const raw = localStorage.getItem(draftKey); if (!raw) return null; const d = JSON.parse(raw); return (d && typeof d === 'object') ? d : null; }
+    catch (e) { return null; }
+  })());
+  const dr = initialDraftRef.current;
+  const draftDiffers = !!dr && (
+    (typeof dr.url === 'string' && dr.url !== savedUrlInit) ||
+    (typeof dr.publishAt === 'string' && dr.publishAt !== savedPubInit) ||
+    (Array.isArray(dr.gallery) && JSON.stringify(dr.gallery) !== JSON.stringify(savedGalleryInit))
+  );
+  const [url, setUrl] = useState((dr && draftDiffers && typeof dr.url === 'string') ? dr.url : savedUrlInit);
+  const [publishAt, setPublishAt] = useState((dr && draftDiffers && typeof dr.publishAt === 'string') ? dr.publishAt : savedPubInit);
+  const [gallery, setGallery] = useState((dr && draftDiffers && Array.isArray(dr.gallery)) ? dr.gallery : savedGalleryInit);
   const [uploading, setUploading] = useState(false);
-  const dirty = (url !== (sess.mementoPhotoUrl || "")) || (publishAt !== String(sess.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
+  const [galBusy, setGalBusy] = useState(false);
+  const [galProg, setGalProg] = useState({ done: 0, total: 0 });
+  const [draftRestored, setDraftRestored] = useState(draftDiffers);
+  const [draftSavedAt, setDraftSavedAt] = useState(0);
+  const savedGallery = savedGalleryInit;
+  const galleryDirty = JSON.stringify(gallery) !== JSON.stringify(savedGallery);
+  const dirty = (url !== savedUrlInit) || (publishAt !== savedPubInit) || galleryDirty;
+
+  // (自動下書き保存) 変更が落ち着いたらブラウザに下書きを保存 (本体への書込なし=軽い)。 保存済みと一致したら下書きを消す。
+  React.useEffect(() => {
+    if (!dirty) {
+      try { localStorage.removeItem(draftKey); } catch (e) {}
+      setDraftRestored(false);
+      setDraftSavedAt(0);
+      return;
+    }
+    const t = setTimeout(() => {
+      try { localStorage.setItem(draftKey, JSON.stringify({ url: url, publishAt: publishAt, gallery: gallery, savedAt: Date.now() })); setDraftSavedAt(Date.now()); } catch (e) {}
+    }, 700);
+    return () => clearTimeout(t);
+  }, [url, publishAt, gallery, dirty]);
+
+  function discardDraft() {
+    setUrl(savedUrlInit); setPublishAt(savedPubInit); setGallery(savedGalleryInit);
+    try { localStorage.removeItem(draftKey); } catch (e) {}
+    setDraftRestored(false); setDraftSavedAt(0);
+  }
+
+  // (離脱警告) 未保存(下書きあり)時のみ、 タブ閉じ/再読込前に確認を出す
+  React.useEffect(() => {
+    if (!dirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
+  // (R4) ギャラリー要素の補助 (要素は URL文字列=表示 / {u,h:true}=非表示)
+  const galU = (x) => (typeof x === 'string' ? x : (x && x.u) || '');
+  const galHidden = (x) => (typeof x === 'object' && x && !!x.h);
+  const hiddenCount = gallery.filter(galHidden).length;
+  function moveItem(i, dir) {
+    setGallery(g => { const a = g.slice(); const j = i + dir; if (j < 0 || j >= a.length) return g; const t = a[i]; a[i] = a[j]; a[j] = t; return a; });
+  }
+  function toggleHide(i) {
+    setGallery(g => g.map((x, j) => (j !== i ? x : (galHidden(x) ? galU(x) : { u: galU(x), h: true }))));
+  }
+  function removeItem(i) { setGallery(g => g.filter((_, j) => j !== i)); }
   // 参加者に「いま見えている」状態を保存済みの値から判定 (規則: 公開日時 未設定/過去=公開中, 未来=予約)
   const savedUrl = sess.mementoPhotoUrl || "";
   const savedPubRaw = String(sess.mementoPublishAt || "");
   let savedPubD = null;
   if (savedPubRaw) { const d = new Date(savedPubRaw.replace(' ', 'T')); if (!isNaN(d.getTime())) savedPubD = d; }
-  const pubStatus = !savedUrl ? 'none' : (!savedPubD || savedPubD <= new Date()) ? 'public' : 'scheduled';
+  const hasAnyPhoto = !!savedUrl || savedGallery.length > 0;
+  const pubStatus = !hasAnyPhoto ? 'none' : (!savedPubD || savedPubD <= new Date()) ? 'public' : 'scheduled';
   const pubWhen = savedPubD ? `${savedPubD.getMonth() + 1}/${savedPubD.getDate()} ${String(savedPubD.getHours()).padStart(2, '0')}:${String(savedPubD.getMinutes()).padStart(2, '0')}` : '';
+
+  async function handleGalleryFiles(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    const room = 100 - gallery.length;
+    if (room <= 0) { window.toast.error('写真は最大100枚までです'); return; }
+    const take = files.slice(0, room);
+    if (files.length > room) window.toast.error(`残り${room}枚まで。${files.length - room}枚は追加しませんでした`);
+    setGalBusy(true);
+    setGalProg({ done: 0, total: take.length });
+    let added = 0;
+    for (let i = 0; i < take.length; i++) {
+      const file = take[i];
+      if (file.size > 15 * 1024 * 1024) { window.toast.error(`${file.name} は大きすぎます (最大15MB)`); setGalProg({ done: i + 1, total: take.length }); continue; }
+      try {
+        const compressed = await window.compressImage(file, { maxLong: 2000, quality: 0.82 });
+        const result = await window.postData('uploadPosterImage', {
+          filename: 'memgal-' + sess.id + '-' + Date.now() + '-' + (file.name || 'photo').replace(/\.[^.]+$/, '.jpg'),
+          mimeType: compressed.mimeType, dataBase64: compressed.dataBase64, eventId: sess.eventId || '',
+        });
+        if (result && result.url) { setGallery(g => [...g, result.url]); added++; }
+        else throw new Error('結果が不正');
+      } catch (err) { window.toast.error('追加失敗: ' + (file.name || '') + ' / ' + (err.message || err)); }
+      setGalProg({ done: i + 1, total: take.length });
+    }
+    setGalBusy(false);
+    if (added) window.toast.success(`${added}枚を追加しました（保存で確定）`);
+  }
+
   return (
     <div style={{padding:12,border:'1px solid var(--line)',borderRadius:8,background:'var(--white)',marginBottom:10}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
@@ -5634,9 +5737,18 @@ function SessionMementoRow({ sess, busy, onSave }){
         {pubStatus === 'public' && <span className="badge badge-green"><span className="badge-dot"></span>公開中</span>}
         {pubStatus === 'scheduled' && <span className="badge badge-amber"><span className="badge-dot"></span>{pubWhen} 公開予約</span>}
         {pubStatus === 'none' && <span className="badge badge-ink">記念写真なし</span>}
+        {savedGallery.length > 0 && <span className="badge badge-ink">写真 {savedGallery.length}枚</span>}
         {dirty && <span className="badge badge-coral">未保存の変更</span>}
       </div>
-      <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>記念写真URL</label>
+      {(draftRestored || draftSavedAt > 0) && (
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap',fontSize:11}}>
+          {draftRestored
+            ? <span style={{color:'var(--amber-700, #b45309)',fontWeight:700}}>下書きを復元しました（未保存。 保存で参加者に公開）</span>
+            : <span style={{color:'var(--ink4)'}}>下書きを自動保存しました {new Date(draftSavedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}</span>}
+          {draftRestored && <button type="button" className="btn btn-soft btn-sm" style={{padding:'2px 8px',fontSize:11}} onClick={discardDraft}>下書きを破棄</button>}
+        </div>
+      )}
+      <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>主写真URL（スタンプ合成の対象）</label>
       <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
         <input className="input" style={{flex:'1 1 200px',fontSize:12}} value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://... (空ならイベント共通→ヒーロー)"/>
         <label className={clsx("btn","btn-soft","btn-sm")} style={{cursor:uploading?'wait':'pointer',opacity:uploading?0.6:1}}>
@@ -5661,11 +5773,48 @@ function SessionMementoRow({ sess, busy, onSave }){
         </label>
         {url && <button type="button" className="btn btn-soft btn-sm" style={{color:'var(--coral)'}} onClick={()=>setUrl('')}><Icon n="x" s={11}/></button>}
       </div>
+
+      {/* (R4) 追加写真ギャラリー (最大100枚) */}
+      <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block',marginTop:4}}>
+        追加写真（最大100枚 / 任意） <span style={{color:'var(--ink4)',fontWeight:400}}>{gallery.length}/100{hiddenCount > 0 ? ` ・ 非表示 ${hiddenCount}` : ''}</span>
+      </label>
+      {gallery.length > 0 && (
+        <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:8}}>
+          {gallery.map((x, i) => {
+            const u = galU(x); const hidden = galHidden(x);
+            return (
+              <div key={u + '#' + i} style={{position:'relative',width:74,borderRadius:6,border:'1px solid var(--line)',background:'var(--paper)'}}>
+                <div style={{position:'relative',width:'100%',height:64,borderRadius:'6px 6px 0 0',overflow:'hidden'}}>
+                  <img src={window.imgSized ? window.imgSized(u, 400) : u} alt="" loading="lazy" decoding="async" style={{width:'100%',height:'100%',objectFit:'cover',display:'block',filter:hidden?'grayscale(1)':'none',opacity:hidden?0.45:1}}/>
+                  {i === 0 && <span style={{position:'absolute',top:2,left:2,fontSize:8,fontWeight:800,color:'#fff',background:'var(--jb-blue, #2563eb)',borderRadius:3,padding:'1px 4px'}}>表紙</span>}
+                  {hidden && <span style={{position:'absolute',bottom:2,left:2,fontSize:8,fontWeight:800,color:'#fff',background:'rgba(0,0,0,0.65)',borderRadius:3,padding:'1px 4px'}}>非表示</span>}
+                  <button type="button" title="削除" onClick={()=>removeItem(i)}
+                    style={{position:'absolute',top:2,right:2,width:17,height:17,borderRadius:'50%',border:'none',background:'rgba(0,0,0,0.6)',color:'#fff',fontSize:11,lineHeight:'17px',textAlign:'center',cursor:'pointer',padding:0}}>×</button>
+                </div>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 3px',gap:2}}>
+                  <button type="button" title="前へ" disabled={i===0} onClick={()=>moveItem(i,-1)} style={{flex:1,border:'none',background:'transparent',cursor:i===0?'default':'pointer',opacity:i===0?0.3:1,fontSize:12,padding:'2px 0',color:'var(--ink2)'}}>◀</button>
+                  <button type="button" title={hidden?'表示にする':'非表示にする'} onClick={()=>toggleHide(i)} style={{flex:1,border:'none',background:'transparent',cursor:'pointer',fontSize:11,padding:'2px 0',color:hidden?'var(--coral)':'var(--ink2)'}}>{hidden?'🚫':'👁'}</button>
+                  <button type="button" title="次へ" disabled={i===gallery.length-1} onClick={()=>moveItem(i,1)} style={{flex:1,border:'none',background:'transparent',cursor:i===gallery.length-1?'default':'pointer',opacity:i===gallery.length-1?0.3:1,fontSize:12,padding:'2px 0',color:'var(--ink2)'}}>▶</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
+        <label className={clsx("btn","btn-soft","btn-sm")} style={{cursor:galBusy?'wait':'pointer',opacity:galBusy?0.6:1}}>
+          <Icon n="upload" s={12}/> {galBusy ? ` アップロード中… ${galProg.done}/${galProg.total}` : ' 写真を追加'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple style={{display:'none'}} disabled={galBusy} onChange={handleGalleryFiles}/>
+        </label>
+        {gallery.length > 0 && !galBusy && <button type="button" className="btn btn-soft btn-sm" style={{color:'var(--coral)'}} onClick={()=>setGallery([])}>全て削除</button>}
+      </div>
+      <div className="field-hint" style={{fontSize:11,margin:'2px 0 8px',color:'var(--ink4)'}}>主写真とは別の写真です。 端末から複数選択でまとめて追加できます（1枚ずつ順次アップロードするため枚数が多いと時間がかかります）。 先頭が一覧の表紙。 ◀▶で並べ替え、 👁で表示/非表示（削除せず隠す）。 公開時期は下の公開予約に従います。</div>
+
       <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>記念写真の公開予約 (任意)</label>
       <input type="datetime-local" className="input" style={{fontSize:12,marginBottom:4}} value={publishAt} onChange={e=>setPublishAt(e.target.value)}/>
-      <div className="field-hint" style={{fontSize:11,marginBottom:8,color:'var(--ink4)'}}>空欄または過去の日時＝保存と同時に公開。未来の日時＝その日時まで参加者には非表示（テスト参加者は事前に確認可）。</div>
+      <div className="field-hint" style={{fontSize:11,marginBottom:8,color:'var(--ink4)'}}>空欄または過去の日時＝保存と同時に公開。未来の日時＝その日時まで参加者には非表示（テスト参加者は事前に確認可）。主写真・追加写真の両方に適用されます。</div>
       <div style={{display:'flex',justifyContent:'flex-end'}}>
-        <button className="btn btn-pri btn-sm" disabled={busy || !dirty} onClick={()=>onSave(sess, url, publishAt)}>
+        <button className="btn btn-pri btn-sm" disabled={busy || galBusy || !dirty} onClick={()=>onSave(sess, url, publishAt, gallery)}>
           {busy ? '保存中…' : (dirty ? '保存' : '保存済み')}
         </button>
       </div>
@@ -5760,10 +5909,14 @@ function PagePostEvent(){
   const overallCsat = calcCsat(responses);
 
   // ===== アクション =====
-  async function saveSessionMemento(sess, url, publishAt) {
+  async function saveSessionMemento(sess, url, publishAt, gallery) {
     setBusy(true);
     try {
-      await window.postData('updateEventSession', { sessionId: sess.id, fields: { mementoPhotoUrl: url || '', mementoPublishAt: publishAt || '' } });
+      await window.postData('updateEventSession', { sessionId: sess.id, fields: {
+        mementoPhotoUrl: url || '',
+        mementoPublishAt: publishAt || '',
+        mementoGallery: JSON.stringify(Array.isArray(gallery) ? gallery : []),
+      } });
       window.toast.success('セッションの記念写真を保存しました');
       loadDetail();
     } catch (e) { window.toast.error('保存に失敗: ' + (e.message || e)); }
@@ -9130,6 +9283,8 @@ function PageEventAdminDetail() {
   const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
   const [arrivalOpen, setArrivalOpen] = useState(false);  // 未到着一覧の開閉
   const [notArrivedTodayOnly, setNotArrivedTodayOnly] = useState(true);  // 未到着一覧: 本日のみ表示 (複数日)
+  const [selectedRegIds, setSelectedRegIds] = useState({});  // 未到着の一括選択 (regId -> true)
+  const [bulkBusy, setBulkBusy] = useState(false);
   // (Phase 17.S) タブ — 'overview' | 'apps' | 'payments' | 'analytics'
   const [tab, setTab] = useState(() => {
     try { return sessionStorage.getItem('event-detail-tab') || 'overview'; } catch (e) { return 'overview'; }
@@ -9185,6 +9340,50 @@ function PageEventAdminDetail() {
     document.addEventListener('visibilitychange', onVis);
     return () => { if (timer) clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
   }, [eventId]);
+
+  // (受付・一括) 選択した未到着者をまとめてチェックイン。 同時実行は5件ずつに抑制し、 完了後に1度だけ再取得。
+  const reloadEventDetail = async () => {
+    try {
+      const detail = await window.fetchData('loadEventDetail', { eventId });
+      if (detail && Array.isArray(detail.regs)) setRegs(detail.regs);
+      if (detail && Array.isArray(detail.apps)) setApps(detail.apps);
+    } catch (e) {}
+  };
+  async function handleBulkCheckin(ids) {
+    const list = (ids || []).filter(Boolean);
+    if (!list.length) return;
+    const ok = await window.confirmDialog({ title: `${list.length}名をチェックインしますか?`, body: '選択した未到着者を入場済にします。', confirmLabel: 'チェックイン' });
+    if (!ok) return;
+    setBulkBusy(true);
+    let done = 0, failed = 0;
+    const chunk = 5;
+    for (let i = 0; i < list.length; i += chunk) {
+      const slice = list.slice(i, i + chunk);
+      const res = await Promise.all(slice.map(id => window.postData('admin.checkin', { regId: id }).then(() => true).catch(() => false)));
+      res.forEach(r => (r ? done++ : failed++));
+    }
+    if (window.invalidateCache) window.invalidateCache('listRegistrations');
+    setSelectedRegIds({});
+    await reloadEventDetail();
+    setBulkBusy(false);
+    window.toast[failed ? 'error' : 'success'](`${done}名をチェックイン${failed ? ` / ${failed}名失敗` : ''}`);
+  }
+  function exportNotArrivedCsv(groups) {
+    const rows = [['日程', '日付', '名前', 'ふりがな', 'ステータス']];
+    (groups || []).forEach(g => {
+      (g.pending || []).forEach(p => rows.push([g.label || '', g.date || '', p.name || '', p.kana || '', p.status || '']));
+    });
+    if (rows.length <= 1) { window.toast.error('未到着者がいません'); return; }
+    const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const csv = '\uFEFF' + rows.map(r => r.map(esc).join(',')).join('\r\n');  // BOM付きでExcel文字化け回避
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const evName = (event && event.title ? String(event.title).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 30) : 'event');
+    a.href = u; a.download = evName + '_未到着.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+  }
 
   const loadAll = async () => {
     if (!eventId) { setLoading(false); return; }
@@ -9523,7 +9722,7 @@ function PageEventAdminDetail() {
             const uid = String(r.userId || r.userName || '');
             if (!uid || seen[uid]) return;
             seen[uid] = true;
-            out.push({ uid, name: r.userName || '(名前未登録)', status: r.status });
+            out.push({ uid, name: r.userName || '(名前未登録)', status: r.status, id: r.id, kana: r.userKana || '' });
           });
           return out;
         };
@@ -9557,12 +9756,24 @@ function PageEventAdminDetail() {
         const allHereDisp = dispPending === 0;        // 表示中ビューで未到着ゼロ
         const expandable = totalPending > 0;          // どこかに未到着があれば展開可
         const headDanger = effTodayOnly ? !allHereDisp : !allHereAll;
-        const chip = (p) => (
-          <span key={p.uid} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--paper, #fff)', border: '1px solid var(--line, #e5e9f0)', fontSize: 13, fontWeight: 700, color: 'var(--ink, #0a1628)' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: (p.status === '決済済み' || p.status === '確定') ? 'var(--green, #16a34a)' : 'var(--amber, #f59e0b)' }} />
-            {p.name}
-          </span>
-        );
+        // (一括操作) 表示中の未到着の reg id 集合
+        const dispPendingItems = [];
+        displayedGroups.forEach(g => (g.pending || []).forEach(p => { if (p.id) dispPendingItems.push(p); }));
+        const dispIds = dispPendingItems.map(p => p.id);
+        const selCount = dispIds.filter(id => selectedRegIds[id]).length;
+        const allSel = dispIds.length > 0 && selCount === dispIds.length;
+        const chip = (p) => {
+          const sel = !!(p.id && selectedRegIds[p.id]);
+          return (
+            <button key={p.id || p.uid} onClick={() => { if (!p.id) return; setSelectedRegIds(m => { const n = { ...m }; if (n[p.id]) delete n[p.id]; else n[p.id] = true; return n; }); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999,
+                background: sel ? 'var(--blue, #2563eb)' : 'var(--paper, #fff)', color: sel ? '#fff' : 'var(--ink, #0a1628)',
+                border: '1px solid ' + (sel ? 'var(--blue, #2563eb)' : 'var(--line, #e5e9f0)'), fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: sel ? '#fff' : ((p.status === '決済済み' || p.status === '確定') ? 'var(--green, #16a34a)' : 'var(--amber, #f59e0b)') }} />
+              {p.name}
+            </button>
+          );
+        };
         const segBtn = (active, label, on) => (
           <button onClick={(e) => { e.stopPropagation(); on(); }} style={{
             padding: '4px 12px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer',
@@ -9604,6 +9815,22 @@ function PageEventAdminDetail() {
                   <div style={{ display: 'flex', gap: 6, marginTop: 10, marginBottom: 2 }}>
                     {segBtn(effTodayOnly, '本日のみ', () => setNotArrivedTodayOnly(true))}
                     {segBtn(!notArrivedTodayOnly, '全日程', () => setNotArrivedTodayOnly(false))}
+                  </div>
+                )}
+                {dispPending > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, marginBottom: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button onClick={() => setSelectedRegIds(allSel ? {} : Object.fromEntries(dispIds.map(id => [id, true])))}
+                      style={{ padding: '5px 12px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', border: '1px solid var(--line, #e5e9f0)', background: 'var(--paper, #fff)', color: 'var(--ink3, #4b5563)', borderRadius: 999 }}>
+                      {allSel ? '選択解除' : '表示中を全選択'}
+                    </button>
+                    <button onClick={() => handleBulkCheckin(dispIds.filter(id => selectedRegIds[id]))} disabled={bulkBusy || selCount === 0}
+                      style={{ padding: '5px 14px', fontSize: 11.5, fontWeight: 800, cursor: (bulkBusy || selCount === 0) ? 'default' : 'pointer', border: 'none', background: 'var(--green, #16a34a)', color: '#fff', borderRadius: 999, opacity: (bulkBusy || selCount === 0) ? 0.5 : 1 }}>
+                      {bulkBusy ? '処理中…' : `選択をチェックイン (${selCount})`}
+                    </button>
+                    <button onClick={() => exportNotArrivedCsv(displayedGroups)}
+                      style={{ padding: '5px 12px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', border: '1px solid var(--line, #e5e9f0)', background: 'var(--paper, #fff)', color: 'var(--ink3, #4b5563)', borderRadius: 999 }}>
+                      未到着CSV
+                    </button>
                   </div>
                 )}
                 {isMulti ? (
@@ -22281,6 +22508,7 @@ function PageQRLive(){
   const [registrations, setRegistrations] = useState([]);
   const [events, setEvents] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [manualSid, setManualSid] = useState('');  // (受付) 手動で選んだ対象セッション (空=自動: 指定/本日)
   const [loading, setLoading] = useState(true);
   const [poll, setPoll] = useState(null);        // 最新 livePoll 結果
   const [doneSeqs, setDoneSeqs] = useState({});   // seq -> 'admitted' (楽観的に一覧から除外)
@@ -22441,6 +22669,7 @@ function PageQRLive(){
     const distinctSids = new Set(activeRegs.map(r => String(r.sessionId || '')));
     const multi = ((event && event.format === 'multi') || distinctSids.size > 1) && activeRegs.length > 1;
     if (!multi) return { multi: false, targetSid: null };
+    if (manualSid) return { multi: true, targetSid: String(manualSid) };  // 手動選択を最優先
     const sessionDates = {}; sessions.forEach(s => { sessionDates[String(s.id)] = s.date || ''; });
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
     let targetSid = pageSessionId ? String(pageSessionId) : '';
@@ -22536,12 +22765,72 @@ function PageQRLive(){
   const targetSessionInfo = (() => {
     if (!event || event.format !== 'multi') return null;
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
-    let s = null;
-    if (pageSessionId) s = sessions.find(x => String(x.id) === String(pageSessionId)) || null;
-    if (!s) s = sessions.find(x => (x.date || '') === todayStr) || null;
-    if (!s) return { label: '対象日を特定できません(DayのQRから開いてください)', warn: true };
+    let s = null; let src = '';
+    if (manualSid) { s = sessions.find(x => String(x.id) === String(manualSid)) || null; src = '（手動選択）'; }
+    if (!s && pageSessionId) { s = sessions.find(x => String(x.id) === String(pageSessionId)) || null; src = '（指定）'; }
+    if (!s) { s = sessions.find(x => (x.date || '') === todayStr) || null; src = '（本日）'; }
+    if (!s) return { label: '対象日を特定できません(下の選択かDayのQRから指定)', warn: true };
     const idx = sessions.findIndex(x => String(x.id) === String(s.id));
-    return { label: `Day ${s.order || (idx + 1)}・${s.date || ''}${pageSessionId ? '（指定）' : '（本日）'}`, warn: false };
+    return { label: `Day ${s.order || (idx + 1)}・${s.date || ''}${src}`, warn: false };
+  })();
+
+  // (受付・即時集計) このイベントの登録から セッション別 到着/未到着 を算出 (新規取得なし。 8秒更新の registrations を再利用)
+  const sessionSummary = React.useMemo(() => {
+    const NOT_ACTIVE = { 'キャンセル': 1, '返金': 1, '返金待ち': 1 };
+    const regs = (registrations || []).filter(r => r && String(r.eventId || '') === String(eventId));
+    const isMulti = !!(event && event.format === 'multi' && Array.isArray(sessions) && sessions.length > 0);
+    const calc = (rows) => { let active = 0, arrived = 0; rows.forEach(r => { if (NOT_ACTIVE[r.status]) return; active++; if (r.status === 'チェックイン済') arrived++; }); return { active, arrived }; };
+    if (!isMulti) { const c = calc(regs); return c.active > 0 ? { multi: false, rows: [{ key: 'all', label: '全体', date: '', active: c.active, arrived: c.arrived }] } : { multi: false, rows: [] }; }
+    const sessIdSet = {}; sessions.forEach(s => { sessIdSet[String(s.id)] = true; });
+    const rows = [...sessions].sort((a, b) => (a.order || 0) - (b.order || 0)).map(s => {
+      const r = regs.filter(x => String(x.sessionId || '') === String(s.id)); const c = calc(r);
+      return { key: String(s.id), label: 'Day ' + (s.order || ''), date: s.date || '', active: c.active, arrived: c.arrived };
+    }).filter(g => g.active > 0);
+    const orphan = regs.filter(x => !x.sessionId || !sessIdSet[String(x.sessionId)]); const oc = calc(orphan);
+    if (oc.active > 0) rows.push({ key: '__other', label: '日程未指定', date: '', active: oc.active, arrived: oc.arrived });
+    return { multi: true, rows };
+  }, [registrations, sessions, event, eventId]);
+
+  // 集計ハイライト用の対象セッション (手動 → 指定 → 本日)
+  const chosenTargetSid = (() => {
+    if (!event || event.format !== 'multi') return '';
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+    if (manualSid) return String(manualSid);
+    if (pageSessionId) return String(pageSessionId);
+    const s = sessions.find(x => (x.date || '') === todayStr);
+    return s ? String(s.id) : '';
+  })();
+
+  // (受付・即時集計) ページの受付対象セッションID (強調表示用)
+  const pageTargetSid = (() => {
+    if (manualSid) return String(manualSid);
+    if (pageSessionId) return String(pageSessionId);
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+    const s = sessions.find(x => (x.date || '') === todayStr);
+    return s ? String(s.id) : '';
+  })();
+
+  // (受付・即時集計) 既取得の registrations から 到着/総数 を算出 (新規取得なし)。 active=キャンセル/返金/返金待ち以外、 arrived=チェックイン済。
+  const liveSummary = (() => {
+    const evRegs = (registrations || []).filter(r => String(r.eventId || '') === String(eventId));
+    if (!evRegs.length) return null;
+    const isActive = (r) => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち';
+    const isArrived = (r) => r.status === 'チェックイン済';
+    const isMulti = !!(event && event.format === 'multi' && Array.isArray(sessions) && sessions.length);
+    if (isMulti) {
+      const sidSet = {}; sessions.forEach(s => { sidSet[String(s.id)] = true; });
+      const bySid = {};
+      evRegs.forEach(r => { const sid = String(r.sessionId || ''); if (!sidSet[sid]) return; (bySid[sid] = bySid[sid] || []).push(r); });
+      const perDay = [...sessions].sort((a, b) => (a.order || 0) - (b.order || 0)).map(s => {
+        const rows = (bySid[String(s.id)] || []).filter(isActive);
+        return { sid: String(s.id), label: 'Day ' + (s.order || ''), total: rows.length, arrived: rows.filter(isArrived).length };
+      }).filter(d => d.total > 0);
+      if (!perDay.length) return null;
+      return { multi: true, perDay };
+    }
+    const rows = evRegs.filter(isActive);
+    if (!rows.length) return null;
+    return { multi: false, total: rows.length, arrived: rows.filter(isArrived).length };
   })();
 
   return (
@@ -22555,6 +22844,73 @@ function PageQRLive(){
             <div style={{marginTop:4,fontSize:12,fontWeight:700,color: targetSessionInfo.warn ? 'var(--accent, #dc2626)' : 'var(--green, #16a34a)'}}>
               受付対象: {targetSessionInfo.label}
             </div>
+          )}
+          {event && event.format === 'multi' && sessions.length > 0 && (
+            <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              <span style={{fontSize:11,color:'var(--ink4)'}}>受付する日:</span>
+              <select value={manualSid} onChange={e => setManualSid(e.target.value)} style={{fontSize:12,padding:'4px 8px',borderRadius:8,border:'1px solid var(--line)',background:'var(--paper)',color:'var(--ink)'}}>
+                <option value="">自動（指定/本日）</option>
+                {[...sessions].sort((a,b)=>(a.order||0)-(b.order||0)).map(s => (
+                  <option key={s.id} value={String(s.id)}>{`Day ${s.order||''}・${s.date||''}`}</option>
+                ))}
+              </select>
+              {manualSid && <button onClick={()=>setManualSid('')} style={{fontSize:11,padding:'3px 8px',borderRadius:8,border:'1px solid var(--line)',background:'var(--paper)',cursor:'pointer',color:'var(--ink3)'}}>自動に戻す</button>}
+            </div>
+          )}
+          {sessionSummary.rows.length > 0 && (
+            <div style={{marginTop:8,display:'flex',flexWrap:'wrap',gap:6}}>
+              {sessionSummary.rows.map(r => {
+                const hot = sessionSummary.multi && chosenTargetSid && r.key === chosenTargetSid;
+                const pend = r.active - r.arrived;
+                return (
+                  <div key={r.key} style={{padding:'5px 10px',borderRadius:10,fontSize:11.5,fontWeight:700,
+                    border:'1px solid ' + (hot ? 'var(--green, #16a34a)' : 'var(--line, #e5e9f0)'),
+                    background: hot ? 'var(--green-50, #f0fdf4)' : 'var(--paper, #fff)', color:'var(--ink, #0a1628)'}}>
+                    {sessionSummary.multi && <span style={{marginRight:6,color:'var(--ink3)'}}>{r.label}{r.date?'・'+r.date:''}</span>}
+                    到着 {r.arrived}/{r.active}
+                    {pend > 0 && <span style={{marginLeft:6,color:'var(--amber, #b45309)'}}>未 {pend}</span>}
+                    {hot && <span style={{marginLeft:6,fontSize:9,fontWeight:800,color:'#fff',background:'var(--green, #16a34a)',borderRadius:999,padding:'1px 6px'}}>対象</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {event && event.format === 'multi' && Array.isArray(sessions) && sessions.length > 0 && (
+            <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              <span style={{fontSize:11.5,color:'var(--ink3, #4b5563)',fontWeight:700}}>受付する日:</span>
+              <select value={manualSid} onChange={e => setManualSid(e.target.value)}
+                style={{fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:8,border:'1px solid var(--line, #e5e9f0)',background:'var(--paper, #fff)',color:'var(--ink, #0a1628)',cursor:'pointer'}}>
+                <option value="">自動（指定／本日）</option>
+                {[...sessions].sort((a,b)=>(a.order||0)-(b.order||0)).map((s,i) => (
+                  <option key={s.id} value={String(s.id)}>{`Day ${s.order || (i+1)}・${s.date || ''}`}</option>
+                ))}
+              </select>
+              {manualSid && <span style={{fontSize:11,color:'var(--accent, #dc2626)',fontWeight:700}}>手動選択中</span>}
+            </div>
+          )}
+          {liveSummary && (
+            liveSummary.multi ? (
+              <div style={{marginTop:8,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                {liveSummary.perDay.map(d => {
+                  const isTarget = pageTargetSid && d.sid === pageTargetSid;
+                  const allHere = d.arrived >= d.total;
+                  return (
+                    <span key={d.sid} style={{
+                      fontSize:11.5,fontWeight:800,padding:'4px 10px',borderRadius:999,
+                      border:'1px solid ' + (isTarget ? 'var(--blue, #2563eb)' : 'var(--line, #e5e9f0)'),
+                      background: isTarget ? 'var(--blue, #2563eb)' : 'var(--paper, #fff)',
+                      color: isTarget ? '#fff' : (allHere ? 'var(--green, #16a34a)' : 'var(--ink2, #1f2937)'),
+                    }}>{d.label} 到着 {d.arrived}/{d.total}</span>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{marginTop:8}}>
+                <span style={{fontSize:11.5,fontWeight:800,padding:'4px 10px',borderRadius:999,border:'1px solid var(--line, #e5e9f0)',background:'var(--paper, #fff)',color: liveSummary.arrived >= liveSummary.total ? 'var(--green, #16a34a)' : 'var(--ink2, #1f2937)'}}>
+                  到着 {liveSummary.arrived}/{liveSummary.total}
+                </span>
+              </div>
+            )
           )}
         </div>
         <div className="ph-right" style={{display:'flex',gap:8,alignItems:'center'}}>
