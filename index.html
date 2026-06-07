@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-07 P3g'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-07 P3i'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1652,7 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3g</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3i</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -5638,6 +5638,15 @@ function SessionMementoRow({ sess, busy, onSave }){
   const savedUrlInit = sess.mementoPhotoUrl || "";
   const savedPubInit = normDT(sess.mementoPublishAt);
   const savedGalleryInit = Array.isArray(sess.mementoGallery) ? sess.mementoGallery : [];
+  // (R5) この日のスタンプ初期値。 種類は空=自動(イベント/カテゴリ準拠)。 位置は "x,y" の中心比率。
+  const savedSealTypeInit = sess.sealType || "";
+  const _sealInit = (function(){
+    const p = String(sess.sealPos || '').split(',');
+    const x = parseFloat(p[0]), y = parseFloat(p[1]);
+    const cl = (n, d) => isNaN(n) ? d : Math.max(0.05, Math.min(0.95, n));
+    return { x: cl(x, 0.26), y: cl(y, 0.80) };
+  })();
+  const savedSealPosInit = _sealInit.x.toFixed(3) + ',' + _sealInit.y.toFixed(3);
   // (自動下書き保存) ブラウザ保存された下書きを起動時に1度だけ読む
   const initialDraftRef = React.useRef((function(){
     try { const raw = localStorage.getItem(draftKey); if (!raw) return null; const d = JSON.parse(raw); return (d && typeof d === 'object') ? d : null; }
@@ -5657,11 +5666,22 @@ function SessionMementoRow({ sess, busy, onSave }){
   const [galProg, setGalProg] = useState({ done: 0, total: 0 });
   const [draftRestored, setDraftRestored] = useState(draftDiffers);
   const [draftSavedAt, setDraftSavedAt] = useState(0);
+  // (R5) この日のスタンプ設定
+  const [sealType, setSealType] = useState(savedSealTypeInit);
+  const [sealPosX, setSealPosX] = useState(_sealInit.x);
+  const [sealPosY, setSealPosY] = useState(_sealInit.y);
+  const sealDragRef = React.useRef(false);
+  const sealPrevRef = React.useRef(null);
   // (未保存判定の基準) 保存に成功した値そのものを基準にする。 これで保存→読戻しのフォーマット/タイムゾーン差に左右されず、 保存後は確実に未保存が解消する。 初期は sess 由来。
-  const [savedSnap, setSavedSnap] = useState({ url: savedUrlInit, publishAt: savedPubInit, gallery: savedGalleryInit });
+  const [savedSnap, setSavedSnap] = useState({ url: savedUrlInit, publishAt: savedPubInit, gallery: savedGalleryInit, sealType: savedSealTypeInit, sealPos: savedSealPosInit });
   const savedGallery = savedSnap.gallery;
   const galleryDirty = JSON.stringify(gallery) !== JSON.stringify(savedGallery);
-  const dirty = (url !== savedSnap.url) || (publishAt !== savedSnap.publishAt) || galleryDirty;
+  const curSealPos = sealPosX.toFixed(3) + ',' + sealPosY.toFixed(3);
+  const dirty = (url !== savedSnap.url) || (publishAt !== savedSnap.publishAt) || galleryDirty || (sealType !== savedSnap.sealType) || (curSealPos !== savedSnap.sealPos);
+  // (R5) 別ブロックの記念スタンプ部品を window 経由で参照 (描画時に解決)
+  const SealPrev = (typeof window !== 'undefined' && window.MementoSealPreview) ? window.MementoSealPreview : null;
+  const autoSeal = (typeof window !== 'undefined' && window.autoSealForCategory) ? window.autoSealForCategory : function(){ return 'classic'; };
+  const sealEffective = sealType || autoSeal(sess.category);
 
   // (自動下書き保存) 変更が落ち着いたらブラウザに下書きを保存 (本体への書込なし=軽い)。 保存済みと一致したら下書きを消す。
   React.useEffect(() => {
@@ -5824,11 +5844,35 @@ function SessionMementoRow({ sess, busy, onSave }){
       <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>記念写真の公開予約 (任意)</label>
       <input type="datetime-local" className="input" style={{fontSize:12,marginBottom:4}} value={publishAt} onChange={e=>setPublishAt(e.target.value)}/>
       <div className="field-hint" style={{fontSize:11,marginBottom:8,color:'var(--ink4)'}}>空欄または過去の日時＝保存と同時に公開。未来の日時＝その日時まで参加者には非表示（テスト参加者は事前に確認可）。主写真・追加写真の両方に適用されます。</div>
+
+      <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>スタンプ (この日) <span style={{color:'var(--ink4)',fontWeight:400}}>— 公開終了後も編集できます</span></label>
+      <div className="field-hint" style={{fontSize:11,margin:'0 0 6px',color:'var(--ink4)'}}>この日の記念写真に重ねるスタンプ。 種類は「自動」でカテゴリ準拠（未設定時はイベント全体の設定に従います）。 下のプレビューをタップ/ドラッグで位置を調整。</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+        {[{k:'',label:'自動'},{k:'classic',label:'定番'},{k:'passport',label:'旅'},{k:'minimal',label:'簡素'},{k:'beaded',label:'華'},{k:'laurel',label:'月桂'}].map(opt => (
+          <button key={opt.k||'auto'} type="button" onClick={()=>setSealType(opt.k)} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,padding:'4px 7px',borderRadius:9,border:(sealType===opt.k?'2px solid var(--jb-blue,#2563eb)':'1px solid var(--line,#e5e7eb)'),background:(sealType===opt.k?'var(--jb-blue-50,#eff6ff)':'#fff'),cursor:'pointer'}}>
+            <span style={{width:36,height:36,borderRadius:'50%',background:'var(--jb-blue-deep,#1a3a6b)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              {SealPrev ? <SealPrev variant={opt.k || autoSeal(sess.category)} date={sess.date||''} size={32}/> : null}
+            </span>
+            <span style={{fontSize:10,color:'var(--ink3,#555)'}}>{opt.label}</span>
+          </button>
+        ))}
+      </div>
+      <div ref={sealPrevRef}
+        onPointerDown={(e)=>{ sealDragRef.current=true; const r=sealPrevRef.current.getBoundingClientRect(); setSealPosX(Math.max(0.05,Math.min(0.95,(e.clientX-r.left)/r.width))); setSealPosY(Math.max(0.05,Math.min(0.95,(e.clientY-r.top)/r.height))); }}
+        onPointerMove={(e)=>{ if(!sealDragRef.current) return; const r=sealPrevRef.current.getBoundingClientRect(); setSealPosX(Math.max(0.05,Math.min(0.95,(e.clientX-r.left)/r.width))); setSealPosY(Math.max(0.05,Math.min(0.95,(e.clientY-r.top)/r.height))); }}
+        onPointerUp={()=>{ sealDragRef.current=false; }} onPointerLeave={()=>{ sealDragRef.current=false; }}
+        style={{position:'relative',width:'100%',maxWidth:190,aspectRatio:'3 / 4',borderRadius:10,overflow:'hidden',margin:'0 auto 8px',cursor:'crosshair',touchAction:'none',border:'1px solid var(--line,#e5e7eb)',backgroundImage:url?('url('+url+')'):'none',backgroundSize:'cover',backgroundPosition:'center',backgroundColor:'#0d2347',backgroundRepeat:'no-repeat'}}>
+        {!url ? <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',color:'rgba(255,255,255,0.6)',fontSize:11,textAlign:'center',padding:8}}>この日の主写真を設定すると<br/>背景に表示されます</div> : null}
+        <div style={{position:'absolute',left:(sealPosX*100)+'%',top:(sealPosY*100)+'%',transform:'translate(-50%,-50%)',pointerEvents:'none',filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.4))'}}>
+          {SealPrev ? <SealPrev variant={sealEffective} date={sess.date||''} size={56}/> : null}
+        </div>
+      </div>
+
       <div style={{display:'flex',justifyContent:'flex-end'}}>
         <button className="btn btn-pri btn-sm" disabled={busy || galBusy || !dirty} onClick={async ()=>{
-          const ok = await onSave(sess, url, publishAt, gallery);
+          const ok = await onSave(sess, url, publishAt, gallery, sealType, curSealPos);
           if (ok !== false) {
-            setSavedSnap({ url: url, publishAt: publishAt, gallery: gallery });  // 保存できた値を基準に固定 → 未保存が解消
+            setSavedSnap({ url: url, publishAt: publishAt, gallery: gallery, sealType: sealType, sealPos: curSealPos });  // 保存できた値を基準に固定 → 未保存が解消
             try { localStorage.removeItem(draftKey); } catch (e) {}
             setDraftRestored(false); setDraftSavedAt(0);
           }
@@ -5927,13 +5971,15 @@ function PagePostEvent(){
   const overallCsat = calcCsat(responses);
 
   // ===== アクション =====
-  async function saveSessionMemento(sess, url, publishAt, gallery) {
+  async function saveSessionMemento(sess, url, publishAt, gallery, sealType, sealPos) {
     setBusy(true);
     try {
       await window.postData('updateEventSession', { sessionId: sess.id, fields: {
         mementoPhotoUrl: url || '',
         mementoPublishAt: publishAt || '',
         mementoGallery: JSON.stringify(Array.isArray(gallery) ? gallery : []),
+        sealType: sealType || '',
+        sealPos: sealPos || '',
       } });
       window.toast.success('セッションの記念写真を保存しました');
       if (window.invalidateCache) window.invalidateCache('listEventSessions');  // 30秒キャッシュを無効化し、 再取得で保存値を確実に反映
@@ -19466,6 +19512,9 @@ function MementoSealPreview({variant, date, size}){
   }
   return (<svg width={s} height={s} viewBox="0 0 120 120" style={{color:'#ffffff'}}>{inner}</svg>);
 }
+// (R5) 別 babel ブロックの SessionMementoRow から再利用するため window に公開
+window.autoSealForCategory = autoSealForCategory;
+window.MementoSealPreview = MementoSealPreview;
 function PageEventCreate(){
   // URL hash から編集対象 ID を取得 (例: #event-create?id=E-2601)
   const editId = (() => {
