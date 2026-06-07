@@ -5619,11 +5619,22 @@ function SessionMementoRow({ sess, busy, onSave }){
   const [publishAt, setPublishAt] = useState(String(sess.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
   const [uploading, setUploading] = useState(false);
   const dirty = (url !== (sess.mementoPhotoUrl || "")) || (publishAt !== String(sess.mementoPublishAt || "").replace(' ', 'T').slice(0, 16));
+  // 参加者に「いま見えている」状態を保存済みの値から判定 (規則: 公開日時 未設定/過去=公開中, 未来=予約)
+  const savedUrl = sess.mementoPhotoUrl || "";
+  const savedPubRaw = String(sess.mementoPublishAt || "");
+  let savedPubD = null;
+  if (savedPubRaw) { const d = new Date(savedPubRaw.replace(' ', 'T')); if (!isNaN(d.getTime())) savedPubD = d; }
+  const pubStatus = !savedUrl ? 'none' : (!savedPubD || savedPubD <= new Date()) ? 'public' : 'scheduled';
+  const pubWhen = savedPubD ? `${savedPubD.getMonth() + 1}/${savedPubD.getDate()} ${String(savedPubD.getHours()).padStart(2, '0')}:${String(savedPubD.getMinutes()).padStart(2, '0')}` : '';
   return (
     <div style={{padding:12,border:'1px solid var(--line)',borderRadius:8,background:'var(--white)',marginBottom:10}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
         <span style={{fontWeight:700,fontSize:13}}>Day {sess.order}</span>
         <span style={{fontSize:12,color:'var(--ink3)'}}>{sess.date || ''}{sess.name ? ' ・ ' + sess.name : ''}</span>
+        {pubStatus === 'public' && <span className="badge badge-green"><span className="badge-dot"></span>公開中</span>}
+        {pubStatus === 'scheduled' && <span className="badge badge-amber"><span className="badge-dot"></span>{pubWhen} 公開予約</span>}
+        {pubStatus === 'none' && <span className="badge badge-ink">記念写真なし</span>}
+        {dirty && <span className="badge badge-coral">未保存の変更</span>}
       </div>
       <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>記念写真URL</label>
       <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
@@ -5651,7 +5662,8 @@ function SessionMementoRow({ sess, busy, onSave }){
         {url && <button type="button" className="btn btn-soft btn-sm" style={{color:'var(--coral)'}} onClick={()=>setUrl('')}><Icon n="x" s={11}/></button>}
       </div>
       <label className="field-label" style={{fontSize:11,marginBottom:3,display:'block'}}>記念写真の公開予約 (任意)</label>
-      <input type="datetime-local" className="input" style={{fontSize:12,marginBottom:8}} value={publishAt} onChange={e=>setPublishAt(e.target.value)}/>
+      <input type="datetime-local" className="input" style={{fontSize:12,marginBottom:4}} value={publishAt} onChange={e=>setPublishAt(e.target.value)}/>
+      <div className="field-hint" style={{fontSize:11,marginBottom:8,color:'var(--ink4)'}}>空欄または過去の日時＝保存と同時に公開。未来の日時＝その日時まで参加者には非表示（テスト参加者は事前に確認可）。</div>
       <div style={{display:'flex',justifyContent:'flex-end'}}>
         <button className="btn btn-pri btn-sm" disabled={busy || !dirty} onClick={()=>onSave(sess, url, publishAt)}>
           {busy ? '保存中…' : (dirty ? '保存' : '保存済み')}
@@ -9117,6 +9129,7 @@ function PageEventAdminDetail() {
   const [promos, setPromos] = useState([]);  // (Phase 17.O) 広報イベント
   const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
   const [arrivalOpen, setArrivalOpen] = useState(false);  // 未到着一覧の開閉
+  const [notArrivedTodayOnly, setNotArrivedTodayOnly] = useState(true);  // 未到着一覧: 本日のみ表示 (複数日)
   // (Phase 17.S) タブ — 'overview' | 'apps' | 'payments' | 'analytics'
   const [tab, setTab] = useState(() => {
     try { return sessionStorage.getItem('event-detail-tab') || 'overview'; } catch (e) { return 'overview'; }
@@ -9499,54 +9512,123 @@ function PageEventAdminDetail() {
       {/* (Phase 17.S) タブ — 概要 / 申込者 / 決済 / 分析 */}
       <EventDetailTabsBar tab={tab} onChange={setTab} kpi={kpi}/>
 
-      {/* (受付・当日) 未到着 (未チェックイン) 一覧 — チェックインすると自動的に消える */}
+      {/* (受付・当日) 未到着 (未チェックイン) 一覧 — 複数日はセッション別。 チェックインすると自動的に消える */}
       {(() => {
         const NOT_ARRIVED = ['申込済み', '決済済み', '確定'];
-        const seen = {};
-        const pending = [];
-        (regs || []).forEach(r => {
-          if (!r || NOT_ARRIVED.indexOf(r.status) < 0) return;        // チェックイン済/保留/キャンセル等は除外
-          const uid = String(r.userId || r.userName || '');
-          if (!uid || seen[uid]) return;
-          seen[uid] = true;
-          pending.push({ uid, name: r.userName || '(名前未登録)', status: r.status });
-        });
-        const activeTotal = (regs || []).filter(r => r && r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち').length;
-        const arrivedCount = Math.max(0, activeTotal - pending.length);
-        if (activeTotal === 0) return null;
-        const allHere = pending.length === 0;
+        const isMulti = !!(event && event.format === 'multi' && Array.isArray(sessions) && sessions.length > 0);
+        const pendingForRows = (rows) => {
+          const seen = {}; const out = [];
+          rows.forEach(r => {
+            if (!r || NOT_ARRIVED.indexOf(r.status) < 0) return;        // チェックイン済/保留/キャンセル等は除外
+            const uid = String(r.userId || r.userName || '');
+            if (!uid || seen[uid]) return;
+            seen[uid] = true;
+            out.push({ uid, name: r.userName || '(名前未登録)', status: r.status });
+          });
+          return out;
+        };
+        const activeCount = (rows) => rows.filter(r => r && r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち').length;
+        const todayStr = (() => { try { return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' }); } catch (e) { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); } })();
+
+        let groups;
+        if (isMulti) {
+          const sessIdSet = {}; sessions.forEach(s => { sessIdSet[String(s.id)] = true; });
+          groups = [...sessions].sort((a, b) => (a.order || 0) - (b.order || 0)).map(s => {
+            const rows = (regs || []).filter(r => String(r.sessionId || '') === String(s.id));
+            return { key: s.id, label: 'Day ' + (s.order || ''), date: s.date || '', isToday: !!(s.date && s.date === todayStr), pending: pendingForRows(rows), activeTotal: activeCount(rows) };
+          }).filter(g => g.activeTotal > 0);
+          // 日程未指定(セッション未紐付け)の申込も取りこぼさない
+          const orphan = (regs || []).filter(r => !r || !r.sessionId || !sessIdSet[String(r.sessionId)]);
+          if (activeCount(orphan) > 0) groups.push({ key: '__other', label: '日程未指定', date: '', isToday: false, pending: pendingForRows(orphan), activeTotal: activeCount(orphan) });
+        } else {
+          const rows = regs || [];
+          groups = [{ key: 'all', label: '', date: '', isToday: false, pending: pendingForRows(rows), activeTotal: activeCount(rows) }];
+        }
+        const totalActive = groups.reduce((n, g) => n + g.activeTotal, 0);
+        if (totalActive === 0) return null;
+        const totalPending = groups.reduce((n, g) => n + g.pending.length, 0);
+        // (本日のみ表示) 複数日かつ本日に該当する日程があるときだけ有効
+        const hasTodayGroup = isMulti && groups.some(g => g.isToday);
+        const effTodayOnly = isMulti && notArrivedTodayOnly && hasTodayGroup;
+        const displayedGroups = effTodayOnly ? groups.filter(g => g.isToday) : groups;
+        const dispActive = displayedGroups.reduce((n, g) => n + g.activeTotal, 0);
+        const dispPending = displayedGroups.reduce((n, g) => n + g.pending.length, 0);
+        const allHereAll = totalPending === 0;        // 全日程で未到着ゼロ
+        const allHereDisp = dispPending === 0;        // 表示中ビューで未到着ゼロ
+        const expandable = totalPending > 0;          // どこかに未到着があれば展開可
+        const headDanger = effTodayOnly ? !allHereDisp : !allHereAll;
+        const chip = (p) => (
+          <span key={p.uid} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--paper, #fff)', border: '1px solid var(--line, #e5e9f0)', fontSize: 13, fontWeight: 700, color: 'var(--ink, #0a1628)' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: (p.status === '決済済み' || p.status === '確定') ? 'var(--green, #16a34a)' : 'var(--amber, #f59e0b)' }} />
+            {p.name}
+          </span>
+        );
+        const segBtn = (active, label, on) => (
+          <button onClick={(e) => { e.stopPropagation(); on(); }} style={{
+            padding: '4px 12px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer',
+            border: '1px solid ' + (active ? 'var(--blue, #2563eb)' : 'var(--line, #e5e9f0)'),
+            background: active ? 'var(--blue, #2563eb)' : 'var(--paper, #fff)',
+            color: active ? '#fff' : 'var(--ink3, #4b5563)',
+            borderRadius: 999,
+          }}>{label}</button>
+        );
         return (
           <section style={{
             marginBottom: 18, borderRadius: 14, overflow: 'hidden',
-            border: '1px solid ' + (allHere ? 'var(--green-200, #bbf7d0)' : 'var(--amber-200, #fde68a)'),
-            background: allHere ? 'var(--green-50, #f0fdf4)' : 'var(--amber-50, #fffbeb)',
+            border: '1px solid ' + (headDanger ? 'var(--amber-200, #fde68a)' : 'var(--green-200, #bbf7d0)'),
+            background: headDanger ? 'var(--amber-50, #fffbeb)' : 'var(--green-50, #f0fdf4)',
           }}>
-            <button onClick={() => setArrivalOpen(o => !o)} style={{
+            <button onClick={() => expandable && setArrivalOpen(o => !o)} style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
-              background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+              background: 'transparent', border: 'none', cursor: expandable ? 'pointer' : 'default', textAlign: 'left',
             }}>
-              <span style={{ fontSize: 18 }}>{allHere ? '✅' : '🟡'}</span>
+              <span style={{ fontSize: 18 }}>{headDanger ? '🟡' : '✅'}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink, #0a1628)' }}>
-                  {allHere ? '全員チェックイン済み' : `未到着 ${pending.length}名`}
+                  {effTodayOnly
+                    ? (allHereDisp ? '本日は全員チェックイン済み' : `本日 未到着 ${dispPending}名`)
+                    : (allHereAll ? '全員チェックイン済み' : `未到着 ${totalPending}名`)}
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--ink3, #4b5563)', marginTop: 1 }}>
-                  到着 {arrivedCount} / {activeTotal}名{allHere ? '' : '（タップで未到着の一覧）'}
+                  {effTodayOnly
+                    ? `本日 到着 ${dispActive - dispPending}/${dispActive}名` + (totalPending > 0 ? ` ・ 全日程 未到着 ${totalPending}名` : '')
+                    : `到着 ${totalActive - totalPending}/${totalActive}名` + (isMulti ? ` ・ ${groups.length}日程` : '')}
+                  {expandable ? '（タップで一覧）' : ''}
                 </div>
               </div>
-              {!allHere && <Icon n={arrivalOpen ? 'chevUp' : 'chevDown'} s={16} />}
+              {expandable && <Icon n={arrivalOpen ? 'chevUp' : 'chevDown'} s={16} />}
             </button>
-            {!allHere && arrivalOpen && (
-              <div style={{ padding: '0 14px 14px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {pending.map(p => (
-                  <span key={p.uid} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999,
-                    background: 'var(--paper, #fff)', border: '1px solid var(--line, #e5e9f0)', fontSize: 13, fontWeight: 700, color: 'var(--ink, #0a1628)',
-                  }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.status === '決済済み' || p.status === '確定' ? 'var(--green, #16a34a)' : 'var(--amber, #f59e0b)' }} />
-                    {p.name}
-                  </span>
-                ))}
+            {expandable && arrivalOpen && (
+              <div style={{ padding: '0 14px 14px' }}>
+                {isMulti && hasTodayGroup && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10, marginBottom: 2 }}>
+                    {segBtn(effTodayOnly, '本日のみ', () => setNotArrivedTodayOnly(true))}
+                    {segBtn(!notArrivedTodayOnly, '全日程', () => setNotArrivedTodayOnly(false))}
+                  </div>
+                )}
+                {isMulti ? (
+                  displayedGroups.length === 0
+                    ? <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink3, #4b5563)' }}>本日に該当する日程はありません</div>
+                    : displayedGroups.map(g => (
+                      <div key={g.key} style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--ink, #0a1628)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span>{g.label}{g.date ? ' ・ ' + g.date : ''}</span>
+                          {g.isToday && <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--amber, #f59e0b)', borderRadius: 999, padding: '1px 7px' }}>本日</span>}
+                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink3, #4b5563)' }}>到着 {g.activeTotal - g.pending.length}/{g.activeTotal}名</span>
+                        </div>
+                        {g.pending.length === 0
+                          ? <div style={{ fontSize: 12, color: 'var(--green, #16a34a)', fontWeight: 700 }}>全員チェックイン済み</div>
+                          : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{g.pending.map(chip)}</div>}
+                      </div>
+                    ))
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>{groups[0].pending.map(chip)}</div>
+                )}
+                {effTodayOnly && allHereDisp && totalPending > 0 && (
+                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--amber-700, #b45309)', fontWeight: 700 }}>
+                    他の日程に未到着が {totalPending}名 います（「全日程」で表示）
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -10843,6 +10925,23 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
       window.toast.error('失敗: ' + (e.message || e));
     }
   };
+  // (セッション別の修正) この日のチェックインだけを取り消す。 他の日には影響しない。
+  const handleUncheckin = async (reg) => {
+    const ok = await window.confirmDialog({
+      title: '入場を取り消しますか?',
+      body: `${reg.id} のこの日(セッション)のチェックインを取り消します。他の日には影響しません。`,
+      confirmLabel: '取り消す',
+    });
+    if (!ok) return;
+    try {
+      await window.postData('admin.uncheckin', { regId: reg.id });
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      window.toast.success('入場を取り消しました');
+      if (onReload) onReload();
+    } catch (e) {
+      window.toast.error('取消失敗: ' + (e.message || e));
+    }
+  };
   return (
     <section style={{marginBottom:24}}>
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
@@ -10860,13 +10959,16 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
           const isExpanded = expandedId === s.id;
           const sessionRegs = regs.filter(r => r.sessionId === s.id);
           const activeRegs = sessionRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+          const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+          const isToday = !!(s.date && s.date === todayStr);
           return (
             <div key={s.id} style={{
-              background:'var(--jb-paper)',
-              border:'1px solid var(--jb-line)',
+              background: isToday ? 'var(--jb-success-soft, #ecfdf5)' : 'var(--jb-paper)',
+              border:'1px solid ' + (isToday ? 'var(--jb-success, #16a34a)' : 'var(--jb-line)'),
               borderRadius:6,
               overflow:'hidden',
               transition:'all 0.15s',
+              boxShadow: isToday ? 'inset 4px 0 0 0 var(--jb-success, #16a34a)' : undefined,
             }}>
               {/* ヘッダー */}
               <div
@@ -10886,6 +10988,7 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
                   transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                 }}>▸</span>
                 <div style={{minWidth:60,fontFamily:'var(--jb-display)',fontSize:14,fontWeight:800,color:'var(--jb-blue)'}}>Day {s.order || (i+1)}</div>
+                {isToday && <span style={{fontSize:9,fontWeight:800,color:'#fff',background:'var(--jb-success, #16a34a)',borderRadius:999,padding:'2px 8px',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>本日</span>}
                 <div style={{flex:1,minWidth:160}}>
                   <div style={{fontFamily:'var(--jb-sans)',fontSize:13,fontWeight:600,color:'var(--jb-ink)'}}>
                     {s.date || '—'}
@@ -10977,6 +11080,9 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
                               )}
                               {!isPaidStatus && !isCheckedIn && (
                                 <button onClick={() => handleMarkPaid(r)} style={miniBtnStyle('var(--jb-success)', true)}>決済済</button>
+                              )}
+                              {(isCheckedIn || isPending) && (
+                                <button onClick={() => handleUncheckin(r)} style={miniBtnStyle('#dc2626', true)}>入場取消</button>
                               )}
                             </div>
                           </div>
@@ -22167,6 +22273,11 @@ function PageQRLive(){
     try { const h = window.location.hash || ''; const i = h.indexOf('?'); if (i < 0) return ''; return new URLSearchParams(h.substring(i + 1)).get('eventId') || ''; }
     catch (e) { return ''; }
   })();
+  // (セッション別チェックイン) Day の QR ボタンから開いた場合は sessionId が付く → その日のみ受付
+  const pageSessionId = (() => {
+    try { const h = window.location.hash || ''; const i = h.indexOf('?'); if (i < 0) return ''; return new URLSearchParams(h.substring(i + 1)).get('sessionId') || ''; }
+    catch (e) { return ''; }
+  })();
   const [registrations, setRegistrations] = useState([]);
   const [events, setEvents] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -22266,6 +22377,8 @@ function PageQRLive(){
     q.forEach(item => {
       if (!item || !item.seq) return;
       if (doneSeqs[item.seq]) return;
+      const info = resolveArrival(item);
+      if (info.app && (info.targetCheckedIn || info.noTargetReg)) return; // 受付不要(本日分済 / 対象外)は鳴らさない
       const ageMs = item.at ? (now - new Date(item.at).getTime()) : 0;
       if (ageMs > 90 * 1000 && !warnedSeqsRef.current[item.seq]) {
         warnedSeqsRef.current[item.seq] = true;
@@ -22323,6 +22436,21 @@ function PageQRLive(){
     if (uid) pendingUserIdCounts[uid] = (pendingUserIdCounts[uid] || 0) + 1;
   });
 
+  // (セッション別) 受付対象セッションを判定。複数日のみ対象を絞り、単一は対象=全件。
+  function computeTargetSid(activeRegs) {
+    const distinctSids = new Set(activeRegs.map(r => String(r.sessionId || '')));
+    const multi = ((event && event.format === 'multi') || distinctSids.size > 1) && activeRegs.length > 1;
+    if (!multi) return { multi: false, targetSid: null };
+    const sessionDates = {}; sessions.forEach(s => { sessionDates[String(s.id)] = s.date || ''; });
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+    let targetSid = pageSessionId ? String(pageSessionId) : '';
+    if (!targetSid) {
+      const todays = activeRegs.filter(r => sessionDates[String(r.sessionId || '')] === todayStr);
+      if (todays.length) targetSid = String(todays[0].sessionId || '');
+    }
+    return { multi: true, targetSid: targetSid || null };
+  }
+
   // regId から表示情報を解決
   function resolveArrival(item) {
     const app = window.findApplicationByRegId(applications, item.regId);
@@ -22334,7 +22462,26 @@ function PageQRLive(){
     const ageVal = (() => { const r = appRegs.find(r => r.age != null); return r ? r.age : null; })();
     const isRepeater = app ? repeaterUserIds.has(app.userId) : false;
     const wrongEvent = app && app.eventId !== eventId;
-    return { app, appRegs, activeRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent };
+    // (本日セッション基準) 受付対象セッションの状態を導出
+    const tg = computeTargetSid(activeRegs);
+    const multiDay = tg.multi;
+    const targetSid = tg.targetSid;
+    let targetRegs, targetCheckedIn, noTargetReg = false, targetLabel = '', targetUnresolved = false;
+    if (!multiDay) {
+      targetRegs = activeRegs;
+      targetCheckedIn = allCheckedIn;
+    } else if (targetSid) {
+      targetRegs = activeRegs.filter(r => String(r.sessionId || '') === targetSid);
+      noTargetReg = targetRegs.length === 0;
+      targetCheckedIn = targetRegs.length > 0 && targetRegs.every(r => r.status === 'チェックイン済');
+      const s = sessions.find(x => String(x.id) === targetSid);
+      if (s) { const idx = sessions.findIndex(x => String(x.id) === String(s.id)); targetLabel = 'Day ' + (s.order || (idx + 1)) + (s.date ? ' ・ ' + s.date : ''); }
+    } else {
+      targetUnresolved = true;
+      targetRegs = activeRegs.filter(r => r.status !== 'チェックイン済');
+      targetCheckedIn = false;
+    }
+    return { app, appRegs, activeRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent, multiDay, targetSid, targetRegs, targetCheckedIn, noTargetReg, targetLabel, targetUnresolved };
   }
 
   // 入場確定 (楽観的)。 ボタンを押した瞬間に一覧から除去し、 checkin/決済確認はバックグラウンドで実行。
@@ -22343,7 +22490,27 @@ function PageQRLive(){
     const info = resolveArrival(item);
     const app = info.app; if (!app) return;
     const seq = item.seq;
-    const targets = info.activeRegs.filter(r => r.status !== 'チェックイン済');
+    let targets = info.activeRegs.filter(r => r.status !== 'チェックイン済');
+
+    // (セッション別チェックイン) 複数日の申込は、受付した日(Day指定 or 本日)だけを入場確定する。
+    // 単一セッションの申込は従来どおり対象=全件(=1件)。判定は resolveArrival に集約。
+    if (info.multiDay) {
+      if (!info.targetSid) {
+        // 複数日だが対象セッションを特定できない → 安全のため確定せず案内 (DayごとのQR or 個別操作へ)
+        window.toast.warn(`${app.userName} さんの対象セッションを特定できません。各Dayの「QR」ボタンから開くか、Adminの個別操作で入場してください`);
+        return;
+      }
+      targets = info.targetRegs.filter(r => r.status !== 'チェックイン済');
+      if (targets.length === 0) {
+        // 対象セッションは既に入場済み or その日の申込なし
+        setDoneSeqs(m => ({ ...m, [seq]: 'admitted' }));
+        if (!info.noTargetReg) window.toast.success(`${app.userName} さんは本日分は既に入場済みです`);
+        else window.toast.warn(`${app.userName} さんはこの日程の申込がありません`);
+        try { await window.postData('qr.ackScan', { eventId, seq: seq, regId: item.regId }); } catch (e) {}
+        return;
+      }
+    }
+
     setDoneSeqs(m => ({ ...m, [seq]: 'admitted' }));   // 即座に一覧から消す
     window.toast.success(`${app.userName} さんを入場確定しました`);
     try {
@@ -22365,6 +22532,17 @@ function PageQRLive(){
   }
 
   const camActive = poll && poll.cameraActive;
+  // (セッション別チェックイン) 受付対象の日を明示。複数日イベントのみ。
+  const targetSessionInfo = (() => {
+    if (!event || event.format !== 'multi') return null;
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+    let s = null;
+    if (pageSessionId) s = sessions.find(x => String(x.id) === String(pageSessionId)) || null;
+    if (!s) s = sessions.find(x => (x.date || '') === todayStr) || null;
+    if (!s) return { label: '対象日を特定できません(DayのQRから開いてください)', warn: true };
+    const idx = sessions.findIndex(x => String(x.id) === String(s.id));
+    return { label: `Day ${s.order || (idx + 1)}・${s.date || ''}${pageSessionId ? '（指定）' : '（本日）'}`, warn: false };
+  })();
 
   return (
     <div className="jb-page" data-page="qr-live">
@@ -22373,6 +22551,11 @@ function PageQRLive(){
           <div className="ph-crumbs"><span>イベント</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>QR詳細ステータス管理</span></div>
           <h1>QR詳細 <i>ステータス管理</i></h1>
           <div className="ph-sub">{event ? event.title : (eventId || 'イベント未指定')} · スキャナ端末が読み取った人を即時表示します</div>
+          {targetSessionInfo && (
+            <div style={{marginTop:4,fontSize:12,fontWeight:700,color: targetSessionInfo.warn ? 'var(--accent, #dc2626)' : 'var(--green, #16a34a)'}}>
+              受付対象: {targetSessionInfo.label}
+            </div>
+          )}
         </div>
         <div className="ph-right" style={{display:'flex',gap:8,alignItems:'center'}}>
           <span className="badge" style={{background: camActive ? 'var(--green-50)' : '#eceff2', color: camActive ? 'var(--green)' : 'var(--ink4)', border:'1px solid currentColor'}}>
@@ -22406,7 +22589,7 @@ function PageQRLive(){
             <div style={{fontSize:11,color:'var(--ink4)',marginTop:2}}>約10分操作が無い項目は自動で消えます。同じ人を続けて読み取ると「再スキャン」、同一人物が複数件あると注意表示します。</div>
           </div>
           {pending.map(item => {
-            const { app, appRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent } = resolveArrival(item);
+            const { app, appRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent, multiDay, targetCheckedIn, noTargetReg, targetLabel, targetUnresolved } = resolveArrival(item);
             if (!app) {
               return (
                 <div key={item.seq} className="card"><div className="card-body" style={{padding:'14px 18px'}}>
@@ -22418,15 +22601,15 @@ function PageQRLive(){
             }
             const scanCount = item.count || 1;
             const ageMs = item.at ? (nowMs - new Date(item.at).getTime()) : 0;
-            const stale = ageMs > QR_WARN_MS && !allCheckedIn;
+            const stale = ageMs > QR_WARN_MS && !targetCheckedIn;
             const ageLabel = ageMs < 60000 ? `${Math.max(0, Math.round(ageMs / 1000))}秒待ち` : `${Math.floor(ageMs / 60000)}分待ち`;
             const dupUser = pendingUserIdCounts[app.userId] > 1;
-            const warnColor = allCheckedIn ? 'var(--coral)' : (dupUser || scanCount > 1 || stale) ? '#d98a00' : null;
+            const warnColor = (targetCheckedIn || noTargetReg) ? 'var(--coral)' : (dupUser || scanCount > 1 || stale) ? '#d98a00' : null;
             return (
               <div key={item.seq} className="card" style={warnColor ? { borderLeft: '4px solid ' + warnColor } : undefined}>
                 <div className="card-body" style={{padding:0}}>
                   {/* ステータスヘッダー */}
-                  <div style={{padding:'16px 20px',background: allCheckedIn ? 'var(--green-50)' : isPaid ? 'var(--blue-soft, #eef6fb)' : '#fff6e5', borderBottom:'1px solid var(--line)'}}>
+                  <div style={{padding:'16px 20px',background: targetCheckedIn ? 'var(--green-50)' : isPaid ? 'var(--blue-soft, #eef6fb)' : '#fff6e5', borderBottom:'1px solid var(--line)'}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                       <div style={{fontSize:22,fontWeight:800,color:'var(--ink1)'}}>{app.userName}</div>
                       {kana && <div style={{fontSize:13,color:'var(--ink3)'}}>{kana}</div>}
@@ -22436,13 +22619,16 @@ function PageQRLive(){
                       {ageVal != null && <span className="badge badge-ink">{ageVal} 歳</span>}
                     </div>
                     <div style={{marginTop:8,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                      {allCheckedIn
-                        ? <span className="badge badge-green"><span className="badge-dot"></span>受付済（チェックイン済）</span>
+                      {targetCheckedIn
+                        ? <span className="badge badge-green"><span className="badge-dot"></span>{multiDay ? '本日分 受付済' : '受付済（チェックイン済）'}</span>
                         : isPaid
                           ? <span className="badge badge-green"><span className="badge-dot"></span>決済済み</span>
                           : <span className="badge badge-amber"><span className="badge-dot"></span>未決済</span>}
+                      {multiDay && targetLabel && <span className="badge" style={{background:'var(--blue-soft, #eef6fb)',color:'var(--blue, #2563eb)',border:'1px solid var(--blue, #2563eb)'}}>本日: {targetLabel}</span>}
                       {wrongEvent && <span className="badge badge-coral">別イベントの申込</span>}
-                      {allCheckedIn && <span className="badge badge-coral">既に入場済み</span>}
+                      {targetCheckedIn && <span className="badge badge-coral">{multiDay ? '本日分は入場済み' : '既に入場済み'}</span>}
+                      {noTargetReg && <span className="badge badge-coral">本日の申込なし</span>}
+                      {targetUnresolved && <span className="badge badge-amber">対象日 未特定</span>}
                       {dupUser && <span className="badge badge-coral">同一人物が複数件</span>}
                       {scanCount > 1 && <span className="badge badge-amber">再スキャン ×{scanCount}</span>}
                       {stale && <span className="badge badge-amber">受付待ち {ageLabel}</span>}
@@ -22451,9 +22637,14 @@ function PageQRLive(){
                   </div>
                   {/* 入場確定アクション */}
                   <div style={{padding:'14px 20px',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
-                    {allCheckedIn ? (
+                    {targetCheckedIn ? (
                       <>
-                        <div style={{flex:1,fontSize:14,fontWeight:700,color:'var(--green)'}}>✓ すでに受付済み</div>
+                        <div style={{flex:1,fontSize:14,fontWeight:700,color:'var(--green)'}}>{multiDay ? '✓ 本日分は受付済み' : '✓ すでに受付済み'}</div>
+                        <button className="jb-btn" onClick={() => admit(item, false)}>一覧から外す</button>
+                      </>
+                    ) : noTargetReg ? (
+                      <>
+                        <div style={{flex:1,fontSize:13,color:'var(--coral)'}}>本日（この日程）の申込がありません。</div>
                         <button className="jb-btn" onClick={() => admit(item, false)}>一覧から外す</button>
                       </>
                     ) : wrongEvent ? (
