@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P3o'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P3r'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1652,7 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P3o</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P3r</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -3006,11 +3006,17 @@ function PageDashboard(){
   const activeRegs = registrations.filter(r => r.status !== "キャンセル" && !r.isTest);
   const totalRegistrations = activeRegs.length;
 
-  // 今月の収益: 決済「成功」ステータスの金額合計 (今月分) — テスト参加者の決済は除外
+  // 今月の収益: 決済済み(ステータス決済済み)の登録ベース — 決済確認日時(paidAt)が今月のものを (金額-返金額) で合計。
+  //   テスト参加者は activeRegs で除外済。 決済レコード(payments)に依存せず、 決済済みになった時点で値が入る。
   const today = new Date();
   const thisYearMonth = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
   const successPayments = payments.filter(p => p.status === "成功" && !_testUserIds.has(p.userId));
-  const monthRevenue = successPayments.reduce((s, p) => s + (p.amount || 0), 0);
+  const monthRevenue = activeRegs.reduce((s, r) => {
+    if (!(r.paid === true || r.paid === 'TRUE') || r.status === '返金待ち') return s;
+    const dt = r.paidAt || r.appliedAt;
+    if (!dt || String(dt).slice(0, 7) !== thisYearMonth) return s;
+    return s + Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0));
+  }, 0);
 
   // 出席率: チェックイン済み / (確定 + チェックイン済み) — activeRegs は既にテスト除外済み
   const checkedIn = activeRegs.filter(r => r.status === "チェックイン済").length;
@@ -9647,8 +9653,15 @@ function PageEventAdminDetail() {
       else activeAppCount++;
       if (a.hasPendingRefund) refundPendingCount++;
       if (Number(a.totalPaid || 0) > 0) paidAppCount++;
-      totalRevenue += Number(a.totalPaid || 0);
-      totalRefunded += Number(a.totalRefunded || 0);
+    });
+    // (収益整合) 売上は登録ベースで集計し、KPIレポート/収益サマリー(バックエンド)と一致させる。
+    //   = 決済済み かつ 非キャンセル(返金待ち除く) かつ 非テスターの登録の (金額 - 返金額) 合計。
+    //   従来の application.totalPaid (決済レコード基準) は、手動で決済済みにした登録などを取りこぼし差異が出ていた。
+    _regsNT.forEach(r => {
+      if (r.status === 'キャンセル' || r.status === '返金待ち') return;
+      if (!r.paid) return;
+      totalRevenue += Number(r.amount) || 0;
+      totalRefunded += Number(r.refundAmount) || 0;
     });
     const activeRegs = _regsNT.filter(r =>
       r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち'
@@ -9673,12 +9686,14 @@ function PageEventAdminDetail() {
         if (diffs.length > 0) avgDaysFromOpen = diffs.reduce((s, v) => s + v, 0) / diffs.length;
       }
     }
-    // (3) リピーター率 — participant.participantCount >= 2 を リピーター扱い
+    // (3) リピーター率 — 参加回数(events) >= 2 を リピーター扱い
+    //   注: 参加回数列は無料イベントの確定申込時のみ加算され、有料/管理者作成は加算されないため過小になり得る。
+    //   横断KPIレポートのリピーター率は登録データから直接算出しており、そちらが信頼できる。
     let repeaterCount = 0;
     _appsNT.forEach(a => {
       if (a.isAllCancelled) return;
       const p = participantMap[a.userId];
-      if (p && Number(p.participantCount || 0) >= 2) repeaterCount++;
+      if (p && Number(p.events || 0) >= 2) repeaterCount++;
     });
     const repeaterRate = activeAppCount > 0 ? repeaterCount / activeAppCount : 0;
     // (4) チェックイン率 — チェックイン済 reg / アクティブ reg
@@ -23794,18 +23809,28 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
   const stats = React.useMemo(() => {
     const now = new Date();
     const toDate = s => { if (!s) return null; if (s instanceof Date) return s; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+    // (テスター除外) 全 KPI の母集合はテスト参加者を除く
+    const ntRegs = (registrations || []).filter(r => !r.isTest);
     // 全 reg のうち キャンセル/返金 を 除く active
-    const activeRegs = (registrations || []).filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
-    const cancelledRegs = (registrations || []).filter(r => r.status === 'キャンセル');
+    const activeRegs = ntRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+    const cancelledRegs = ntRegs.filter(r => r.status === 'キャンセル');
+    // (リピーター判定用) userId ごとの distinct eventId 数 — 参加回数列は不正確(無料/確定のみ加算)なため登録から直接算出
+    const userEventCount = {};
+    activeRegs.forEach(r => { if (r.userId) { (userEventCount[r.userId] = userEventCount[r.userId] || new Set()).add(r.eventId); } });
     // チェックイン済
     const checkedInRegs = activeRegs.filter(r => r.status === 'チェックイン済');
-    // 累積 売上
-    const paidPayments = (payments || []).filter(p => String(p.status || '') === '成功');
-    const totalPaid = paidPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const refundPayments = (payments || []).filter(p => String(p.status || '') === '成功' && (String(p.type || '') === 'refund' || String(p.type || '') === '返金'));
-    const totalRefunded = refundPayments.reduce((s, p) => s + Math.abs(Number(p.amount) || 0), 0);
-    // キャンセル率
-    const cancelRate = (registrations && registrations.length > 0) ? cancelledRegs.length / registrations.length : 0;
+    // 累積 売上 (収益整合) — 登録ベース・テスター除外で KPIレポート/収益サマリー(バックエンド)と一致させる。
+    //   従来は payments を生集計しており、テスト参加者の決済が混入して過大表示になっていた。
+    let totalPaid = 0, totalRefunded = 0;
+    (registrations || []).forEach(r => {
+      if (r.isTest) return;
+      if (r.status === 'キャンセル' || r.status === '返金待ち') return;
+      if (!r.paid) return;
+      totalPaid += Number(r.amount) || 0;
+      totalRefunded += Number(r.refundAmount) || 0;
+    });
+    // キャンセル率 (テスター除外の母集合)
+    const cancelRate = (ntRegs.length > 0) ? cancelledRegs.length / ntRegs.length : 0;
     // チェックイン率
     const checkInRate = activeRegs.length > 0 ? checkedInRegs.length / activeRegs.length : 0;
     // 平均申込日数 (= 開始 → 申込)
@@ -23820,19 +23845,16 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
       if (d >= 0) diffs.push(d);
     });
     const avgDaysFromOpen = diffs.length > 0 ? (diffs.reduce((s, v) => s + v, 0) / diffs.length) : null;
-    // リピーター率 (= participantCount >= 2 の 参加者の 比率)
+    // リピーター率 (= 2 イベント以上に参加した active ユーザーの比率。登録データから distinct event 数で判定)
     const activeParticipants = new Set(activeRegs.map(r => r.userId).filter(Boolean));
-    const partMap = {};
-    (participants || []).forEach(p => { partMap[p.id || p.userId] = p; });
     let repeaters = 0;
     activeParticipants.forEach(uid => {
-      const p = partMap[uid];
-      if (p && Number(p.participantCount || 0) >= 2) repeaters++;
+      if (userEventCount[uid] && userEventCount[uid].size >= 2) repeaters++;
     });
     const repeaterRate = activeParticipants.size > 0 ? repeaters / activeParticipants.size : 0;
     // 日次申込ペース (= 直近 30 日)
     const thirtyAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const recentReg = (registrations || []).filter(r => {
+    const recentReg = ntRegs.filter(r => {
       const ad = toDate(r.appliedAt || r.createdAt);
       return ad && ad >= thirtyAgo && r.status !== 'キャンセル';
     });
@@ -23849,7 +23871,7 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
       const after3 = new Date(pd.getTime() + 3 * 24 * 60 * 60 * 1000);
       const before3 = new Date(pd.getTime() - 3 * 24 * 60 * 60 * 1000);
       const beforeUsers = new Set(), afterUsers = new Set();
-      (registrations || []).forEach(r => {
+      ntRegs.forEach(r => {
         if (r.eventId !== p.eventId) return;
         const ad = toDate(r.appliedAt || r.createdAt);
         if (!ad || !r.userId) return;
@@ -23872,7 +23894,7 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
       const after3 = new Date(pd.getTime() + 3 * 24 * 60 * 60 * 1000);
       const before3 = new Date(pd.getTime() - 3 * 24 * 60 * 60 * 1000);
       const beforeUsers = new Set(), afterUsers = new Set();
-      (registrations || []).forEach(r => {
+      ntRegs.forEach(r => {
         if (r.eventId !== p.eventId) return;
         const ad = toDate(r.appliedAt || r.createdAt);
         if (!ad || !r.userId) return;
@@ -23887,20 +23909,20 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
     });
     // イベント別 ランキング
     const eventStats = (events || []).map(ev => {
-      const evRegs = (registrations || []).filter(r => r.eventId === ev.id);
+      const evRegs = ntRegs.filter(r => r.eventId === ev.id);
       const evActive = evRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
       const evCancelled = evRegs.filter(r => r.status === 'キャンセル');
       const evCheckedIn = evActive.filter(r => r.status === 'チェックイン済');
-      const evPay = (payments || []).filter(p => p.eventId === ev.id && String(p.status || '') === '成功');
-      const evRevenue = evPay.reduce((s, p) => {
-        const isRefund = String(p.type || '') === 'refund' || String(p.type || '') === '返金';
-        return s + (isRefund ? -Math.abs(Number(p.amount) || 0) : (Number(p.amount) || 0));
+      // (収益整合) 売上は登録ベース・テスター除外で集計 (headline 累計売上と同じ定義)
+      const evRevenue = evRegs.reduce((sum, r) => {
+        if (r.status === 'キャンセル' || r.status === '返金待ち') return sum;
+        if (!r.paid) return sum;
+        return sum + Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0));
       }, 0);
       const evUserIds = new Set(evActive.map(r => r.userId).filter(Boolean));
       let evRepeaters = 0;
       evUserIds.forEach(uid => {
-        const p = partMap[uid];
-        if (p && Number(p.participantCount || 0) >= 2) evRepeaters++;
+        if (userEventCount[uid] && userEventCount[uid].size >= 2) evRepeaters++;
       });
       return {
         event: ev,
@@ -23913,13 +23935,36 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
       };
     });
     return {
-      activeRegs, cancelledRegs, checkedInRegs,
+      activeRegs, cancelledRegs, checkedInRegs, totalRegCount: ntRegs.length,
       totalPaid, totalRefunded, netRevenue: totalPaid - totalRefunded,
       cancelRate, checkInRate, avgDaysFromOpen, repeaterRate,
       dailyPace, promoRoi, totalReach,
       channelStats, eventStats,
     };
   }, [events, registrations, participants, payments, promos]);
+
+  // (戦略ダッシュボード) イベント別・セッション別の絞り込み。 テスター除外済みを両グラフへ供給する。
+  const [stratEventId, setStratEventId] = React.useState('');
+  const [stratSessionId, setStratSessionId] = React.useState('');
+  const [stratSessions, setStratSessions] = React.useState([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    setStratSessionId('');
+    if (!stratEventId) { setStratSessions([]); return; }
+    window.fetchData('listEventSessions', { eventId: stratEventId })
+      .then(list => { if (!cancelled) setStratSessions(Array.isArray(list) ? list : []); })
+      .catch(() => { if (!cancelled) setStratSessions([]); });
+    return () => { cancelled = true; };
+  }, [stratEventId]);
+  const strategicRegs = React.useMemo(() => {
+    let rs = (registrations || []).filter(r => !r.isTest);
+    if (stratEventId) rs = rs.filter(r => r.eventId === stratEventId);
+    if (stratSessionId) rs = rs.filter(r => String(r.sessionId) === String(stratSessionId));
+    return rs;
+  }, [registrations, stratEventId, stratSessionId]);
+  const stratEvents = React.useMemo(() => (
+    stratEventId ? (events || []).filter(e => e.id === stratEventId) : (events || [])
+  ), [events, stratEventId]);
 
   const CHANNEL_COLORS = {
     'Instagram': '#E1306C', 'LINE': '#06C755', 'X': '#000000',
@@ -23979,7 +24024,7 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
           sub={`入金 ¥${Number(stats.totalPaid).toLocaleString()} / 返金 ¥${Number(stats.totalRefunded).toLocaleString()}`}/>
         <KpiCard label="キャンセル率" value={`${(stats.cancelRate * 100).toFixed(1)}%`} unit=""
           color={stats.cancelRate > 0.2 ? 'var(--jb-shouwa)' : stats.cancelRate > 0.1 ? '#F59E0B' : 'var(--jb-success)'}
-          sub={`${stats.cancelledRegs.length} / 全 ${(registrations || []).length}`}/>
+          sub={`${stats.cancelledRegs.length} / 全 ${stats.totalRegCount}`}/>
         <KpiCard label="平均申込日数" value={stats.avgDaysFromOpen != null ? stats.avgDaysFromOpen.toFixed(1) : '—'}
           unit={stats.avgDaysFromOpen != null ? '日' : ''} color="var(--jb-blue-deep)"
           sub="開始から申込までの平均"/>
@@ -24009,7 +24054,36 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
 
       {/* (Phase 17.S-fix) 期間切替トレンド — これでもか というほど */}
       <div style={sectionTitleStyle}>戦略ダッシュボード — 期間切替トレンド</div>
-      <MonthlyTrendCharts events={events} registrations={registrations} payments={payments} promos={promos}/>
+      {/* (戦略ダッシュボード) イベント別・セッション別 絞り込み */}
+      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'8px 0 14px',padding:'10px 14px',background:'var(--jb-paper)',border:'1px solid var(--jb-line)',borderRadius:8}}>
+        <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:700}}>絞り込み</span>
+        <select value={stratEventId} onChange={e => setStratEventId(e.target.value)}
+          style={{padding:'6px 12px',border:'1px solid var(--jb-line)',borderRadius:6,fontSize:13,background:'var(--jb-white,#fff)',minWidth:220,cursor:'pointer'}}>
+          <option value="">すべてのイベント</option>
+          {(events || []).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(e => (
+            <option key={e.id} value={e.id}>{e.title}{e.date ? ` (${e.date})` : ''}</option>
+          ))}
+        </select>
+        {stratEventId && stratSessions.length > 0 && (
+          <select value={stratSessionId} onChange={e => setStratSessionId(e.target.value)}
+            style={{padding:'6px 12px',border:'1px solid var(--jb-line)',borderRadius:6,fontSize:13,background:'var(--jb-white,#fff)',minWidth:200,cursor:'pointer'}}>
+            <option value="">全セッション(Day)</option>
+            {stratSessions.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map(s => (
+              <option key={s.id} value={s.id}>Day {s.order || ''}{s.date ? ` — ${s.date}` : ''}{s.name ? ` (${s.name})` : ''}</option>
+            ))}
+          </select>
+        )}
+        {(stratEventId || stratSessionId) && (
+          <button onClick={() => { setStratEventId(''); setStratSessionId(''); }}
+            style={{padding:'5px 10px',background:'var(--jb-white,#fff)',border:'1px solid var(--jb-line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--jb-ink-soft)'}}>
+            クリア
+          </button>
+        )}
+        <span style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-ghost)',marginLeft:'auto'}}>
+          {stratEventId ? (stratSessionId ? '選択セッションのみ' : '選択イベントのみ') : '全イベント'} · 対象 {strategicRegs.length} 件
+        </span>
+      </div>
+      <MonthlyTrendCharts events={stratEvents} registrations={strategicRegs} payments={payments} promos={promos}/>
 
       {/* 流入経路 全体 */}
       {refByChannel.length > 0 && (
@@ -24192,15 +24266,15 @@ function MonthlyTrendCharts({ events, registrations, payments, promos }) {
       if (r.status === 'キャンセル' || r.status === '返金' || r.status === '返金待ち') return false;
       return inBucket(toDate(r.appliedAt || r.createdAt), b);
     }).length);
-    // 2. 売上
+    // 2. 売上 — 決済済み(ステータス決済済み)の登録ベース。 決済確認日時(paidAt) のバケツに (金額-返金額) を計上。
+    //   テスター除外は props(registrations) で適用済。 payments には依存しない (= 決済済みになった時点で値が入る)。
     const revenue = buckets.map(b => {
       let total = 0;
-      (payments || []).forEach(p => {
-        if (String(p.status || '') !== '成功') return;
-        if (!inBucket(toDate(p.paidAt || p.createdAt), b)) return;
-        const type = String(p.type || '').toLowerCase();
-        if (type === 'refund' || type === '返金') total -= Math.abs(Number(p.amount) || 0);
-        else total += Number(p.amount) || 0;
+      (registrations || []).forEach(r => {
+        if (r.status === 'キャンセル' || r.status === '返金待ち') return;
+        if (!(r.paid === true || r.paid === 'TRUE')) return;
+        if (!inBucket(toDate(r.paidAt || r.appliedAt || r.createdAt), b)) return;
+        total += Math.max(0, (Number(r.amount) || 0) - (Number(r.refundAmount) || 0));
       });
       return total;
     });
@@ -24382,7 +24456,7 @@ function MonthlyTrendCharts({ events, registrations, payments, promos }) {
 
       {/* 戦略 — 深い分析 */}
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.12em',color:'var(--jb-shouwa)',fontWeight:700,marginBottom:10,marginTop:18,textTransform:'uppercase'}}>戦略 — セグメント深掘り</div>
-      <StrategicAnalytics events={events} registrations={registrations} payments={payments} promos={promos}/>
+      <StrategicAnalytics events={stratEvents} registrations={strategicRegs} payments={payments} promos={promos}/>
     </div>
   );
 }
