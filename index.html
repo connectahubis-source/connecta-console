@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-07 P3j'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-07 P3n'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1652,7 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3j</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3n</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -5673,6 +5673,10 @@ function SessionMementoRow({ sess, busy, onSave }){
   const sealDragRef = React.useRef(false);
   const sealPrevRef = React.useRef(null);
   const [prevLandscape, setPrevLandscape] = useState(false);  // (R5) この日の主写真が横長(4:3)か
+  // (R6) 記念写真公開のお知らせ News
+  const [newsId, setNewsId] = useState(sess.mementoNewsId || '');
+  const [newsStatus, setNewsStatus] = useState('');  // '' 不明 / '下書き' / '公開中'
+  const [newsBusy, setNewsBusy] = useState(false);
   // (未保存判定の基準) 保存に成功した値そのものを基準にする。 これで保存→読戻しのフォーマット/タイムゾーン差に左右されず、 保存後は確実に未保存が解消する。 初期は sess 由来。
   const [savedSnap, setSavedSnap] = useState({ url: savedUrlInit, publishAt: savedPubInit, gallery: savedGalleryInit, sealType: savedSealTypeInit, sealPos: savedSealPosInit });
   const savedGallery = savedSnap.gallery;
@@ -5871,6 +5875,37 @@ function SessionMementoRow({ sess, busy, onSave }){
         </div>
       </div>
 
+      <div style={{marginTop:6,marginBottom:10,padding:'10px 12px',borderRadius:10,background:'var(--jb-blue-50,#f5f8ff)',border:'1px solid var(--line,#e5e7eb)'}}>
+        <div style={{fontSize:12,fontWeight:700,color:'var(--brand-navy,#1a3a6b)',marginBottom:4}}>記念写真公開のお知らせ</div>
+        <div style={{fontSize:11,color:'var(--ink4,#666)',marginBottom:8}}>この開催日の参加者へ「記念写真を公開しました」をお知らせできます。 公開すると、この日にチェックインした人のみへ通知します。</div>
+        {!newsId ? (
+          <button className="btn btn-sm" disabled={newsBusy} onClick={async ()=>{
+            setNewsBusy(true);
+            try {
+              const r = await window.postData('createMementoNews', { sessionId: sess.id });
+              if (r && r.newsId) { setNewsId(r.newsId); setNewsStatus(r.status || '下書き'); if(window.toast) window.toast.success(r.reused ? 'お知らせは作成済みです' : 'お知らせの下書きを作成しました'); }
+              else if(window.toast) window.toast.error('作成に失敗しました');
+            } catch(e) { if(window.toast) window.toast.error('作成に失敗しました'); }
+            setNewsBusy(false);
+          }}>{newsBusy ? '作成中…' : 'お知らせを作成'}</button>
+        ) : newsStatus === '公開中' ? (
+          <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:'var(--ok,#15803d)',fontWeight:700}}>公開済み (チェックイン者へ通知しました)</span>
+        ) : (
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,color:'var(--ink4,#666)'}}>下書き作成済み</span>
+            <button className="btn btn-pri btn-sm" disabled={newsBusy} onClick={async ()=>{
+              if (!(await window.confirmDialog({ title: 'お知らせを公開', body: 'この開催日にチェックインした参加者のみへ通知します。 公開しますか?', confirmLabel: '公開する' }))) return;
+              setNewsBusy(true);
+              try {
+                const r = await window.postData('publishMementoNews', { newsId: newsId, sessionId: sess.id });
+                if (r && r.ok) { setNewsStatus('公開中'); if(window.toast) window.toast.success(r.alreadyPublished ? '既に公開済みです' : ('公開しました (通知 ' + (r.sent || 0) + '件)')); }
+                else if(window.toast) window.toast.error('公開に失敗しました');
+              } catch(e) { if(window.toast) window.toast.error('公開に失敗しました'); }
+              setNewsBusy(false);
+            }}>{newsBusy ? '公開中…' : '公開する (チェックイン者へ通知)'}</button>
+          </div>
+        )}
+      </div>
       <div style={{display:'flex',justifyContent:'flex-end'}}>
         <button className="btn btn-pri btn-sm" disabled={busy || galBusy || !dirty} onClick={async ()=>{
           const ok = await onSave(sess, url, publishAt, gallery, sealType, curSealPos);
