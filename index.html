@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-07 P3n'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P3o'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1652,7 +1652,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-07 P3n</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P3o</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -9704,7 +9704,7 @@ function PageEventAdminDetail() {
     if (sd) sd.setHours(0, 0, 0, 0);
     const validRegs = regs.filter(r => {
       const ad = toDate(r.appliedAt || r.createdAt);
-      return ad && (!sd || ad >= sd) && r.status !== 'キャンセル';
+      return ad && (!sd || ad >= sd) && r.status !== 'キャンセル' && !r.isTest;
     });
     const recent7 = validRegs.filter(r => {
       const ad = toDate(r.appliedAt || r.createdAt);
@@ -9817,6 +9817,9 @@ function PageEventAdminDetail() {
       };
     });
   }, [sessions, regs]);
+
+  // (テストデータ) 申込者推移グラフ用にテスト参加者を除外した reg 一覧 (1 回だけ算出)
+  const ntRegs = useMemo(() => (regs || []).filter(r => !r.isTest), [regs]);
 
   if (loading) {
     return <div style={{padding:60,textAlign:'center',color:'var(--jb-ink-soft)',fontFamily:'var(--jb-mono)',letterSpacing:'0.1em',fontSize:11}}>LOADING…</div>;
@@ -10254,7 +10257,7 @@ function PageEventAdminDetail() {
 
       {/* (Phase 17.N) 登録推移 折れ線グラフ */}
       {regs.length > 0 && (
-        <ApplicationTrendChart event={event} sessions={sessions} regs={regs} pattern={trendPattern} sessionStats={sessionStats} promos={promos}/>
+        <ApplicationTrendChart event={event} sessions={sessions} regs={ntRegs} pattern={trendPattern} sessionStats={sessionStats} promos={promos}/>
       )}
 
       {/* (Phase 17.N-10) 国別 参加者分布 — 世界地図 choropleth */}
@@ -14078,14 +14081,15 @@ function EventPayPayPanel({ event, regs, participants, onReload }) {
   const partMap = {};
   (participants || []).forEach(p => { partMap[p.id || p.userId] = p; });
 
-  // 未決済 reg の抽出
+  // 未決済 reg の抽出 (テスト参加者は除外)
   const pendingRegs = (regs || []).filter(r => {
+    if (r.isTest) return false;
     const s = String(r.status || '');
     if (s === 'キャンセル' || s === '返金' || s === '返金待ち') return false;
     return !r.paid && s !== '決済済み';
   });
-  // 決済済 reg
-  const paidRegs = (regs || []).filter(r => r.paid || r.status === '決済済み');
+  // 決済済 reg (テスト参加者は除外)
+  const paidRegs = (regs || []).filter(r => !r.isTest && (r.paid || r.status === '決済済み'));
 
   // アクティブリンク
   const activeLink = links.find(l => l.isActive);
@@ -25014,6 +25018,9 @@ function PageAnalytics(){
 
   // ========== 集計 (Phase 15.S140 Registrations ベース + S143 申込操作単位) ==========
   const activeRegs = registrations.filter(r => r.status !== "キャンセル" && r.status !== "返金" && !r.isTest);
+  // (テストデータ) 表紙の表示数もテスト参加者を除外した実数にする
+  const nonTestParticipants = participants.filter(p => !p.isTest);
+  const nonTestRegCount = registrations.filter(r => !r.isTest).length;
   const periodRegs = activeRegs.filter(r => inPeriod(r.appliedAt));
   const periodEvents = events.filter(e => inPeriod(e.date) && e.status !== "アーカイブ");
   // (S140) 期間内の決済済み Registrations
@@ -25368,12 +25375,12 @@ function PageParticipantAnalytics() {
             参加者 <span style={{color:'var(--jb-blue)'}}>分析</span>
           </h1>
           <p style={{fontFamily:'var(--jb-sans)',fontSize:13,color:'var(--jb-ink-soft)',marginTop:18,maxWidth:520,lineHeight:1.7}}>
-            {loading ? 'データを読み込んでいます…' : `登録 ${participants.length} 名、 申込 ${registrations.length} 件を分析しています。`}
+            {loading ? 'データを読み込んでいます…' : `登録 ${nonTestParticipants.length} 名、 申込 ${nonTestRegCount} 件を分析しています。`}
           </p>
         </div>
         <div className="jb-cover-meta">
           <div>{periodLabel}</div>
-          <span className="jb-cover-meta-num">{participants.length}</span>
+          <span className="jb-cover-meta-num">{nonTestParticipants.length}</span>
           <div>PARTICIPANTS</div>
         </div>
       </header>
