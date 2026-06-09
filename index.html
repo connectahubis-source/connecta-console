@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P3r'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P4z'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1538,6 +1538,53 @@ svg{display:block}
   .grid-2,.grid-3{gap:8px}
 }
 </style>
+<script>
+/* (Runtime Error Overlay) window エラー / 未処理 Promise を捕捉し、画面隅にバッジ表示。
+   React に依存しない素の JS。 ErrorBoundary からも window.__pushRuntimeError 経由で通知される。
+   本番で無効化したい場合は window.__ERR_OVERLAY_OFF__ = true をこの前に設定する。 */
+(function(){
+  try {
+    if (window.__ERR_OVERLAY_OFF__) return;
+    var errors = [], MAX = 50, badge = null, panel = null, open = false;
+    function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+    function ensureUI(){
+      if (badge || !document.body) return;
+      badge = document.createElement('div');
+      badge.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483647;background:#c0392b;color:#fff;font:700 12px/1 ui-monospace,monospace;padding:8px 12px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,.3);cursor:pointer;display:none;letter-spacing:.04em;';
+      badge.onclick = function(){ open = !open; renderPanel(); };
+      document.body.appendChild(badge);
+      panel = document.createElement('div');
+      panel.style.cssText = 'position:fixed;right:14px;bottom:54px;z-index:2147483647;background:#1b1b1f;color:#eee;font:12px/1.5 ui-monospace,monospace;width:min(440px,92vw);max-height:50vh;overflow:auto;border:1px solid #c0392b;border-radius:10px;padding:10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.45);display:none;';
+      document.body.appendChild(panel);
+    }
+    function renderBadge(){
+      ensureUI(); if (!badge) return;
+      if (!errors.length){ badge.style.display='none'; if (panel) panel.style.display='none'; return; }
+      badge.style.display='block'; badge.textContent = '\u26A0 ' + errors.length + ' エラー';
+    }
+    function renderPanel(){
+      ensureUI(); if (!panel) return;
+      panel.style.display = open ? 'block' : 'none'; if (!open) return;
+      var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b style="color:#ff6b6b;">ランタイムエラー ('+errors.length+') <span style="color:#9aa;font-weight:400;">build '+esc(window.__APP_BUILD||'?')+'</span></b><span><button id="__errc__" style="background:#333;color:#fff;border:0;border-radius:4px;padding:3px 8px;cursor:pointer;font:700 11px monospace;">クリア</button> <button id="__errx__" style="background:#333;color:#fff;border:0;border-radius:4px;padding:3px 8px;cursor:pointer;font:700 11px monospace;">\u00D7</button></span></div>';
+      html += errors.slice().reverse().map(function(e){
+        return '<div style="border-top:1px solid #333;padding:6px 0;"><div style="color:#ffd479;">'+esc(e.time)+' <span style="color:#9aa;">build '+esc(e.build||'?')+'</span></div><div style="color:#fff;white-space:pre-wrap;word-break:break-word;">'+esc(e.msg)+'</div>'+(e.where?'<div style="color:#9aa;white-space:pre-wrap;word-break:break-word;">'+esc(e.where)+'</div>':'')+'</div>';
+      }).join('');
+      panel.innerHTML = html;
+      var c = document.getElementById('__errc__'); if (c) c.onclick=function(){ errors.length=0; open=false; renderBadge(); renderPanel(); };
+      var x = document.getElementById('__errx__'); if (x) x.onclick=function(){ open=false; renderPanel(); };
+    }
+    function push(msg, where){
+      var t = new Date().toLocaleTimeString('ja-JP',{hour12:false});
+      errors.push({ time:t, build:(window.__APP_BUILD||'?'), msg:msg, where:where }); if (errors.length>MAX) errors.shift();
+      try { renderBadge(); if (open) renderPanel(); } catch(e){}
+    }
+    window.__pushRuntimeError = function(err, where){ try { push((err&&err.message)?err.message:String(err), where||(err&&err.stack)||''); } catch(e){} };
+    window.addEventListener('error', function(ev){ if (ev && ev.message) push(ev.message, (ev.filename||'')+(ev.lineno?(':'+ev.lineno):'')); });
+    window.addEventListener('unhandledrejection', function(ev){ var r = ev&&ev.reason; push('UnhandledRejection: '+((r&&r.message)?r.message:String(r)), (r&&r.stack)||''); });
+    if (document.body) ensureUI(); else document.addEventListener('DOMContentLoaded', ensureUI);
+  } catch(e){}
+})();
+</script>
 
 </head>
 <body>
@@ -1652,7 +1699,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P3r</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P4z</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -2031,6 +2078,13 @@ svg{display:block}
    *     createMessage → invalidate('listMessages')
    */
   function _autoInvalidate(action) {
+    // (リピーター精度) 参加回数 再集計後は参加者・ダッシュボード・管理設定キャッシュを無効化
+    if (action === 'admin.recomputeParticipationCounts') {
+      window.invalidateCache('listParticipants');
+      window.invalidateCache('getDashboard');
+      if (window.invalidateAdminSettings) window.invalidateAdminSettings();
+      return;
+    }
     // 'createMember' / 'updateMember' / 'deleteMember' → ['Member']
     const m = action.match(/^(create|update|delete|restore|approve|reject)([A-Z]\w+)$/);
     if (!m) return;
@@ -2173,7 +2227,37 @@ svg{display:block}
     );
   };
 
+  // 書込(POST/handleMutation)で呼ぶべき主要アクションの登録簿 (厳密警告)。 新規書込はここに追記。
+  // 注: handleAction(GET)にも登録された両対応アクション(admin.listPromos 等)は含めない。
+  window.__MUTATION_ACTIONS = window.__MUTATION_ACTIONS || [
+    'admin.recomputeParticipationCounts',
+    'admin.refundPayment', 'admin.markPaid', 'admin.markPaidBulk',
+    'admin.changePaymentMethod', 'admin.confirmPayment',
+    'admin.checkin', 'admin.uncheckin', 'admin.sendBulkMail',
+    'admin.application.refund', 'admin.application.markPaid', 'admin.application.delete',
+    'createMember', 'updateMember', 'deleteMember', 'restoreMember',
+    'createEvent', 'deleteEvent', 'cancelEvent', 'postponeEvent',
+    'createRegistration', 'createRegistrationWithCompanions', 'deleteRegistration',
+    'createParticipant', 'deleteParticipant',
+    'application.cancel', 'application.cancelRegistration', 'application.reapply',
+    'createMementoNews', 'publishMementoNews',
+    'admin.setupActionLogFlushTrigger', 'admin.removeActionLogFlushTrigger',
+    'admin.setupDailyRecomputeTrigger', 'admin.removeDailyRecomputeTrigger',
+  ];
+  // 読取専用なのにヒント正規表現へ偶発マッチするアクションの許可リスト (誤検知除外)。
+  window.__READ_ALLOWLIST = window.__READ_ALLOWLIST || [
+    'admin.getApplicationTrendPattern', 'admin.getReferralStats', 'admin.listPromos',
+    'createPaymentLink', 'sendPaymentCompleteEmail',
+  ];
+  // 書込っぽい動詞 (緩い補助判定)。 確実な登録簿で拾えない取り違えのヒント。
+  window.__MUTATION_HINT_RE = /(^|\.)(create|update|delete|restore|approve|reject|save|recompute|refund|markPaid|setup|remove|cancel|confirm|change|send|publish|reorder|postpone|checkin|uncheckin)/i;
+
   window.fetchData = async function fetchData(action, params = {}) {
+    if (window.__MUTATION_ACTIONS.indexOf(action) >= 0) {
+      console.warn('[fetchData] "' + action + '" は書込系アクションです。postData を使用してください (GET 経路では unknown action になります)。');
+    } else if (window.__READ_ALLOWLIST.indexOf(action) < 0 && window.__MUTATION_HINT_RE.test(action)) {
+      console.warn('[fetchData] "' + action + '" は書込系の可能性があります。読取専用でなければ postData を検討してください。');
+    }
     if (window.CONFIG.USE_MOCK) {
       await new Promise((r) => setTimeout(r, 50));
       const data = window.MOCK ? window.MOCK[action] : null;
@@ -2575,6 +2659,145 @@ window.Icon = Icon;
 // ==================== Dashboard ====================
 const {useState, useEffect, useRef, useMemo, Fragment} = React;
 
+// (Error Boundary) 子の例外を捕捉し、画面全体のクラッシュを防ぐ。componentDidCatch でランタイムオーバーレイにも通知。
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = { hasError:false, error:null }; }
+  static getDerivedStateFromError(error){ return { hasError:true, error:error }; }
+  componentDidCatch(error, info){
+    try {
+      if (window.__pushRuntimeError) {
+        window.__pushRuntimeError(error, (this.props.name ? ('['+this.props.name+'] ') : '') + ((info && info.componentStack) || ''));
+      }
+    } catch(e){}
+  }
+  render(){
+    if (this.state.hasError){
+      const err = this.state.error;
+      const msg = (err && err.message) ? err.message : String(err || '不明なエラー');
+      return (
+        <div style={{padding:'18px 20px',margin:'10px 0',background:'#fff5f5',border:'1px solid #f0b4b4',borderRadius:10,fontFamily:'sans-serif'}}>
+          <div style={{fontWeight:800,color:'#c0392b',fontSize:14,marginBottom:6}}>
+            {this.props.label || 'この部分の表示でエラーが発生しました'}
+          </div>
+          <div style={{fontSize:12,color:'#7a3b3b',fontFamily:'ui-monospace,monospace',wordBreak:'break-word',marginBottom:10}}>{msg}</div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={() => this.setState({hasError:false, error:null})} style={{padding:'5px 12px',background:'#c0392b',color:'#fff',border:0,borderRadius:6,fontSize:12,cursor:'pointer'}}>再試行</button>
+            <button onClick={() => window.location.reload()} style={{padding:'5px 12px',background:'#fff',color:'#c0392b',border:'1px solid #c0392b',borderRadius:6,fontSize:12,cursor:'pointer'}}>リロード</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+window.ErrorBoundary = ErrorBoundary;
+
+// (リピーター精度) 参加回数 再集計の共通処理 — 確認・呼び出し・結果通知を一元化。
+// 各コンポーネントは loading 表示と一覧再取得のみ担当する。 戻り値: 結果オブジェクト or null(キャンセル時)。
+window.recomputeParticipation = async function recomputeParticipation() {
+  if (!window.confirm('全参加者の参加回数を登録データから再集計します。\nリピーター率の精度を是正します。よろしいですか？')) return null;
+  const res = await window.postData('admin.recomputeParticipationCounts');
+  window.alert('再集計が完了しました。\n更新 ' + ((res && res.updated != null) ? res.updated : '?') + ' 名 / 全 ' + ((res && res.total != null) ? res.total : '?') + ' 名');
+  return res;
+};
+
+// (運用可視化) 管理設定(getSettings)の共通キャッシュ取得。 複数画面での重複フェッチを避ける。
+window.__adminSettingsCache = null;  // getSettings の base マップのみキャッシュ
+window.__adminSettingsCacheAt = 0;   // キャッシュ取得時刻 (ms)
+window.ADMIN_SETTINGS_TTL = 5 * 60 * 1000;  // base キャッシュの寿命 (5分)
+// withTrigger=true のときだけ実トリガー状況を毎回フレッシュ取得し、base のコピーにマージ。
+// base 自体は共有キャッシュ (TTL付)。 トリガー情報でキャッシュを汚さない (画面間の取りこぼし防止)。
+window.getAdminSettings = async function getAdminSettings(force, withTrigger) {
+  let base;
+  const fresh = window.__adminSettingsCache && (Date.now() - window.__adminSettingsCacheAt) < window.ADMIN_SETTINGS_TTL;
+  if (!force && fresh) {
+    base = window.__adminSettingsCache;
+  } else {
+    try {
+      const r = await window.fetchData('getSettings');
+      base = (r && typeof r === 'object') ? r : {};
+    } catch (e) {
+      base = window.__adminSettingsCache || {};
+    }
+    window.__adminSettingsCache = base;
+    window.__adminSettingsCacheAt = Date.now();
+    // TTL を Settings(admin_settings_ttl_ms) で上書き (次回以降に反映)
+    if (base && base.admin_settings_ttl_ms != null && base.admin_settings_ttl_ms !== '') {
+      const ttl = Number(base.admin_settings_ttl_ms);
+      if (isFinite(ttl) && ttl >= 0) window.ADMIN_SETTINGS_TTL = ttl;
+    }
+  }
+  if (!withTrigger) return base;
+  let merged = base;
+  try {
+    const t = await window.fetchData('admin.getRecomputeTriggerStatus');
+    if (t && t.ok) {
+      merged = Object.assign({}, base, {
+        recompute_trigger_enabled: t.enabled ? '1' : '0',
+        recompute_trigger_hour: (t.hour != null && t.hour !== '') ? String(t.hour) : base.recompute_trigger_hour,
+      });
+    }
+  } catch (e) {}
+  return merged;
+};
+// 設定変更後に呼ぶと、次回 getAdminSettings がサーバから base を再取得する。
+window.invalidateAdminSettings = function invalidateAdminSettings() { window.__adminSettingsCache = null; window.__adminSettingsCacheAt = 0; };
+
+// (運用可視化) 最終再集計・自動トリガー状況を構造化して返す。 ms はしきい値超で警告色にできるよう分離。
+window.RECOMPUTE_MS_WARN = 3000;  // この値(ms)超で警告色
+window.recomputeStatusInfo = function recomputeStatusInfo(settings) {
+  if (!settings) return { text: '', ms: null, msWarn: false };
+  let last = '';
+  if (settings.recompute_last_run) {
+    try {
+      const d = new Date(settings.recompute_last_run);
+      const p = (n) => String(n).padStart(2, '0');
+      last = `最終再集計: ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}` + (settings.recompute_last_updated != null ? `（更新${settings.recompute_last_updated}名）` : '');
+    } catch (e) { last = '最終再集計: ' + settings.recompute_last_run; }
+  }
+  let trig = '';
+  if (settings.recompute_trigger_enabled === '1') {
+    const h = settings.recompute_trigger_hour;
+    trig = (h != null && h !== '') ? `自動再集計: 毎日 ${h}時台` : '自動再集計: 有効（時刻はsetup関数で設定）';
+  } else if (settings.recompute_trigger_enabled === '0') {
+    trig = '自動再集計: 無効';
+  }
+  let ms = null;
+  if (settings.recompute_last_ms != null && settings.recompute_last_ms !== '') {
+    const n = Number(settings.recompute_last_ms);
+    if (isFinite(n)) ms = n;
+  }
+  // 閾値は Settings(recompute_ms_warn) を優先、無ければ既定値
+  let warnTh = window.RECOMPUTE_MS_WARN;
+  if (settings.recompute_ms_warn != null && settings.recompute_ms_warn !== '') {
+    const w = Number(settings.recompute_ms_warn);
+    if (isFinite(w) && w > 0) warnTh = w;
+  }
+  return {
+    text: [last, trig].filter(Boolean).join(' ／ '),
+    ms: ms,
+    msWarn: ms != null && ms > warnTh,
+  };
+};
+
+// (運用可視化) 状況行コンポーネント。 <RecomputeStatusLine settings={...} showMs={false} style={{...}}/> で使用可。
+window.RecomputeStatusLine = function RecomputeStatusLine(props) {
+  const p = props || {};
+  const settings = p.settings;
+  const info = window.recomputeStatusInfo ? window.recomputeStatusInfo(settings) : null;
+  if (!info || !info.text) return null;
+  const showMs = p.showMs !== false;
+  const style = Object.assign({ fontFamily: 'var(--jb-mono)', fontSize: 9, color: 'var(--jb-ink-ghost)', textAlign: 'right', lineHeight: 1.5 }, p.style || {});
+  return (
+    <div style={style}>
+      {info.text}
+      {showMs && info.ms != null && (
+        <span style={{ marginLeft: 4, color: info.msWarn ? 'var(--jb-shouwa)' : 'inherit', fontWeight: info.msWarn ? 700 : 400 }}>{info.ms}ms</span>
+      )}
+    </div>
+  );
+};
+
 // --- helpers ---
 const fmt = n => n.toLocaleString('ja-JP');
 const yen = n => '¥' + fmt(n);
@@ -2965,6 +3188,10 @@ function PageDashboard(){
   const [departments, setDepartments] = useState([]);  // (Phase 17.R-fix) 部署マスタ
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+   const [recomputing, setRecomputing] = useState(false);  // (リピーター精度) 参加回数 再集計中
+   const [settings, setSettings] = useState({});  // (運用可視化) 最終再集計など
+   const [actionLogStats, setActionLogStats] = useState(null);  // (Phase 18.B2) 行動ログ統計 (俯瞰用)
+   const [statsFetchedAt, setStatsFetchedAt] = useState(null);  // (Phase 18.B2) 統計取得時刻
 
   useEffect(() => {
     let cancelled = false;
@@ -2989,6 +3216,8 @@ function PageDashboard(){
         setMembers(Array.isArray(mems) ? mems : []);
         setPayments(Array.isArray(pays) ? pays : []);
         setDepartments(Array.isArray(depts) ? depts : []);
+        window.getAdminSettings(false, true).then(s => { if (!cancelled) setSettings(s || {}); }).catch(() => {});
+        window.fetchData("admin.getActionLogStats", {}).then(s => { if (!cancelled && s && s.ok) { setActionLogStats(s); setStatsFetchedAt(Date.now()); } }).catch(() => {});
       } catch (err) {
         if (!cancelled) setError(err.message || String(err));
       } finally {
@@ -3024,9 +3253,11 @@ function PageDashboard(){
   const attendBase = checkedIn + confirmed;
   const attendRate = attendBase > 0 ? Math.round(checkedIn / attendBase * 100) : null;
 
-  // NPS: Participants の NPS の平均 — テスト参加者を除外
-  const npsValues = participants.filter(p => p.nps && p.status !== "アーカイブ" && !p.isTest).map(p => p.nps);
+  // NPS: Participants の NPS の平均 — テスト参加者を除外、未回答(null)は除外し回答0は含める
+  const npsValues = participants.filter(p => p.nps !== null && p.nps !== undefined && p.status !== "アーカイブ" && !p.isTest).map(p => p.nps);
   const avgNps = npsValues.length > 0 ? Math.round(npsValues.reduce((s, v) => s + v, 0) / npsValues.length) : null;
+  const npsAnswered = npsValues.length;
+  const npsUnanswered = participants.filter(p => (p.nps === null || p.nps === undefined) && p.status !== "アーカイブ" && !p.isTest).length;
 
   // ========== 直近のイベント (公開中のみ、日付昇順、4件) ==========
   const upcoming = activeEvents
@@ -3076,6 +3307,23 @@ function PageDashboard(){
   // ========== チーム (在籍 Members 上位4名) ==========
   const activeMembers = members.filter(m => m.isActive).slice(0, 4);
 
+  const recomputeParticipation = async () => {
+    if (recomputing) return;
+    setRecomputing(true);
+    try {
+      const res = await window.recomputeParticipation();
+      if (res) {
+        const data = await window.fetchData('listParticipants');
+        setParticipants(Array.isArray(data) ? data : []);
+        window.getAdminSettings(true, true).then(s => setSettings(s || {})).catch(() => {});
+      }
+    } catch (e) {
+      window.alert('再集計に失敗しました: ' + (e && e.message ? e.message : e));
+    } finally {
+      setRecomputing(false);
+    }
+  };
+
   return (
     <div className="jb-page" data-page="dashboard">
 
@@ -3102,6 +3350,12 @@ function PageDashboard(){
               + イベント作成
             </a>
           )}
+          {window.canDo && window.canDo('participants.create') && (
+            <button className="jb-btn" onClick={recomputeParticipation} disabled={recomputing} style={{marginTop:8}} title="参加回数を登録データから再集計（リピーター率の是正）">
+              {recomputing ? '再集計中…' : '参加回数を再集計'}
+            </button>
+          )}
+          {(() => { const RecomputeStatusLine = window.RecomputeStatusLine; return RecomputeStatusLine ? <RecomputeStatusLine settings={settings} style={{marginTop:4,maxWidth:240}}/> : null; })()}
         </div>
       </header>
 
@@ -3110,6 +3364,12 @@ function PageDashboard(){
           <b>ERROR.</b> {error}
         </div>
       )}
+
+      {/* (Phase 18.B2) 自動処理ステータス (俯瞰・コンパクト) */}
+      {window.canDo && window.canDo('participants.create') && (() => {
+        const Panel = window.AutomationStatusPanel;
+        return Panel ? <Panel settings={settings} actionLogStats={actionLogStats} compact={true} fetchedAt={statsFetchedAt} /> : null;
+      })()}
 
       {/* ===== 章 01 — KPI ===== */}
       <section>
@@ -3147,7 +3407,7 @@ function PageDashboard(){
           <a href="#participant-analytics" className="jb-stat" style={{textDecoration:'none',color:'inherit',display:'block'}}>
             <span className="jb-stat-label">Avg NPS</span>
             <span className="jb-stat-value">{loading ? '—' : (avgNps !== null ? avgNps : '—')}</span>
-            <span className="jb-stat-meta">{npsValues.length} responses</span>
+            <span className="jb-stat-meta">回答 {npsAnswered} / 未回答 {npsUnanswered}</span>
             <span className="jb-card-link">詳細 →</span>
           </a>
         </div>
@@ -9388,6 +9648,16 @@ function PageEventAdminDetail() {
   const [surveyPublishOpen, setSurveyPublishOpen] = useState(false);  // (満足度調査) 公開モーダル
   const [camLive, setCamLive] = useState(null);          // (QRライブ) livePoll 結果
   const [camBannerDismissed, setCamBannerDismissed] = useState(false);
+  const [residBasis, setResidBasis] = useState('active');  // (在留区分) active / checkedIn 切替
+  const [residRosterDay, setResidRosterDay] = useState(null);  // (在留区分) 名簿を展開中の sessionId
+  const [residRosterFilter, setResidRosterFilter] = useState('all');  // (在留区分) all / unset
+  const [residView, setResidView] = useState(() => { try { return localStorage.getItem('connecta_resid_view') || 'table'; } catch (e) { return 'table'; } });  // (在留区分) 名簿表示: grouped / table (localStorage保持)
+  const [tableSort, setTableSort] = useState(() => { try { const v = JSON.parse(localStorage.getItem('connecta_resid_sort') || 'null'); return v && v.key ? v : { key: 'cat', dir: 'asc' }; } catch (e) { return { key: 'cat', dir: 'asc' }; } });  // (名簿表) 列ソート (localStorage保持)
+  const [showNationality, setShowNationality] = useState(() => { try { return localStorage.getItem('connecta_resid_showNat') === '1'; } catch (e) { return false; } });  // (名簿表) 国籍列の表示 (localStorage保持)
+  const [banFields, setBanFields] = useState({ place: '', items: '', staff: '' });  // (班票) 印刷時の追記欄(保存はしない)
+  const [groupCount, setGroupCount] = useState(4);  // (グループ分け) グループ数
+  const [groupStrategy, setGroupStrategy] = useState('residency');  // random / residency / jlpt
+  const [groupResult, setGroupResult] = useState(null);  // { sessionId, strategy, basis, groups:[[person]] }
   const [trendPattern, setTrendPattern] = useState(null);  // (Phase 17.N-2) 過去パターン
   const [promos, setPromos] = useState([]);  // (Phase 17.O) 広報イベント
   const [promoModal, setPromoModal] = useState(null);  // (Phase 17.O) { mode, promo? }
@@ -9817,6 +10087,34 @@ function PageEventAdminDetail() {
 
   // Day 別 申込数集計 (multi 用)
   const sessionStats = useMemo(() => {
+    // (在留区分) reg リストから 在留外国人/日本人/その他/未設定 を集計。 在留外国人は JLPT/日本語学校 も。
+    const residBreakdown = (list) => {
+      let foreign = 0, japanese = 0, otherExplicit = 0, unset = 0, jpSchool = 0;
+      const jlpt = { N1:0, N2:0, N3:0, N4:0, N5:0, none:0 };
+      const foreignPeople = [], japanesePeople = [], otherPeople = [];
+      list.forEach(r => {
+        const p = participantMap[r.userId];
+        const rs = p ? (p.residencyStatus || '') : '';
+        const nm = r.userName || (p && p.name) || (p && p.nickname) || r.userId || '(名前なし)';
+        if (rs === '在留外国人') {
+          foreign++;
+          const lv = p && p.jlpt ? p.jlpt : 'none';
+          if (jlpt[lv] !== undefined) jlpt[lv]++; else jlpt.none++;
+          if (p && p.jpSchool) jpSchool++;
+          foreignPeople.push({ userId: r.userId, name: nm, cat: 'foreign', jlpt: (jlpt[lv] !== undefined ? lv : 'none'), jpSchool: !!(p && p.jpSchool), nationality: (p && p.nationality) || '', status: r.status || '' });
+        } else if (rs === '日本人') {
+          japanese++;
+          japanesePeople.push({ userId: r.userId, name: nm, cat: 'japanese', jlpt: '', jpSchool: false, nationality: '', status: r.status || '' });
+        } else if (rs === 'その他') {
+          otherExplicit++;
+          otherPeople.push({ userId: r.userId, name: nm, cat: 'other', unset: false, jlpt: '', jpSchool: false, nationality: (p && p.nationality) || '', status: r.status || '' });
+        } else {
+          unset++;
+          otherPeople.push({ userId: r.userId, name: nm, cat: 'other', unset: true, jlpt: '', jpSchool: false, nationality: '', status: r.status || '' });
+        }
+      });
+      return { foreign, japanese, other: otherExplicit + unset, otherExplicit, unset, jlpt, jpSchool, foreignPeople, japanesePeople, otherPeople };
+    };
     return sessions.map(s => {
       const sRegs = regs.filter(r => r.sessionId === s.id && !r.isTest);
       const active = sRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
@@ -9829,9 +10127,11 @@ function PageEventAdminDetail() {
         paid: paid.length,
         checkedIn: checkedIn.length,
         capacity: Number(s.capacity) || 0,
+        resid: residBreakdown(active),
+        residCI: residBreakdown(checkedIn),
       };
     });
-  }, [sessions, regs]);
+  }, [sessions, regs, participantMap]);
 
   // (テストデータ) 申込者推移グラフ用にテスト参加者を除外した reg 一覧 (1 回だけ算出)
   const ntRegs = useMemo(() => (regs || []).filter(r => !r.isTest), [regs]);
@@ -10218,6 +10518,352 @@ function PageEventAdminDetail() {
             ))}
           </div>
         )}
+
+        {/* (在留区分) Day別 在留外国人 × 日本人 の比率と実数 (= multi イベント時) */}
+        {event.format === 'multi' && sessions.length > 0 && (() => {
+          const basisKey = residBasis === 'checkedIn' ? 'residCI' : 'resid';
+          const basisLabel = residBasis === 'checkedIn' ? 'チェックイン済' : '申込';
+          // 全 Day 合算
+          const sum = { foreign:0, japanese:0, other:0, unset:0, jpSchool:0, jlpt:{N1:0,N2:0,N3:0,N4:0,N5:0,none:0} };
+          sessionStats.forEach(st => {
+            const b = st[basisKey];
+            sum.foreign += b.foreign; sum.japanese += b.japanese; sum.other += b.other; sum.unset += b.unset; sum.jpSchool += b.jpSchool;
+            ['N1','N2','N3','N4','N5','none'].forEach(k => { sum.jlpt[k] += b.jlpt[k]; });
+          });
+          const sumDenom = sum.foreign + sum.japanese + sum.other;
+          const sp = (n) => sumDenom > 0 ? Math.round((n / sumDenom) * 1000) / 10 : 0;
+          const jlptLine = (jlpt, foreign) => {
+            if (foreign <= 0) return null;
+            const parts = ['N1','N2','N3','N4','N5'].filter(k => jlpt[k] > 0).map(k => `${k} ${jlpt[k]}`);
+            if (jlpt.none > 0) parts.push(`なし ${jlpt.none}`);
+            return parts.join(' / ');
+          };
+          return (
+          <div style={{
+            marginTop:14,
+            padding:'14px 16px',
+            background:'var(--jb-paper)',
+            border:'1px solid var(--jb-line)',
+            borderRadius:6,
+          }}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10,flexWrap:'wrap'}}>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:9,letterSpacing:'0.14em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600}}>Day別 在留区分</div>
+              {/* 母数 切替トグル */}
+              <div style={{display:'inline-flex',border:'1px solid var(--jb-line)',borderRadius:6,overflow:'hidden'}}>
+                {[{k:'active',l:'申込ベース'},{k:'checkedIn',l:'チェックイン済ベース'}].map(opt => (
+                  <button key={opt.k} onClick={() => setResidBasis(opt.k)} style={{
+                    padding:'4px 10px',fontSize:11,border:0,cursor:'pointer',fontFamily:'var(--jb-sans)',
+                    background: residBasis === opt.k ? 'var(--jb-blue)' : 'transparent',
+                    color: residBasis === opt.k ? '#fff' : 'var(--jb-ink-soft)',
+                  }}>{opt.l}</button>
+                ))}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:12,fontFamily:'var(--jb-sans)',fontSize:11,color:'var(--jb-ink-soft)',marginLeft:'auto',flexWrap:'wrap'}}>
+                <span style={{display:'inline-flex',alignItems:'center',gap:4}}><i style={{width:10,height:10,borderRadius:2,background:'var(--jb-blue)',display:'inline-block'}}/>在留外国人</span>
+                <span style={{display:'inline-flex',alignItems:'center',gap:4}}><i style={{width:10,height:10,borderRadius:2,background:'var(--jb-shouwa)',display:'inline-block'}}/>日本人</span>
+                <span style={{display:'inline-flex',alignItems:'center',gap:4}}><i style={{width:10,height:10,borderRadius:2,background:'#9CA8B2',display:'inline-block'}}/>その他/未設定</span>
+              </div>
+            </div>
+
+            {/* 全 Day 合算 サマリー */}
+            <div style={{padding:'8px 12px',background:'var(--jb-white,#fff)',border:'1px solid var(--jb-line)',borderRadius:6,marginBottom:12}}>
+              <div style={{fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink)',fontWeight:700}}>
+                全Day合算（{basisLabel}）: 在留外国人 {sum.foreign}名 ({sp(sum.foreign)}%) / 日本人 {sum.japanese}名 ({sp(sum.japanese)}%){sum.other > 0 ? ` / その他・未設定 ${sum.other}名 (${sp(sum.other)}%)` : ''} · 計 {sumDenom}名
+              </div>
+              {sum.foreign > 0 && jlptLine(sum.jlpt, sum.foreign) && (
+                <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',marginTop:4}}>
+                  在留外国人のうち JLPT: {jlptLine(sum.jlpt, sum.foreign)} · 日本語学校 {sum.jpSchool}名
+                </div>
+              )}
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              {sessionStats.map((stat, i) => {
+                const b = stat[basisKey];
+                const denom = b.foreign + b.japanese + b.other;
+                const pct = (n) => denom > 0 ? Math.round((n / denom) * 1000) / 10 : 0;
+                const fPct = pct(b.foreign), jPct = pct(b.japanese), oPct = pct(b.other);
+                const unsetHigh = denom > 0 && b.unset >= 2 && (b.unset / denom) >= 0.2;
+                const jl = jlptLine(b.jlpt, b.foreign);
+                return (
+                  <div key={stat.session.id}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:5,flexWrap:'wrap',gap:6}}>
+                      <span style={{fontFamily:'var(--jb-display)',fontSize:13,fontWeight:700,color:'var(--jb-ink)'}}>
+                        Day {stat.session.order || (i+1)}{stat.session.date ? ` — ${stat.session.date}` : ''}
+                      </span>
+                      <span style={{fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)'}}>
+                        在留外国人 {b.foreign}名 ({fPct}%) / 日本人 {b.japanese}名 ({jPct}%){b.other > 0 ? ` / その他・未設定 ${b.other}名 (${oPct}%)` : ''} · 計 {denom}名
+                      </span>
+                    </div>
+                    {denom > 0 ? (
+                      <div style={{display:'flex',height:16,borderRadius:4,overflow:'hidden',background:'var(--jb-line)'}}>
+                        {b.foreign > 0 && <div title={`在留外国人 ${b.foreign}名 (${fPct}%)`} style={{width:`${fPct}%`,background:'var(--jb-blue)'}}/>}
+                        {b.japanese > 0 && <div title={`日本人 ${b.japanese}名 (${jPct}%)`} style={{width:`${jPct}%`,background:'var(--jb-shouwa)'}}/>}
+                        {b.other > 0 && <div title={`その他/未設定 ${b.other}名 (${oPct}%)`} style={{width:`${oPct}%`,background:'#9CA8B2'}}/>}
+                      </div>
+                    ) : (
+                      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-ghost)'}}>{basisLabel}なし</div>
+                    )}
+                    {jl && (
+                      <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',marginTop:4}}>
+                        在留外国人のうち JLPT: {jl} · 日本語学校 {b.jpSchool}名
+                      </div>
+                    )}
+                    {unsetHigh && (
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:5,padding:'5px 9px',background:'#fff6e5',border:'1px solid #f0c674',borderRadius:5,flexWrap:'wrap'}}>
+                        <span style={{fontFamily:'var(--jb-sans)',fontSize:11,color:'#8a5d00'}}>
+                          ⚠ 在留ステータス未設定 {b.unset}名 ({pct(b.unset)}%) — 比率の精度が下がります
+                        </span>
+                        <button onClick={() => { window.location.hash = 'participants'; }} style={{
+                          padding:'3px 9px',background:'#fff',border:'1px solid #f0c674',borderRadius:4,fontSize:11,cursor:'pointer',color:'#8a5d00',fontFamily:'var(--jb-sans)',
+                        }}>参加者管理で補完</button>
+                      </div>
+                    )}
+                    {denom > 0 && (
+                      <button onClick={() => setResidRosterDay(residRosterDay === stat.session.id ? null : stat.session.id)} style={{
+                        marginTop:6,padding:'3px 9px',background:'transparent',border:'1px solid var(--jb-line)',borderRadius:4,
+                        fontSize:11,cursor:'pointer',color:'var(--jb-ink-soft)',fontFamily:'var(--jb-sans)',
+                      }}>
+                        {residRosterDay === stat.session.id ? '名簿・グループ分けを閉じる ▲' : '名簿・グループ分け（氏名）▼'}
+                      </button>
+                    )}
+                    {residRosterDay === stat.session.id && (() => {
+                      const allPeople = [].concat(b.foreignPeople, b.japanesePeople, b.otherPeople);
+                      const shown = residRosterFilter === 'unset' ? allPeople.filter(p => p.cat === 'other' && p.unset) : allPeople;
+                      const openDetail = (uid) => { const app = (apps || []).find(a => a.userId === uid); if (app) setDetailModalApp(app); };
+                      const Chip = ({ pp, extra, danger }) => (
+                        <button onClick={() => openDetail(pp.userId)} title="クリックで参加者詳細" style={{
+                          display:'inline-block',padding:'2px 7px',margin:'2px 4px 2px 0',
+                          background: danger ? '#fff6e5' : 'var(--jb-white,#fff)',
+                          border:'1px solid ' + (danger ? '#f0c674' : 'var(--jb-line)'),borderRadius:4,fontSize:11,
+                          fontFamily:'var(--jb-sans)',color: danger ? '#8a5d00' : 'var(--jb-ink)',cursor:'pointer',
+                        }}>{pp.name}{extra}</button>
+                      );
+                      const catLbl = (c, unset) => c === 'foreign' ? '在留外国人' : c === 'japanese' ? '日本人' : (unset ? '未設定' : 'その他');
+                      const q = (x) => `"${String(x == null ? '' : x).replace(/"/g, '""')}"`;
+                      const copyText = (txt, msg) => {
+                        try { navigator.clipboard.writeText(txt).then(() => alert(msg), () => alert('コピーに失敗しました')); }
+                        catch (e) { try { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); alert(msg); } catch (e2) { alert('コピーに失敗しました'); } }
+                      };
+                      const copyRosterCsv = () => {
+                        const head = '氏名,在留区分,JLPT,日本語学校,国籍';
+                        const rows = shown.map(p => [p.name, catLbl(p.cat, p.unset), p.cat === 'foreign' ? (p.jlpt === 'none' ? 'なし' : p.jlpt) : '', p.cat === 'foreign' ? (p.jpSchool ? '通学' : '') : '', p.nationality || ''].map(q).join(','));
+                        copyText([head].concat(rows).join('\n'), '名簿をCSVでコピーしました (' + shown.length + '名)');
+                      };
+                      const makeGroups = (people, count, strategy) => {
+                        const n = Math.max(2, Math.min(count, Math.max(2, people.length)));
+                        const groups = Array.from({ length: n }, () => []);
+                        const shuffle = (arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
+                        if (strategy === 'random') {
+                          shuffle(people).forEach((p, i) => groups[i % n].push(p));
+                        } else if (strategy === 'jlpt') {
+                          const ord = { N1:0, N2:1, N3:2, N4:3, N5:4, none:5 };
+                          shuffle(people.filter(p => p.cat === 'foreign')).sort((a, b2) => (ord[a.jlpt] == null ? 9 : ord[a.jlpt]) - (ord[b2.jlpt] == null ? 9 : ord[b2.jlpt])).forEach((p, i) => groups[i % n].push(p));
+                          shuffle(people.filter(p => p.cat !== 'foreign')).forEach((p, i) => groups[i % n].push(p));
+                        } else {
+                          ['foreign', 'japanese', 'other'].forEach(cat => { shuffle(people.filter(p => p.cat === cat)).forEach((p, i) => groups[i % n].push(p)); });
+                        }
+                        return groups;
+                      };
+                      const genGroups = () => { setGroupResult({ sessionId: stat.session.id, groups: makeGroups(allPeople, groupCount, groupStrategy) }); };
+                      const copyGroupsCsv = () => {
+                        if (!groupResult) return;
+                        const head = 'グループ,氏名,在留区分,JLPT,日本語学校';
+                        const rows = [];
+                        groupResult.groups.forEach((g, gi) => g.forEach(p => rows.push(['グループ' + (gi + 1), p.name, catLbl(p.cat, p.unset), p.cat === 'foreign' ? (p.jlpt === 'none' ? 'なし' : p.jlpt) : '', p.cat === 'foreign' ? (p.jpSchool ? '通学' : '') : ''].map(q).join(','))));
+                        copyText([head].concat(rows).join('\n'), 'グループ分けをCSVでコピーしました');
+                      };
+                      const byJlpt = { N1:[], N2:[], N3:[], N4:[], N5:[], none:[] };
+                      b.foreignPeople.forEach(pp => { (byJlpt[pp.jlpt] || byJlpt.none).push(pp); });
+                      const jlptOrder = ['N1','N2','N3','N4','N5','none'];
+                      const jlptLabel = { N1:'N1', N2:'N2', N3:'N3', N4:'N4', N5:'N5', none:'JLPTなし' };
+                      const showGroups = groupResult && groupResult.sessionId === stat.session.id;
+                      const catColor = (c) => c === 'foreign' ? 'var(--jb-blue)' : c === 'japanese' ? 'var(--jb-shouwa)' : '#9CA8B2';
+                      const sortPeople = (arr) => arr.slice().sort((a, b2) => { const ord = (x) => x.cat === 'foreign' ? 0 : x.cat === 'japanese' ? 1 : 2; return ord(a) - ord(b2) || String(a.name).localeCompare(String(b2.name), 'ja'); });
+                      const STATUS_ORDER = ['チェックイン済','確定','決済済み','申込済み','キャンセル','返金待ち','返金'];
+                      const sortCmp = (a, b2) => {
+                        const k = tableSort.key; const dir = tableSort.dir === 'asc' ? 1 : -1;
+                        let av, bv;
+                        if (k === 'jlpt') { const o = { N1:0, N2:1, N3:2, N4:3, N5:4, none:5 }; av = a.cat === 'foreign' ? (o[a.jlpt] == null ? 5 : o[a.jlpt]) : 9; bv = b2.cat === 'foreign' ? (o[b2.jlpt] == null ? 5 : o[b2.jlpt]) : 9; }
+                        else if (k === 'cat') { const o = { foreign:0, japanese:1, other:2 }; av = o[a.cat]; bv = o[b2.cat]; }
+                        else if (k === 'jpSchool') { av = a.jpSchool ? 0 : 1; bv = b2.jpSchool ? 0 : 1; }
+                        else if (k === 'status') { av = STATUS_ORDER.indexOf(a.status); bv = STATUS_ORDER.indexOf(b2.status); if (av < 0) av = 99; if (bv < 0) bv = 99; }
+                        else { return dir * (String(a[k] || '').localeCompare(String(b2[k] || ''), 'ja')) || String(a.name).localeCompare(String(b2.name), 'ja'); }
+                        return dir * ((av < bv ? -1 : av > bv ? 1 : 0)) || String(a.name).localeCompare(String(b2.name), 'ja');
+                      };
+                      const onSort = (k) => setTableSort(s => { const ns = s.key === k ? { key: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }; try { localStorage.setItem('connecta_resid_sort', JSON.stringify(ns)); } catch (e) {} return ns; });
+                      const SORT_LABEL = { name:'名前', cat:'在留区分', jlpt:'JLPT', jpSchool:'日本語学校', nationality:'国籍', status:'状態' };
+                      const tableList = sortPeople(shown);
+                      const PeopleTable = ({ list, compact, sortable, showNat }) => {
+                        const rows = sortable ? list.slice().sort(sortCmp) : list;
+                        const arrow = (k) => sortable && tableSort.key === k ? (tableSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+                        const th = (k, label) => (
+                          <th onClick={sortable ? () => onSort(k) : undefined} style={{padding:'5px 9px',fontWeight:600,fontSize:11,cursor: sortable ? 'pointer' : 'default',whiteSpace:'nowrap',userSelect:'none'}}>{label}{arrow(k)}</th>
+                        );
+                        return (
+                          <div style={{border:'1px solid var(--jb-line)',borderRadius:6,overflow:'auto'}}>
+                            <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'var(--jb-sans)',fontSize: compact ? 11 : 12}}>
+                              <thead>
+                                <tr style={{background:'var(--jb-paper)',color:'var(--jb-ink-soft)',textAlign:'left'}}>
+                                  {th('name', '名前')}
+                                  {th('cat', '在留区分')}
+                                  {th('jlpt', 'JLPT')}
+                                  {th('jpSchool', '日本語学校')}
+                                  {showNat && th('nationality', '国籍')}
+                                  {!compact && th('status', '状態')}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map((m, idx) => (
+                                  <tr key={idx} onClick={() => openDetail(m.userId)} title="クリックで参加者詳細" style={{borderTop:'1px solid var(--jb-line)',cursor:'pointer',background: m.unset ? '#fff6e5' : 'transparent'}}>
+                                    <td style={{padding:'5px 9px',color: m.unset ? '#8a5d00' : 'var(--jb-ink)',fontWeight:600}}>{m.name}</td>
+                                    <td style={{padding:'5px 9px'}}><span style={{display:'inline-flex',alignItems:'center',gap:5,color:'var(--jb-ink-soft)'}}><i style={{width:8,height:8,borderRadius:2,background:catColor(m.cat),display:'inline-block'}}/>{catLbl(m.cat, m.unset)}</span></td>
+                                    <td style={{padding:'5px 9px',color:'var(--jb-ink-soft)',fontFamily:'var(--jb-mono)'}}>{m.cat === 'foreign' ? (m.jlpt === 'none' ? 'なし' : m.jlpt) : '—'}</td>
+                                    <td style={{padding:'5px 9px',color:'var(--jb-ink-soft)'}}>{m.cat === 'foreign' ? (m.jpSchool ? '通学' : '—') : '—'}</td>
+                                    {showNat && <td style={{padding:'5px 9px',color:'var(--jb-ink-soft)'}}>{m.nationality || '—'}</td>}
+                                    {!compact && <td style={{padding:'5px 9px',color:'var(--jb-ink-soft)',fontFamily:'var(--jb-mono)',fontSize:11}}>{m.status || ''}</td>}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      };
+                      // (班票) グループを印刷用レイアウトで別ウィンドウに開く
+                      const printGroups = () => {
+                        if (!groupResult) return;
+                        const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+                        const dayTitle = `Day ${stat.session.order || ''}${stat.session.date ? ' ' + stat.session.date : ''}`;
+                        const metaItems = [['集合場所', banFields.place], ['持ち物', banFields.items], ['担当スタッフ', banFields.staff]].filter(x => x[1] && String(x[1]).trim());
+                        const metaHtml = metaItems.length ? `<div class="meta">${metaItems.map(x => `<div><b>${esc(x[0])}</b>：${esc(x[1])}</div>`).join('')}</div>` : '';
+                        const now = new Date();
+                        const pad = (n) => String(n).padStart(2, '0');
+                        const printedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+                        const serial = `${esc(event.id || 'EV')}-D${stat.session.order || ''}-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
+                        const cards = groupResult.groups.map((g, gi) => {
+                          const gf = g.filter(p => p.cat === 'foreign').length, gj = g.filter(p => p.cat === 'japanese').length, go = g.length - gf - gj;
+                          const trs = sortPeople(g).map(p => `<tr><td>${esc(p.name)}</td><td>${p.cat === 'foreign' ? '在留外国人' : p.cat === 'japanese' ? '日本人' : (p.unset ? '未設定' : 'その他')}</td><td>${p.cat === 'foreign' ? (p.jlpt === 'none' ? 'なし' : esc(p.jlpt)) : '—'}</td><td>${p.cat === 'foreign' ? (p.jpSchool ? '通学' : '—') : '—'}</td></tr>`).join('');
+                          return `<div class="card"><div class="ch"><span class="gn">グループ${gi + 1}</span><span class="gm">外${gf} / 日${gj}${go > 0 ? ' / 他' + go : ''} · 計${g.length}名</span></div><table><thead><tr><th>名前</th><th>在留区分</th><th>JLPT</th><th>日本語学校</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+                        }).join('');
+                        const html = `<!doctype html><html><head><meta charset="utf-8"><title>班票 ${esc(event.title || '')} ${esc(dayTitle)}</title><style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif;margin:18px;color:#1a1a1a}h1{font-size:18px;margin:0 0 2px}.sub{color:#666;font-size:12px;margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.card{border:1px solid #bbb;border-radius:8px;padding:10px 12px;break-inside:avoid}.ch{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;border-bottom:2px solid #333;padding-bottom:4px}.gn{font-size:15px;font-weight:800}.gm{font-size:11px;color:#555;font-family:monospace}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:4px 6px;border-bottom:1px solid #e0e0e0}th{font-size:10px;color:#666;background:#f5f5f5}.meta{border:1px solid #ddd;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;line-height:1.7;background:#fafafa}.meta b{display:inline-block;min-width:84px}.ft{margin-top:16px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#888;display:flex;justify-content:space-between;font-family:monospace}@media print{body{margin:8mm}.grid{gap:8px}@page{margin:10mm}}</style></head><body><h1>班票 — ${esc(event.title || '')}</h1><div class="sub">${esc(dayTitle)} ／ ${basisLabel}ベース ／ ${groupResult.groups.length}グループ ／ 計${allPeople.length}名</div>${metaHtml}<div class="grid">${cards}</div><div class="ft"><span>発行番号: ${serial}</span><span>印刷日時: ${printedAt}</span></div><script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>`;
+                        const w = window.open('', '_blank');
+                        if (!w) { alert('ポップアップがブロックされました。ブラウザの設定で許可してください。'); return; }
+                        w.document.open(); w.document.write(html); w.document.close();
+                      };
+                      return (
+                        <div style={{marginTop:8,padding:'10px 12px',background:'var(--jb-white,#fff)',border:'1px solid var(--jb-line)',borderRadius:6}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+                            <div style={{display:'inline-flex',border:'1px solid var(--jb-line)',borderRadius:6,overflow:'hidden'}}>
+                              {[{k:'all',l:'全員'},{k:'unset',l:'未設定のみ'}].map(opt => (
+                                <button key={opt.k} onClick={() => setResidRosterFilter(opt.k)} style={{padding:'3px 9px',fontSize:11,border:0,cursor:'pointer',fontFamily:'var(--jb-sans)',background: residRosterFilter === opt.k ? 'var(--jb-blue)' : 'transparent',color: residRosterFilter === opt.k ? '#fff' : 'var(--jb-ink-soft)'}}>{opt.l}</button>
+                              ))}
+                            </div>
+                            <button onClick={copyRosterCsv} style={{padding:'3px 9px',background:'transparent',border:'1px solid var(--jb-line)',borderRadius:4,fontSize:11,cursor:'pointer',color:'var(--jb-ink-soft)',fontFamily:'var(--jb-sans)'}}>名簿をCSVコピー</button>
+                            <div style={{display:'inline-flex',border:'1px solid var(--jb-line)',borderRadius:6,overflow:'hidden'}}>
+                              {[{k:'table',l:'表'},{k:'grouped',l:'区分・JLPT別'}].map(opt => (
+                                <button key={opt.k} onClick={() => { setResidView(opt.k); try { localStorage.setItem('connecta_resid_view', opt.k); } catch (e) {} }} style={{padding:'3px 9px',fontSize:11,border:0,cursor:'pointer',fontFamily:'var(--jb-sans)',background: residView === opt.k ? 'var(--jb-ink)' : 'transparent',color: residView === opt.k ? '#fff' : 'var(--jb-ink-soft)'}}>{opt.l}</button>
+                              ))}
+                            </div>
+                            {residView === 'table' && (
+                              <button onClick={() => setShowNationality(v => { const nv = !v; try { localStorage.setItem('connecta_resid_showNat', nv ? '1' : '0'); } catch (e) {} return nv; })} style={{padding:'3px 9px',background: showNationality ? 'var(--jb-blue)' : 'transparent',border:'1px solid ' + (showNationality ? 'var(--jb-blue)' : 'var(--jb-line)'),borderRadius:4,fontSize:11,cursor:'pointer',color: showNationality ? '#fff' : 'var(--jb-ink-soft)',fontFamily:'var(--jb-sans)'}}>国籍{showNationality ? '：表示中' : 'を表示'}</button>
+                            )}
+                            <span style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-ghost)'}}>名前クリックで参加者詳細</span>
+                          </div>
+                          {residView === 'table' ? (
+                            <>
+                              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',marginBottom:5}}>
+                                並び: {SORT_LABEL[tableSort.key] || tableSort.key} {tableSort.dir === 'asc' ? '昇順' : '降順'} ・ ヘッダークリックで変更
+                              </div>
+                              {tableList.length > 0 ? <PeopleTable list={tableList} sortable={true} showNat={showNationality}/> : <div style={{fontSize:11,color:'var(--jb-ink-ghost)'}}>該当なし</div>}
+                            </>
+                          ) : residRosterFilter === 'unset' ? (
+                            <div>
+                              <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'#8a5d00',fontWeight:700,marginBottom:4}}>在留ステータス未設定 {shown.length}名</div>
+                              {shown.length > 0 ? <div>{shown.map((pp, idx) => <Chip key={'u' + idx} pp={pp} extra="" danger={true}/>)}</div> : <div style={{fontSize:11,color:'var(--jb-ink-ghost)'}}>未設定者なし</div>}
+                            </div>
+                          ) : (
+                            <>
+                              {b.foreign > 0 && (
+                                <div style={{marginBottom:8}}>
+                                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-blue)',fontWeight:700,marginBottom:4}}>在留外国人 {b.foreign}名（🏫=日本語学校）</div>
+                                  {jlptOrder.filter(k => byJlpt[k].length > 0).map(k => (
+                                    <div key={k} style={{marginBottom:3}}>
+                                      <span style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-ink-soft)',marginRight:6}}>{jlptLabel[k]} ({byJlpt[k].length})</span>
+                                      {byJlpt[k].map((pp, idx) => <Chip key={k + idx} pp={pp} extra={`${pp.jpSchool ? ' 🏫' : ''}${pp.nationality ? ` · ${pp.nationality}` : ''}`}/>)}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {b.japanese > 0 && (
+                                <div style={{marginBottom:8}}>
+                                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'var(--jb-shouwa)',fontWeight:700,marginBottom:4}}>日本人 {b.japanese}名</div>
+                                  <div>{b.japanesePeople.map((pp, idx) => <Chip key={'j' + idx} pp={pp} extra=""/>)}</div>
+                                </div>
+                              )}
+                              {b.other > 0 && (
+                                <div>
+                                  <div style={{fontFamily:'var(--jb-mono)',fontSize:10,color:'#7a7f87',fontWeight:700,marginBottom:4}}>その他・未設定 {b.other}名</div>
+                                  <div>{b.otherPeople.map((pp, idx) => <Chip key={'o' + idx} pp={pp} extra={pp.unset ? ' · 未設定' : ''} danger={pp.unset}/>)}</div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          <div style={{marginTop:12,paddingTop:10,borderTop:'1px dashed var(--jb-line)'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:8}}>
+                              <span style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--jb-ink-soft)',fontWeight:700}}>グループ分け</span>
+                              <label style={{fontSize:11,color:'var(--jb-ink-soft)',display:'inline-flex',alignItems:'center',gap:4}}>
+                                グループ数
+                                <input type="number" min="2" value={groupCount} onChange={e => setGroupCount(Math.max(2, Number(e.target.value) || 2))} style={{width:54,padding:'3px 6px',border:'1px solid var(--jb-line)',borderRadius:4,fontSize:12}}/>
+                              </label>
+                              <select value={groupStrategy} onChange={e => setGroupStrategy(e.target.value)} style={{padding:'3px 8px',border:'1px solid var(--jb-line)',borderRadius:4,fontSize:12,cursor:'pointer'}}>
+                                <option value="residency">在留区分バランス（外国人と日本人を均等）</option>
+                                <option value="random">ランダム</option>
+                                <option value="jlpt">JLPTレベルを分散</option>
+                              </select>
+                              <button onClick={genGroups} style={{padding:'4px 12px',background:'var(--jb-blue)',color:'#fff',border:0,borderRadius:5,fontSize:12,cursor:'pointer',fontWeight:700}}>グループ作成</button>
+                              {showGroups && <button onClick={copyGroupsCsv} style={{padding:'4px 10px',background:'transparent',border:'1px solid var(--jb-line)',borderRadius:5,fontSize:11,cursor:'pointer',color:'var(--jb-ink-soft)'}}>グループをCSVコピー</button>}
+                              {showGroups && <button onClick={printGroups} style={{padding:'4px 10px',background:'transparent',border:'1px solid var(--jb-line)',borderRadius:5,fontSize:11,cursor:'pointer',color:'var(--jb-ink-soft)'}}>班票を印刷</button>}
+                            </div>
+                            {showGroups && (
+                              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                                {[{k:'place',l:'集合場所',w:170},{k:'items',l:'持ち物',w:170},{k:'staff',l:'担当スタッフ',w:170}].map(f => (
+                                  <input key={f.k} value={banFields[f.k]} onChange={e => { const v = e.target.value; setBanFields(s => ({ ...s, [f.k]: v })); }} placeholder={f.l + '（班票に印刷）'} style={{width:f.w,padding:'4px 8px',border:'1px solid var(--jb-line)',borderRadius:4,fontSize:11,fontFamily:'var(--jb-sans)'}}/>
+                                ))}
+                              </div>
+                            )}
+                            {showGroups && (
+                              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:10}}>
+                                {groupResult.groups.map((g, gi) => {
+                                  const gf = g.filter(p => p.cat === 'foreign').length, gj = g.filter(p => p.cat === 'japanese').length, go = g.length - gf - gj;
+                                  return (
+                                    <div key={gi}>
+                                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:5}}>
+                                        <span style={{fontFamily:'var(--jb-display)',fontSize:12,fontWeight:700}}>グループ{gi + 1}</span>
+                                        <span style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-soft)'}}>外{gf}/日{gj}{go > 0 ? `/他${go}` : ''} · {g.length}名</span>
+                                      </div>
+                                      <PeopleTable list={sortPeople(g)} compact={true}/>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginTop:6}}>
+                              ※ 現在の母数（{basisLabel}・テスター除外）{allPeople.length}名を分割。「在留区分バランス」は各グループの外国人:日本人を全体比率へ均等化。再作成で再シャッフル。
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginTop:10}}>
+              ※ {basisLabel}（{residBasis === 'checkedIn' ? 'チェックイン済' : 'active(キャンセル/返金/返金待ち除外)'}・テスター除外）が母数。 在留区分・JLPT・日本語学校は参加者プロフィールに基づく。
+            </div>
+          </div>
+          );
+        })()}
       </section>
 
       </>
@@ -13434,6 +14080,8 @@ function PageParticipants(){
   // データ層: 初期は空配列、マウント時に API から取得
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [recomputing, setRecomputing] = useState(false);  // (リピーター精度) 参加回数 再集計中
+  const [settings, setSettings] = useState({});  // (運用可視化) 最終再集計など
   const [error, setError] = useState(null);
 
   // モーダル制御
@@ -13448,6 +14096,7 @@ function PageParticipants(){
       try {
         const data = await window.fetchData('listParticipants');
         if (!cancelled) setParticipants(Array.isArray(data) ? data : []);
+        window.getAdminSettings(false, true).then(s => { if (!cancelled) setSettings(s || {}); }).catch(() => {});
       } catch (err) {
         if (!cancelled) setError(err.message || String(err));
       } finally {
@@ -13516,6 +14165,23 @@ function PageParticipants(){
   const newCount = _countBase.filter(p => (p.tags || []).includes("新規") && p.status !== "アーカイブ").length;
   const _testerCount = participants.filter(p => p.isTest).length;
 
+  const recomputeParticipation = async () => {
+    if (recomputing) return;
+    setRecomputing(true);
+    try {
+      const res = await window.recomputeParticipation();
+      if (res) {
+        const data = await window.fetchData('listParticipants');
+        setParticipants(Array.isArray(data) ? data : []);
+        window.getAdminSettings(true, true).then(s => setSettings(s || {})).catch(() => {});
+      }
+    } catch (e) {
+      window.alert('再集計に失敗しました: ' + (e && e.message ? e.message : e));
+    } finally {
+      setRecomputing(false);
+    }
+  };
+
   return (
     <div className="jb-page" data-page="participants">
 
@@ -13537,11 +14203,17 @@ function PageParticipants(){
           <div style={{display:'flex',gap:8,marginTop:20,justifyContent:'flex-end'}}>
             <button className="jb-btn"><Icon n="download" s={12}/> CSV</button>
             {window.canDo('participants.create') && (
+              <>
+              <button className="jb-btn" onClick={recomputeParticipation} disabled={recomputing} title="参加回数を登録データから再集計（リピーター精度の是正）">
+                {recomputing ? '再集計中…' : '参加回数を再集計'}
+              </button>
               <button className="jb-btn jb-btn-primary" onClick={()=>{setEditingP(null); setModalMode("create");}}>
                 + 追加
               </button>
+              </>
             )}
           </div>
+          {(() => { const RecomputeStatusLine = window.RecomputeStatusLine; return RecomputeStatusLine ? <RecomputeStatusLine settings={settings} style={{marginTop:6}}/> : null; })()}
         </div>
       </header>
 
@@ -16563,6 +17235,7 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
 function PageDepartments(){
   const [members, setMembers] = useState([]);
   const [departments, setDepartments] = useState([]);   // 動的取得
+  const [settings, setSettings] = useState({});         // (運用可視化) 学年更新の最終実行など
   const [memberRoles, setMemberRoles] = useState([]);   // 兼任 (副所属) 全件
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -16587,6 +17260,7 @@ function PageDepartments(){
       setMembers(Array.isArray(mems) ? mems : []);
       setDepartments(Array.isArray(depts) ? depts : []);
       setMemberRoles(Array.isArray(roles) ? roles : []);
+      window.getAdminSettings().then(s => setSettings(s || {})).catch(() => {});
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -16801,6 +17475,11 @@ function PageDepartments(){
               </button>
             )}
           </div>
+          {settings.grade_update_last_run && (
+            <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginTop:6,textAlign:'right',lineHeight:1.5}}>
+              {(() => { try { const d = new Date(settings.grade_update_last_run); const p = (n)=>String(n).padStart(2,'0'); return `学年更新 最終実行: ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; } catch (e) { return '学年更新 最終実行: ' + settings.grade_update_last_run; } })()}{settings.grade_update_last_count ? `（${settings.grade_update_last_count}名）` : ''}
+            </div>
+          )}
         </div>
       </header>
 
@@ -17611,6 +18290,15 @@ function PageApplications() {
     partial: applications.filter(a => a.isPartialCancelled).length,
     cancelled: applications.filter(a => a.isAllCancelled).length,
   };
+  // 返金待ち金額: 各申込の registrations のうち status==='返金待ち' の金額(返金額があればそれ、無ければ amount)を合算
+  const pendingRefundAmount = applications.reduce((sum, a) => {
+    if (!Array.isArray(a.registrations)) return sum;
+    return sum + a.registrations.reduce((s, r) => {
+      if (String(r.status || '') !== '返金待ち') return s;
+      const amt = Number(r.refundAmount) > 0 ? Number(r.refundAmount) : (Number(r.amount) || 0);
+      return s + amt;
+    }, 0);
+  }, 0);
 
   return (
     <div className="jb-page" data-page="applications">
@@ -17659,7 +18347,7 @@ function PageApplications() {
         <div className={`jb-stat ${filter === 'pending-refund' ? 'jb-stat-accent' : ''}`} onClick={() => setFilter('pending-refund')} style={{cursor:'pointer'}}>
           <span className="jb-stat-label">Pending Refund</span>
           <span className="jb-stat-value" style={{color:'var(--jb-shouwa)'}}>{counts.pending}</span>
-          <span className="jb-stat-meta">返金処理待ち</span>
+          <span className="jb-stat-meta">返金処理待ち{pendingRefundAmount > 0 ? ` ・ ¥${pendingRefundAmount.toLocaleString()}` : ''}</span>
         </div>
       </div>
 
@@ -23791,6 +24479,7 @@ window.PageSchedule = PageSchedule;
 (function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
 const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
+const EB = window.ErrorBoundary;
 
 
 // 共有コンポーネント (他ブロックから window 経由で取得) — Phase 6 fix
@@ -23804,7 +24493,6 @@ const EventMapEmbed = window.EventMapEmbed;
 // =============================================================================
 function CrossEventAnalyticsSection({ events, registrations, participants, payments, promos, referralStats }) {
   const KpiCard = window.KpiCard;
-  if (!KpiCard) return null;  // KpiCard が まだ ロードされていない
   // 計算
   const stats = React.useMemo(() => {
     const now = new Date();
@@ -24003,6 +24691,9 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
     border: '1px solid var(--jb-line)', borderRadius: 6,
   };
 
+  // (フックのルール) KpiCard 未ロード時のガードは全フックの後で行う (早期 return がフック前にあるとレンダー間でフック数が変わり crash する)
+  if (!KpiCard) return null;
+
   return (
     <section style={{marginTop:40,paddingTop:24,borderTop:'2px solid var(--jb-line)'}}>
       <div style={{
@@ -24083,7 +24774,7 @@ function CrossEventAnalyticsSection({ events, registrations, participants, payme
           {stratEventId ? (stratSessionId ? '選択セッションのみ' : '選択イベントのみ') : '全イベント'} · 対象 {strategicRegs.length} 件
         </span>
       </div>
-      <MonthlyTrendCharts events={stratEvents} registrations={strategicRegs} payments={payments} promos={promos}/>
+      <EB label="月次トレンドの表示でエラーが発生しました"><MonthlyTrendCharts events={stratEvents} registrations={strategicRegs} payments={payments} promos={promos}/></EB>
 
       {/* 流入経路 全体 */}
       {refByChannel.length > 0 && (
@@ -24456,7 +25147,7 @@ function MonthlyTrendCharts({ events, registrations, payments, promos }) {
 
       {/* 戦略 — 深い分析 */}
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.12em',color:'var(--jb-shouwa)',fontWeight:700,marginBottom:10,marginTop:18,textTransform:'uppercase'}}>戦略 — セグメント深掘り</div>
-      <StrategicAnalytics events={stratEvents} registrations={strategicRegs} payments={payments} promos={promos}/>
+      <EB label="戦略深掘り分析の表示でエラーが発生しました"><StrategicAnalytics events={events} registrations={registrations} payments={payments} promos={promos}/></EB>
     </div>
   );
 }
@@ -25005,6 +25696,371 @@ function RankingCard({ title, rows }) {
 /**
  * KPIレポート。データ空時は KPI を `—` 表示、チャートは Empty 状態のままレンダ。
  */
+// (Phase 18.B2) AutomationStatusPanel — 自動処理ステータスの俯瞰 (再集計トリガー + 行動ログフラッシュ)
+function AutomationStatusPanel({ settings, actionLogStats, onChanged, compact, fetchedAt }) {
+  const [busy, setBusy] = React.useState(false);
+  const [flushInt, setFlushInt] = React.useState('10');
+  const [recHour, setRecHour] = React.useState('4');
+  const [guide, setGuide] = React.useState('');   // トリガー作成失敗時の案内
+  const canManage = window.canDo && window.canDo('participants.create');
+  const recompute = window.recomputeStatusInfo ? window.recomputeStatusInfo(settings || {}) : null;
+  const a = actionLogStats || {};
+
+  const run = async (action, payload, okMsg, editorHint) => {
+    if (busy) return;
+    setBusy(true); setGuide('');
+    try {
+      await window.postData(action, payload || {});
+      if (window.toast && window.toast.success) window.toast.success(okMsg); else window.alert(okMsg);
+      if (onChanged) onChanged();
+    } catch (e) {
+      // 管理画面からのトリガー操作が環境制約で失敗した場合は、GASエディタ実行を案内
+      setGuide(editorHint);
+    } finally { setBusy(false); }
+  };
+  const setupFlush = () => run('admin.setupActionLogFlushTrigger', { minutes: Number(flushInt) }, `フラッシュを ${flushInt} 分毎に設定しました。`, `管理画面からの設定に失敗しました。GASエディタで setupActionLogFlushTrigger(${Number(flushInt)}) を実行してください。`);
+  const removeFlush = () => { if (window.confirm('フラッシュトリガーを解除しますか?')) run('admin.removeActionLogFlushTrigger', {}, 'フラッシュトリガーを解除しました。', '管理画面からの解除に失敗しました。GASエディタで removeActionLogFlushTrigger() を実行してください。'); };
+  const setupRecompute = () => run('admin.setupDailyRecomputeTrigger', { hour: Number(recHour) }, `自動再集計を毎日 ${recHour} 時台に設定しました。`, `管理画面からの設定に失敗しました。GASエディタで setupDailyRecomputeTrigger(${Number(recHour)}) を実行してください。`);
+  const removeRecompute = () => { if (window.confirm('自動再集計トリガーを解除しますか?')) run('admin.removeDailyRecomputeTrigger', {}, '自動再集計トリガーを解除しました。', '管理画面からの解除に失敗しました。GASエディタで removeDailyRecomputeTrigger() を実行してください。'); };
+
+  const warnAt = (a.flushWarnAt != null) ? a.flushWarnAt : 100;
+  const flushWarn = (a.bufferEnabled && !a.flushEnabled) || (a.buffered || 0) >= warnAt;
+  const ctrlBtn = { padding: '6px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--white)', cursor: 'pointer', fontSize: 12 };
+  const sel = { padding: '6px 10px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 };
+
+  return (
+    <div className="card" style={{ marginTop: 20 }}>
+      <div className="card-head">
+        <div className="card-title"><Icon n="gear" s={16} /> 自動処理ステータス</div>
+        <span style={{ fontSize: 11, color: 'var(--ink4)' }}>
+          {fetchedAt ? `最終更新 ${(() => { try { const d = new Date(fetchedAt); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; } catch (e) { return ''; } })()}` : '定期処理の稼働状況'}
+        </span>
+      </div>
+      <table className="tbl"><tbody>
+        <tr>
+          <td style={{ width: 160, fontWeight: 600 }}>参加回数 再集計</td>
+          <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink2)' }}>
+            {recompute && recompute.text ? recompute.text : '未実行'}
+            {recompute && recompute.ms != null && <span style={{ marginLeft: 6, color: recompute.msWarn ? 'var(--red)' : 'var(--ink4)' }}>{recompute.ms}ms</span>}
+          </td>
+        </tr>
+        <tr>
+          <td style={{ fontWeight: 600 }}>行動ログ</td>
+          <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink2)' }}>
+            {Number(a.count || 0).toLocaleString()} 件
+            {a.oldest ? ` ・ 最古 ${(() => { try { const d = new Date(a.oldest); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } catch (e) { return a.oldest; } })()}` : ''}
+            {a.bufferEnabled ? ` ・ 自動フラッシュ: ${a.flushEnabled ? `${a.flushIntervalMin || '?'}分毎` : '無効'}` : ' ・ バッファ無効 (即追記)'}
+            {a.buffered ? <span style={{ marginLeft: 6, color: flushWarn ? 'var(--red)' : 'var(--ink4)', fontWeight: flushWarn ? 700 : 400 }}>未フラッシュ {a.buffered} 件{flushWarn ? '（要確認）' : ''}</span> : ''}
+          </td>
+        </tr>
+      </tbody></table>
+
+      {!compact && canManage && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--ink3)', width: 120 }}>自動再集計 時刻</span>
+            <select value={recHour} onChange={(e) => setRecHour(e.target.value)} disabled={busy} style={sel}>
+              {Array.from({ length: 24 }, (_, h) => <option key={h} value={String(h)}>{h} 時台</option>)}
+            </select>
+            <button style={ctrlBtn} onClick={setupRecompute} disabled={busy}>設定・実行</button>
+            <button style={ctrlBtn} onClick={removeRecompute} disabled={busy}>解除</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--ink3)', width: 120 }}>ログ フラッシュ間隔</span>
+            <select value={flushInt} onChange={(e) => setFlushInt(e.target.value)} disabled={busy} style={sel}>
+              {['1', '5', '10', '15', '30'].map(m => <option key={m} value={m}>{m} 分毎</option>)}
+            </select>
+            <button style={ctrlBtn} onClick={setupFlush} disabled={busy}>設定・実行</button>
+            <button style={ctrlBtn} onClick={removeFlush} disabled={busy}>解除</button>
+            <span style={{ fontSize: 11, color: 'var(--ink5)' }}>※ バッファ有効時のみ有効</span>
+          </div>
+          {guide && (
+            <div style={{ fontSize: 12, color: 'var(--red)', background: 'var(--red-50, #fef2f2)', border: '1px solid var(--red-100, #fee2e2)', borderRadius: 8, padding: '8px 12px', lineHeight: 1.6 }}>
+              {guide}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+window.AutomationStatusPanel = AutomationStatusPanel;
+
+// (Phase 18.B1) ParticipantBehaviorAnalytics — 参加者行動分析 (既存タイムスタンプから算出)
+//   参加ファネル / 活性度セグメント / リピート・No-show / 時間帯ヒートマップ
+//   注: 申込日時(appliedAt)など現存データのみ使用。 ログイン/閲覧/通知開封は Phase 2 (ActionLog) で拡張予定。
+function ParticipantBehaviorAnalytics({ events, registrations, participants, actionLogStats, actionStats, actionDays, onDaysChange }) {
+  const data = React.useMemo(() => {
+    const now = Date.now();
+    const DAY = 86400000;
+    const COUNTED = (s) => s !== 'キャンセル' && s !== '返金' && s !== '返金待ち';
+    const regs = (registrations || []).filter(r => !r.isTest);
+    const parts = (participants || []).filter(p => !p.isTest && p.status !== 'アーカイブ');
+    const eventMap = {};
+    (events || []).forEach(e => { eventMap[e.id] = e; });
+
+    // ファネル (参加者単位の distinct)
+    const appliedUsers = new Set(), confirmedUsers = new Set(), checkedInUsers = new Set();
+    regs.forEach(r => {
+      if (!r.userId) return;
+      const s = String(r.status || '');
+      if (COUNTED(s)) appliedUsers.add(r.userId);
+      if (s === '決済済み' || s === '確定' || s === 'チェックイン済') confirmedUsers.add(r.userId);
+      if (s === 'チェックイン済') checkedInUsers.add(r.userId);
+    });
+    const surveyedUsers = parts.filter(p => p.nps !== null && p.nps !== undefined).length;
+    const funnel = [
+      { key: 'applied', label: '申込', n: appliedUsers.size, color: 'var(--indigo)' },
+      { key: 'confirmed', label: '決済・確定', n: confirmedUsers.size, color: 'var(--blue, var(--indigo))' },
+      { key: 'checkedin', label: '参加 (チェックイン)', n: checkedInUsers.size, color: 'var(--green)' },
+      { key: 'surveyed', label: 'アンケート回答', n: surveyedUsers, color: 'var(--violet)' },
+    ];
+
+    // 活性度セグメント (最終参加日 と 最終ログイン の新しい方で判定)
+    const seg = { active: 0, semi: 0, dormant: 0, churned: 0, unknown: 0 };
+    parts.forEach(p => {
+      const t1 = p.lastJoin ? new Date(p.lastJoin).getTime() : 0;
+      const t2 = p.lastLoginAt ? new Date(p.lastLoginAt).getTime() : 0;
+      const t = Math.max(t1 || 0, t2 || 0);
+      if (!t || isNaN(t)) { seg.unknown++; return; }
+      const days = (now - t) / DAY;
+      if (days <= 30) seg.active++;
+      else if (days <= 90) seg.semi++;
+      else if (days <= 180) seg.dormant++;
+      else seg.churned++;
+    });
+
+    // リピート (登録ベース distinct イベント数)
+    const evByUser = {};
+    regs.forEach(r => { if (r.userId && COUNTED(String(r.status || ''))) { (evByUser[r.userId] = evByUser[r.userId] || new Set()).add(r.eventId); } });
+    const userIds = Object.keys(evByUser);
+    const repeatUsers = userIds.filter(u => evByUser[u].size >= 2).length;
+    const repeatRate = userIds.length ? Math.round(repeatUsers / userIds.length * 100) : 0;
+
+    // No-show (過去イベントで 確定/決済 だが チェックイン未到達)
+    let noShowBase = 0, noShow = 0;
+    regs.forEach(r => {
+      const s = String(r.status || '');
+      const e = eventMap[r.eventId];
+      const evt = e && e.date ? new Date(e.date).getTime() : 0;
+      if (evt && evt < now && (s === '決済済み' || s === '確定' || s === 'チェックイン済')) {
+        noShowBase++;
+        if (s !== 'チェックイン済') noShow++;
+      }
+    });
+    const noShowRate = noShowBase ? Math.round(noShow / noShowBase * 100) : null;
+
+    // 時間帯ヒートマップ (申込日時: 曜日 x 時間帯)
+    const heat = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    let heatMax = 0, heatTotal = 0;
+    const byHour = new Array(24).fill(0);
+    regs.forEach(r => {
+      if (!r.appliedAt) return;
+      const d = new Date(r.appliedAt);
+      if (isNaN(d.getTime())) return;
+      const dow = d.getDay(), h = d.getHours();
+      heat[dow][h]++; byHour[h]++; heatTotal++;
+      if (heat[dow][h] > heatMax) heatMax = heat[dow][h];
+    });
+    let bestDow = 0, bestHour = 0, bestVal = -1;
+    for (let i = 0; i < 7; i++) for (let j = 0; j < 24; j++) if (heat[i][j] > bestVal) { bestVal = heat[i][j]; bestDow = i; bestHour = j; }
+
+    return { funnel, seg, segTotal: parts.length, repeatUsers, repeatRate, repeatBase: userIds.length, noShow, noShowBase, noShowRate, heat, heatMax, heatTotal, byHour, bestDow, bestHour, bestVal };
+  }, [events, registrations, participants]);
+
+  const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+  const f0 = data.funnel[0].n || 0;
+  const segColors = { active: 'var(--green)', semi: 'var(--amber, var(--coral))', dormant: 'var(--coral)', churned: 'var(--red)', unknown: 'var(--ink5)' };
+  const segLabels = { active: 'アクティブ (30日以内)', semi: '準休眠 (31-90日)', dormant: '休眠 (91-180日)', churned: '離脱 (180日超)', unknown: '記録なし' };
+  const heatColor = (v) => {
+    if (!v || !data.heatMax) return 'var(--bg2)';
+    const a = 0.12 + 0.78 * (v / data.heatMax);
+    return `rgba(91, 95, 222, ${a.toFixed(2)})`;
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 20 }}>
+      <div className="card-head">
+        <div className="card-title"><Icon n="users" s={16} /> 参加者行動分析</div>
+        <span style={{ fontSize: 11, color: 'var(--ink4)' }}>既存データ (申込・参加・ログイン) 基準 ・ テスター除外</span>
+      </div>
+
+      {/* 参加ファネル */}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 10 }}>参加ファネル (人数 / 申込比)</div>
+        {data.funnel.map((st, i) => {
+          const pct = f0 ? Math.round(st.n / f0 * 100) : 0;
+          const prev = i > 0 ? data.funnel[i - 1].n : st.n;
+          const stepPct = prev ? Math.round(st.n / prev * 100) : 0;
+          return (
+            <div key={st.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <div style={{ width: 130, fontSize: 12, color: 'var(--ink2)' }}>{st.label}</div>
+              <div style={{ flex: 1, background: 'var(--bg2)', borderRadius: 4, height: 22, position: 'relative', overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, background: st.color, height: '100%', borderRadius: 4, transition: 'width .3s' }}></div>
+              </div>
+              <div style={{ width: 150, textAlign: 'right', fontSize: 12, fontFamily: 'var(--mono)' }}>
+                <b>{st.n}</b> <span style={{ color: 'var(--ink4)' }}>({pct}%{i > 0 ? ` ・ 前段比 ${stepPct}%` : ''})</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 活性度セグメント + リピート/No-show */}
+      <div className="grid-ab" style={{ marginTop: 18 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 10 }}>活性度セグメント</div>
+          <div style={{ display: 'flex', height: 14, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
+            {['active', 'semi', 'dormant', 'churned', 'unknown'].map(k => {
+              const w = data.segTotal ? (data.seg[k] / data.segTotal * 100) : 0;
+              return w > 0 ? <div key={k} title={`${segLabels[k]}: ${data.seg[k]}`} style={{ width: `${w}%`, background: segColors[k] }}></div> : null;
+            })}
+          </div>
+          <table className="tbl"><tbody>
+            {['active', 'semi', 'dormant', 'churned', 'unknown'].map(k => (
+              <tr key={k}>
+                <td><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: segColors[k], marginRight: 8 }}></span>{segLabels[k]}</td>
+                <td className="right" style={{ fontFamily: 'var(--mono)' }}>{data.seg[k]}</td>
+                <td className="right" style={{ color: 'var(--ink4)' }}>{data.segTotal ? Math.round(data.seg[k] / data.segTotal * 100) : 0}%</td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 10 }}>リピート ・ No-show</div>
+          <div className="jb-stat-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="jb-stat">
+              <span className="jb-stat-label">リピート率</span>
+              <span className="jb-stat-value">{data.repeatRate}%</span>
+              <span className="jb-stat-meta">{data.repeatUsers} / {data.repeatBase} 名 (2回以上)</span>
+            </div>
+            <div className="jb-stat">
+              <span className="jb-stat-label">No-show 率</span>
+              <span className="jb-stat-value" style={{ color: data.noShowRate != null && data.noShowRate >= 20 ? 'var(--red)' : 'inherit' }}>{data.noShowRate != null ? `${data.noShowRate}%` : '—'}</span>
+              <span className="jb-stat-meta">{data.noShow} / {data.noShowBase} 件 (過去・確定分)</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink4)', marginTop: 10, lineHeight: 1.6 }}>
+            休眠・離脱が多い場合は通知 (オプトイン者) での再活性化、No-show が高い場合はリマインド強化が有効です。
+          </div>
+        </div>
+      </div>
+
+      {/* 時間帯ヒートマップ */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 4 }}>申込アクションの時間帯 (曜日 x 時)</div>
+        <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 10 }}>
+          {data.heatTotal > 0
+            ? `最も申込が多い時間帯: ${DOW[data.bestDow]}曜 ${data.bestHour}時台 (${data.bestVal}件) — SNS投稿・通知の最適時間の目安`
+            : '申込日時データがありません'}
+        </div>
+        {data.heatTotal > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `28px repeat(24, 1fr)`, gap: 2, minWidth: 560 }}>
+              <div></div>
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={'h' + h} style={{ fontSize: 8, color: 'var(--ink5)', textAlign: 'center' }}>{h % 3 === 0 ? h : ''}</div>
+              ))}
+              {DOW.map((d, di) => ([
+                <div key={'d' + di} style={{ fontSize: 10, color: 'var(--ink4)', display: 'flex', alignItems: 'center' }}>{d}</div>,
+                ...Array.from({ length: 24 }, (_, h) => (
+                  <div key={di + '-' + h} title={`${d}曜 ${h}時: ${data.heat[di][h]}件`} style={{ height: 14, borderRadius: 2, background: heatColor(data.heat[di][h]) }}></div>
+                ))
+              ]))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {actionStats && actionStats.ok && actionStats.total > 0 && (() => {
+        const TYPE_LABEL = { login: 'ログイン', ticket_view: 'チケット表示', memento_view: '記念写真閲覧', notif_open: '通知開封', survey_open: 'アンケート開始', survey_submit: 'アンケート回答', event_view: 'イベント閲覧', home_view: 'ホーム閲覧', mypage_view: 'マイページ閲覧' };
+        const types = Object.keys(actionStats.byType || {}).sort((x, y) => actionStats.byType[y] - actionStats.byType[x]);
+        const maxType = types.length ? actionStats.byType[types[0]] : 0;
+        const maxHour = Math.max.apply(null, actionStats.byHour || [0]);
+        return (
+          <div style={{ marginTop: 22, borderTop: '2px solid var(--line)', paddingTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink1)' }}>実行動データ (ActionLog)</div>
+              {onDaysChange && (
+                <select value={String(actionDays || 90)} onChange={(e) => onDaysChange(Number(e.target.value))}
+                  style={{ padding: '4px 8px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }}>
+                  {[30, 90, 180].map(d => <option key={d} value={d}>直近 {d} 日</option>)}
+                </select>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 12 }}>直近 {actionStats.days} 日の記録に基づく実測値。 申込日時ではなく、実際のログイン/閲覧/開封を集計。</div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              {[['総アクション', actionStats.total], ['アクティブ利用者', actionStats.activeUsers], ['ログイン', actionStats.logins]].map(([label, val]) => (
+                <div key={label} style={{ flex: '1 1 120px', background: 'var(--paper, #f8fafc)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--ink4)' }}>{label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink1)', fontFamily: 'var(--mono)' }}>{Number(val || 0).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 260px', minWidth: 240 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>種別内訳</div>
+                {types.map(t => (
+                  <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <span style={{ width: 96, fontSize: 11, color: 'var(--ink3)' }}>{TYPE_LABEL[t] || t}</span>
+                    <span style={{ flex: 1, height: 14, background: 'var(--line)', borderRadius: 4, overflow: 'hidden' }}>
+                      <span style={{ display: 'block', height: '100%', width: `${maxType ? Math.round(actionStats.byType[t] / maxType * 100) : 0}%`, background: 'var(--brand-navy, #0a2960)' }} />
+                    </span>
+                    <span style={{ width: 44, textAlign: 'right', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink2)' }}>{actionStats.byType[t]}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>時間帯 (実測・0〜23時)</div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 70 }}>
+                  {(actionStats.byHour || []).map((v, h) => (
+                    <span key={h} title={`${h}時: ${v}`} style={{ flex: 1, height: `${maxHour ? Math.max(2, Math.round(v / maxHour * 100)) : 2}%`, background: v ? 'var(--brand-navy, #0a2960)' : 'var(--line)', borderRadius: '2px 2px 0 0' }} />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--ink5)', marginTop: 3 }}>
+                  <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
+                </div>
+              </div>
+              <div style={{ flex: '1 1 220px', minWidth: 200 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>曜日 (実測)</div>
+                {(() => {
+                  const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+                  const maxDow = Math.max.apply(null, actionStats.byDow || [0]);
+                  return (actionStats.byDow || []).map((v, d) => (
+                    <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <span style={{ width: 18, fontSize: 11, color: (d === 0 || d === 6) ? 'var(--red)' : 'var(--ink3)' }}>{DOW[d]}</span>
+                      <span style={{ flex: 1, height: 14, background: 'var(--line)', borderRadius: 4, overflow: 'hidden' }}>
+                        <span style={{ display: 'block', height: '100%', width: `${maxDow ? Math.round(v / maxDow * 100) : 0}%`, background: 'var(--brand-navy, #0a2960)' }} />
+                      </span>
+                      <span style={{ width: 40, textAlign: 'right', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink2)' }}>{v}</span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div style={{ fontSize: 10, color: 'var(--ink5)', marginTop: 14, lineHeight: 1.6, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+        上段は申込・参加・ログインの既存タイムスタンプから算出。 「実行動データ」はログイン/チケット・記念写真閲覧/通知開封などの実記録 (ActionLog) を集計したものです。
+        {actionLogStats && actionLogStats.ok && (
+          <span style={{ display: 'block', marginTop: 4 }}>
+            行動ログ: {Number(actionLogStats.count || 0).toLocaleString()} 件
+            {actionLogStats.oldest ? ` ・ 最古 ${(() => { try { const d = new Date(actionLogStats.oldest); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } catch (e) { return actionLogStats.oldest; } })()}` : ''}
+            {actionLogStats.bufferEnabled ? ` ・ 自動フラッシュ: ${actionLogStats.flushEnabled ? `${actionLogStats.flushIntervalMin || '?'}分毎` : '無効'}` : ''}
+            {actionLogStats.buffered ? (() => {
+              const warnAt = (actionLogStats.flushWarnAt != null) ? actionLogStats.flushWarnAt : 100;
+              const warn = (actionLogStats.bufferEnabled && !actionLogStats.flushEnabled) || actionLogStats.buffered >= warnAt;
+              return <span style={{ marginLeft: 6, color: warn ? 'var(--red)' : 'inherit', fontWeight: warn ? 700 : 400 }}>未フラッシュ {actionLogStats.buffered} 件{warn ? '（フラッシュ未稼働の可能性）' : ''}</span>;
+            })() : ''}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PageAnalytics(){
   const [events, setEvents] = useState([]);
   const [participants, setParticipants] = useState([]);
@@ -25049,6 +26105,20 @@ function PageAnalytics(){
   // (Phase 17.R) 全体版 — 広報 + 流入経路 を 追加 fetch
   const [allPromos, setAllPromos] = useState([]);
   const [referralStats, setReferralStats] = useState(null);
+  const [actionLogStats, setActionLogStats] = useState(null);  // (Phase 18.B2) 行動ログ件数・最古日時
+  const [autoSettings, setAutoSettings] = useState({});        // (Phase 18.B2) 再集計トリガー等の状況
+  const [alFetchedAt, setAlFetchedAt] = useState(null);        // (Phase 18.B2) 行動ログ統計の取得時刻
+  const [actionStats, setActionStats] = useState(null);        // (Phase 18.B2b) ActionLog 窓集計
+  const [actionDays, setActionDays] = useState(90);            // (Phase 18.B2b) 集計の窓日数
+  const reloadActionStats = React.useCallback((days) => {
+    const d = Number(days) || 90;
+    setActionDays(d);
+    window.fetchData('admin.getActionStats', { days: d }).then(s => { if (s && s.ok) setActionStats(s); }).catch(() => {});
+  }, []);
+  const reloadActionLogStats = React.useCallback(() => {
+    window.fetchData('admin.getActionLogStats', {}).then(s => { if (s && s.ok) { setActionLogStats(s); setAlFetchedAt(Date.now()); } }).catch(() => {});
+    if (window.getAdminSettings) window.getAdminSettings(true, true).then(s => setAutoSettings(s || {})).catch(() => {});
+  }, []);
   useEffect(() => {
     let cancelled = false;
     async function loadExtras() {
@@ -25064,6 +26134,9 @@ function PageAnalytics(){
       } catch (e) {
         console.warn('analytics extras failed:', e);
       }
+      window.fetchData('admin.getActionLogStats', {}).then(s => { if (!cancelled && s && s.ok) { setActionLogStats(s); setAlFetchedAt(Date.now()); } }).catch(() => {});
+      window.fetchData('admin.getActionStats', { days: 90 }).then(s => { if (!cancelled && s && s.ok) setActionStats(s); }).catch(() => {});
+      if (window.getAdminSettings) window.getAdminSettings(false, true).then(s => { if (!cancelled) setAutoSettings(s || {}); }).catch(() => {});
     }
     loadExtras();
     return () => { cancelled = true; };
@@ -25092,9 +26165,6 @@ function PageAnalytics(){
 
   // ========== 集計 (Phase 15.S140 Registrations ベース + S143 申込操作単位) ==========
   const activeRegs = registrations.filter(r => r.status !== "キャンセル" && r.status !== "返金" && !r.isTest);
-  // (テストデータ) 表紙の表示数もテスト参加者を除外した実数にする
-  const nonTestParticipants = participants.filter(p => !p.isTest);
-  const nonTestRegCount = registrations.filter(r => !r.isTest).length;
   const periodRegs = activeRegs.filter(r => inPeriod(r.appliedAt));
   const periodEvents = events.filter(e => inPeriod(e.date) && e.status !== "アーカイブ");
   // (S140) 期間内の決済済み Registrations
@@ -25379,6 +26449,12 @@ function PageAnalytics(){
         promos={allPromos}
         referralStats={referralStats}
       />
+
+      {/* (Phase 18.B2) 自動処理ステータス */}
+      {(() => { const EB = window.ErrorBoundary; const Inner = <AutomationStatusPanel settings={autoSettings} actionLogStats={actionLogStats} onChanged={reloadActionLogStats} fetchedAt={alFetchedAt} />; return EB ? <EB label="自動処理ステータスの表示でエラーが発生しました">{Inner}</EB> : Inner; })()}
+
+      {/* (Phase 18.B1) 参加者行動分析 — 既存タイムスタンプ基準 */}
+      {(() => { const EB = window.ErrorBoundary; const Inner = <ParticipantBehaviorAnalytics events={events} registrations={registrations} participants={participants} actionLogStats={actionLogStats} actionStats={actionStats} actionDays={actionDays} onDaysChange={reloadActionStats} />; return EB ? <EB label="参加者行動分析の表示でエラーが発生しました">{Inner}</EB> : Inner; })()}
     </div>
   );
 }
@@ -25437,6 +26513,10 @@ function PageParticipantAnalytics() {
     return true;
   }
   const periodLabel = {month:'今月', quarter:'今四半期', year:'今年', all:'全期間'}[period] || '今年';
+
+  // (テストデータ) 表紙の表示数はテスト参加者を除外した実数にする
+  const nonTestParticipants = (participants || []).filter(p => !p.isTest);
+  const nonTestRegCount = (registrations || []).filter(r => !r.isTest).length;
 
   return (
     <div className="jb-page" data-page="participant-analytics">
@@ -28570,12 +29650,16 @@ function PageHomepageSettings(){
     { key: 'mail_postpone_body_en',      label: '延期: 本文 (英)',     ph: 'We regret to inform you that the event has been postponed. Please find the new schedule below.', type: 'textarea' },
     { key: 'mail_postpone_subject_easy', label: '延期: 件名 (やさしい日本語)', ph: '【えんき】{eventTitle}', type: 'text' },
     { key: 'mail_postpone_body_easy',    label: '延期: 本文 (やさしい日本語)', ph: 'イベントの 日が かわりました。 あたらしい 日は したに かいてあります。', type: 'textarea' },
+
+    { section: 'システム / 運用', label: 'システム / 運用', help: '内部処理のしきい値など。 参加者サイトには表示されません。' },
+    { key: 'recompute_ms_warn', label: '参加回数 再集計の警告しきい値 (ms)', ph: '3000', type: 'number', min: 0, step: 100, help: 'この値(ミリ秒)を超えると、最終再集計の所要時間を警告色で表示します。 未設定時は3000ms。' },
+    { key: 'admin_settings_ttl_ms', label: '管理設定キャッシュの寿命 (ms)', ph: '300000', type: 'number', min: 0, step: 60000, help: '管理画面が getSettings をキャッシュする時間(ミリ秒)。 未設定時は300000ms(5分)。 小さくすると鮮度優先、大きくするとフェッチ削減。', note: (v) => (String(v) === '0' ? 'キャッシュ無効（毎回サーバから取得）' : '') },
   ];
 
   async function fetchAll() {
     setLoading(true);
     try {
-      const data = await window.fetchData('getSettings');
+      const data = await window.getAdminSettings(true);
       const obj = (data && typeof data === 'object') ? data : {};
       setSettings(obj);
       setDraft(obj);
@@ -28626,7 +29710,18 @@ function PageHomepageSettings(){
         window.toast.info('変更はありません');
         return;
       }
+      const SANE = {
+        recompute_ms_warn: { max: 600000, label: '警告しきい値' },
+        admin_settings_ttl_ms: { max: 3600000, label: 'キャッシュ寿命' },
+      };
+      const extreme = Object.keys(changed)
+        .filter(k => SANE[k] && changed[k] !== '' && (Number(changed[k]) < 0 || Number(changed[k]) > SANE[k].max || !isFinite(Number(changed[k]))))
+        .map(k => `${SANE[k].label}: ${changed[k]}`);
+      if (extreme.length > 0 && !window.confirm('次の値が推奨範囲外です。保存しますか?\n' + extreme.join('\n'))) {
+        return;
+      }
       await window.postData('updateSettings', { settings: changed });
+      if (window.invalidateAdminSettings) window.invalidateAdminSettings();  // 他画面の状況行を次回取得で最新化
       window.toast.success('設定を保存しました (' + Object.keys(changed).length + '件)');
       await fetchAll();
     } catch (e) {
@@ -28744,6 +29839,7 @@ function PageHomepageSettings(){
                     maxWidth:680,
                   }}
                 />
+                {def.help && <div style={{fontSize:12, color:'var(--ink3)', lineHeight:1.5}}>{def.help}</div>}
               </div>
             );
           }
@@ -28751,9 +29847,11 @@ function PageHomepageSettings(){
             <div key={def.key} style={{display:'flex', flexDirection:'column', gap:8}}>
               <label style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>{def.label}</label>
               <input
-                type="text"
+                type={def.type === 'number' ? 'number' : 'text'}
                 value={val}
                 placeholder={def.ph || ''}
+                min={def.min}
+                step={def.step}
                 onChange={(e) => setVal(def.key, e.target.value)}
                 style={{
                   padding:'10px 12px',
@@ -28763,6 +29861,8 @@ function PageHomepageSettings(){
                   maxWidth:680,
                 }}
               />
+              {def.help && <div style={{fontSize:12, color:'var(--ink3)', lineHeight:1.5}}>{def.help}</div>}
+              {typeof def.note === 'function' && def.note(val) && <div style={{fontSize:12, color:'var(--jb-shouwa)', fontWeight:600, lineHeight:1.5}}>{def.note(val)}</div>}
             </div>
           );
         })}
@@ -28913,7 +30013,7 @@ function PageHomepageMobileSettings(){
   async function fetchAll() {
     setLoading(true);
     try {
-      const data = await window.fetchData('getSettings');
+      const data = await window.getAdminSettings(true);
       const obj = (data && typeof data === 'object') ? data : {};
       // _mobile サフィックス付きの値だけ抽出して draft にロード
       const mobileObj = {};
@@ -28974,6 +30074,7 @@ function PageHomepageMobileSettings(){
         return;
       }
       await window.postData('updateSettings', { settings: changed });
+      if (window.invalidateAdminSettings) window.invalidateAdminSettings();  // 他画面の状況行を次回取得で最新化
       window.toast.success('モバイル設定を保存しました (' + Object.keys(changed).length + '件)');
       await fetchAll();
     } catch (e) {
@@ -29101,6 +30202,7 @@ function PageHomepageMobileSettings(){
                     maxWidth:680,
                   }}
                 />
+                {def.help && <div style={{fontSize:12, color:'var(--ink3)', lineHeight:1.5}}>{def.help}</div>}
               </div>
             );
           }
@@ -29108,9 +30210,11 @@ function PageHomepageMobileSettings(){
             <div key={def.key} style={{display:'flex', flexDirection:'column', gap:8}}>
               <label style={{fontSize:13, fontWeight:600, color:'var(--ink1)'}}>{def.label}</label>
               <input
-                type="text"
+                type={def.type === 'number' ? 'number' : 'text'}
                 value={val}
                 placeholder={def.ph || ''}
+                min={def.min}
+                step={def.step}
                 onChange={(e) => setVal(def.key, e.target.value)}
                 style={{
                   padding:'10px 12px',
@@ -29120,6 +30224,8 @@ function PageHomepageMobileSettings(){
                   maxWidth:680,
                 }}
               />
+              {def.help && <div style={{fontSize:12, color:'var(--ink3)', lineHeight:1.5}}>{def.help}</div>}
+              {typeof def.note === 'function' && def.note(val) && <div style={{fontSize:12, color:'var(--jb-shouwa)', fontWeight:600, lineHeight:1.5}}>{def.note(val)}</div>}
             </div>
           );
         })}
@@ -30545,7 +31651,8 @@ function renderPage(name) {
       </div>
     );
   }
-  return <Comp/>;
+  const EB = window.ErrorBoundary;
+  return EB ? <EB name={name} label={`「${name}」の表示でエラーが発生しました`}><Comp/></EB> : <Comp/>;
 }
 
 const PAGES = {
@@ -30911,8 +32018,21 @@ function App({user, onLogout}){
       } catch (e) { /* サイレント */ }
     }
     fetchUnread();
-    const interval = setInterval(fetchUnread, 15000);   // 15 秒 (= ほぼリアルタイム)
-    return () => { cancelled = true; clearInterval(interval); };
+    // タブ非アクティブ時はポーリングを停止し、再表示時に即時取得＋再開 (GASクォータ節約)
+    let interval = null;
+    const startPolling = () => { if (!interval) interval = setInterval(fetchUnread, 15000); };
+    const stopPolling = () => { if (interval) { clearInterval(interval); interval = null; } };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        fetchUnread();   // 復帰時に即時更新
+        startPolling();
+      }
+    };
+    if (!document.hidden) startPolling();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { cancelled = true; stopPolling(); document.removeEventListener('visibilitychange', onVisibility); };
   }, [user]);
 
   useEffectApp(() => {
