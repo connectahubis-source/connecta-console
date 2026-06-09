@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P4z'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P5a'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1699,7 +1699,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P4z</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5a</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -25865,7 +25865,71 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
     let bestDow = 0, bestHour = 0, bestVal = -1;
     for (let i = 0; i < 7; i++) for (let j = 0; j < 24; j++) if (heat[i][j] > bestVal) { bestVal = heat[i][j]; bestDow = i; bestHour = j; }
 
-    return { funnel, seg, segTotal: parts.length, repeatUsers, repeatRate, repeatBase: userIds.length, noShow, noShowBase, noShowRate, heat, heatMax, heatTotal, byHour, bestDow, bestHour, bestVal };
+    // (Phase 18.C) 拡張分析 — ユーザー単位の参加日(昇順)を構築
+    const userEventDates = {};
+    regs.forEach(r => {
+      if (!r.userId || !COUNTED(String(r.status || ''))) return;
+      const e = eventMap[r.eventId];
+      const d = e && e.date ? new Date(e.date).getTime() : 0;
+      if (!d) return;
+      (userEventDates[r.userId] = userEventDates[r.userId] || []).push(d);
+    });
+    Object.keys(userEventDates).forEach(u => userEventDates[u].sort((a, b) => a - b));
+    const evCount = (u) => (evByUser[u] ? evByUser[u].size : 0);
+
+    // 1) コホート定着 (初回参加月別: 規模 / 継続率(>=2) / 直近90日活性)
+    const cohorts = {};
+    Object.keys(userEventDates).forEach(u => {
+      const first = userEventDates[u][0];
+      const dt = new Date(first);
+      const key = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+      const c = cohorts[key] = cohorts[key] || { month: key, size: 0, repeat: 0, active: 0 };
+      c.size++;
+      if (evCount(u) >= 2) c.repeat++;
+      const last = userEventDates[u][userEventDates[u].length - 1];
+      if (now - last <= 90 * DAY) c.active++;
+    });
+    const cohortRows = Object.keys(cohorts).sort().slice(-8).map(k => cohorts[k]);
+
+    // 2) 初回→2回目転換 (機会のあった人=初回が30日以上前 / 中央値日数)
+    let f2Base = 0, f2Conv = 0; const gaps = [];
+    Object.keys(userEventDates).forEach(u => {
+      const ds = Array.from(new Set(userEventDates[u])).sort((a, b) => a - b);
+      if (!ds.length || now - ds[0] < 30 * DAY) return;
+      f2Base++;
+      if (ds.length >= 2) { f2Conv++; gaps.push((ds[1] - ds[0]) / DAY); }
+    });
+    const f2Rate = f2Base ? Math.round(f2Conv / f2Base * 100) : null;
+    const medGap = gaps.length ? Math.round(gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)]) : null;
+
+    // 3) 属性別クロス (在留ステータス / 日本語学校 × 参加経験率・継続率)
+    const crossBy = (keyFn) => {
+      const g = {};
+      parts.forEach(p => {
+        const k = keyFn(p);
+        const row = g[k] = g[k] || { key: k, size: 0, exp: 0, rep: 0 };
+        row.size++;
+        const ev = evCount(p.id);
+        if (ev >= 1) row.exp++;
+        if (ev >= 2) row.rep++;
+      });
+      return Object.values(g).sort((a, b) => b.size - a.size);
+    };
+    const crossResidency = crossBy(p => p.residencyStatus || '未設定');
+    const crossJpSchool = crossBy(p => p.jpSchool ? '日本語学校 在籍' : '非在籍');
+
+    // 4) 離脱予兆リスト (過去参加あり & 最終活動が60-150日前)
+    const lastAct = (p) => Math.max(p.lastJoin ? new Date(p.lastJoin).getTime() : 0, p.lastLoginAt ? new Date(p.lastLoginAt).getTime() : 0);
+    const churnRisk = parts.filter(p => {
+      if (evCount(p.id) < 1) return false;
+      const la = lastAct(p); if (!la) return false;
+      const days = (now - la) / DAY;
+      return days >= 60 && days <= 150;
+    }).map(p => ({ id: p.id, name: p.name || p.nickname || p.id, days: Math.round((now - lastAct(p)) / DAY), events: evCount(p.id) }))
+      .sort((a, b) => b.days - a.days).slice(0, 12);
+
+    return { funnel, seg, segTotal: parts.length, repeatUsers, repeatRate, repeatBase: userIds.length, noShow, noShowBase, noShowRate, heat, heatMax, heatTotal, byHour, bestDow, bestHour, bestVal,
+      cohortRows, f2Rate, f2Base, f2Conv, medGap, crossResidency, crossJpSchool, churnRisk };
   }, [events, registrations, participants]);
 
   const DOW = ['日', '月', '火', '水', '木', '金', '土'];
@@ -26041,6 +26105,87 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
           </div>
         );
       })()}
+
+      {/* (Phase 18.C) 拡張分析: コホート定着 / 初回→2回目 / 属性別クロス / 離脱予兆 */}
+      <div style={{ marginTop: 22, borderTop: '2px solid var(--line)', paddingTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink1)', marginBottom: 12 }}>定着・転換・セグメント分析</div>
+
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          {/* 初回→2回目転換 */}
+          <div style={{ flex: '1 1 220px', minWidth: 200 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>初回→2回目転換</div>
+            {data.f2Base > 0 ? (
+              <div>
+                <div style={{ fontSize: 28, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--ink1)' }}>{data.f2Rate}%</div>
+                <div style={{ fontSize: 11, color: 'var(--ink4)', marginTop: 2 }}>機会のある {data.f2Base} 人中 {data.f2Conv} 人が再参加</div>
+                {data.medGap != null && <div style={{ fontSize: 11, color: 'var(--ink4)', marginTop: 2 }}>2回目までの中央値 {data.medGap} 日</div>}
+              </div>
+            ) : <div style={{ fontSize: 11, color: 'var(--ink5)' }}>対象データなし</div>}
+          </div>
+
+          {/* コホート定着 */}
+          <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>コホート定着 (初回参加月別)</div>
+            {data.cohortRows && data.cohortRows.length ? (
+              <table className="tbl" style={{ fontSize: 11 }}><thead><tr>
+                <th style={{ textAlign: 'left' }}>初回月</th><th style={{ textAlign: 'right' }}>人数</th><th style={{ textAlign: 'right' }}>継続率</th><th style={{ textAlign: 'right' }}>直近活性</th>
+              </tr></thead><tbody>
+                {data.cohortRows.map(c => (
+                  <tr key={c.month}>
+                    <td>{c.month}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{c.size}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{c.size ? Math.round(c.repeat / c.size * 100) : 0}%</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: c.size && (c.active / c.size) < 0.3 ? 'var(--red)' : 'var(--ink2)' }}>{c.size ? Math.round(c.active / c.size * 100) : 0}%</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            ) : <div style={{ fontSize: 11, color: 'var(--ink5)' }}>対象データなし</div>}
+            <div style={{ fontSize: 10, color: 'var(--ink5)', marginTop: 4 }}>継続率=2回以上参加 / 直近活性=90日以内に参加</div>
+          </div>
+        </div>
+
+        {/* 属性別クロス */}
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>属性別クロス (参加経験率 / 継続率)</div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {[['在留ステータス', data.crossResidency], ['日本語学校', data.crossJpSchool]].map(([label, rows]) => (
+              <div key={label} style={{ flex: '1 1 300px', minWidth: 260 }}>
+                <div style={{ fontSize: 11, color: 'var(--ink3)', marginBottom: 4 }}>{label}</div>
+                <table className="tbl" style={{ fontSize: 11 }}><thead><tr>
+                  <th style={{ textAlign: 'left' }}>区分</th><th style={{ textAlign: 'right' }}>人数</th><th style={{ textAlign: 'right' }}>参加経験</th><th style={{ textAlign: 'right' }}>継続</th>
+                </tr></thead><tbody>
+                  {(rows || []).map(r => (
+                    <tr key={r.key}>
+                      <td>{r.key}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size ? Math.round(r.exp / r.size * 100) : 0}%</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size ? Math.round(r.rep / r.size * 100) : 0}%</td>
+                    </tr>
+                  ))}
+                </tbody></table>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 離脱予兆リスト */}
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 4 }}>離脱予兆リスト (最終活動 60〜150日前・要フォロー)</div>
+          {data.churnRisk && data.churnRisk.length ? (
+            <table className="tbl" style={{ fontSize: 11 }}><thead><tr>
+              <th style={{ textAlign: 'left' }}>会員</th><th style={{ textAlign: 'right' }}>最終活動</th><th style={{ textAlign: 'right' }}>参加回数</th>
+            </tr></thead><tbody>
+              {data.churnRisk.map(u => (
+                <tr key={u.id}>
+                  <td>{u.name}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: u.days >= 120 ? 'var(--red)' : 'var(--ink2)' }}>{u.days}日前</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{u.events}</td>
+                </tr>
+              ))}
+            </tbody></table>
+          ) : <div style={{ fontSize: 11, color: 'var(--ink5)' }}>該当者なし (健全)</div>}
+        </div>
+      </div>
 
       <div style={{ fontSize: 10, color: 'var(--ink5)', marginTop: 14, lineHeight: 1.6, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
         上段は申込・参加・ログインの既存タイムスタンプから算出。 「実行動データ」はログイン/チケット・記念写真閲覧/通知開封などの実記録 (ActionLog) を集計したものです。
