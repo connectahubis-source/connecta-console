@@ -1,0 +1,12 @@
+[
+  "CFG",
+  "requireRole_",
+  "getSpreadsheet_",
+  "listSettings",
+  "getSetting",
+  "updateSettings",
+  "ensureSheet_",
+  "readSheetAsObjects",
+  "invalidateSheetCache_",
+  "authResolveSession_"
+]

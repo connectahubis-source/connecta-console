@@ -1,0 +1,13 @@
+{
+  "name": "connecta-admin-checks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "connec+a 管理画面 (admin-index.html) のデプロイ前チェック (build前進・babelブロック)",
+  "scripts": {
+    "predeploy": "node predeploy_check.js admin-index.html"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.24.0"
+  }
+}
