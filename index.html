@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P5m'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P5v'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -130,6 +130,54 @@
   })();
 </script>
 
+<script>
+  // (Phase 18.E) サイドバー通知バッジの定期更新 — 軽量・全ページ・準リアルタイム
+  (function(){
+    var TYPE_LABELS = { payment: '決済', reg: '申込', warn: '警告', task: 'タスク', mail: '配信', chat: 'チャット', system: 'システム' };
+    function setBadge(count, byType){
+      var el = document.getElementById('notifUnreadBadge');
+      if(!el) return;
+      var n = Number(count) || 0;
+      if(n > 0){
+        el.textContent = n > 99 ? '99+' : String(n);
+        el.style.display = '';
+        // 種類別内訳のツールチップ (非0のみ、 決済/申込/警告 を優先表示)
+        var parts = [];
+        if(byType && typeof byType === 'object'){
+          var order = ['payment','reg','warn','task','mail','chat','system'];
+          order.forEach(function(k){ if(byType[k] > 0) parts.push((TYPE_LABELS[k] || k) + ' ' + byType[k]); });
+          Object.keys(byType).forEach(function(k){ if(order.indexOf(k) < 0 && byType[k] > 0) parts.push((TYPE_LABELS[k] || k) + ' ' + byType[k]); });
+        }
+        el.title = '未読 ' + n + '件' + (parts.length ? '（' + parts.join('・') + '）' : '');
+      } else {
+        el.textContent = '';
+        el.style.display = 'none';
+        el.title = '';
+      }
+    }
+    function refresh(){
+      if(document.visibilityState === 'hidden') return;
+      if(typeof window.fetchData !== 'function') return;
+      try {
+        var p = window.fetchData('getUnreadNotificationCount');
+        if(p && typeof p.then === 'function'){
+          p.then(function(r){ if(r && r.ok) setBadge(r.count, r.byType); }).catch(function(){});
+        }
+      } catch (e) {}
+    }
+    window.refreshNotifBadge = refresh;  // React 側の既読操作後に即時反映できるよう公開
+    var started = false;
+    function start(){ if(started) return; started = true; refresh(); setInterval(refresh, 60000); }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if(typeof window.fetchData === 'function'){ clearInterval(iv); start(); }
+      else if(tries > 20){ clearInterval(iv); }
+    }, 500);
+    document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') refresh(); });
+  })();
+</script>
+
 <!-- iOS icon -->
 <link rel="apple-touch-icon" href="data:image/png;base64,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">
 <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAADh0lEQVR42u2XTWgdVRTHf+femXkf6cvrC3na9CO15CmtRm0W1SKIRAWNCmIFERGrgiBUXAmCRbrqSlBREBSUpuBCESRWdBUCUolf1VI01mgwoMYmaZK+75l5M/e6aBJra5MXtGZh7nI4HH6c+/ufmRFrrWUVj2KVzxrAGsCqAzjLFZyfUmtBlCD/EoCs9h5YcgLGWCrVGmPjk8wWq4hA2/oMhSs2kE4lUEouzQSstYgIp2fLfH5slEQyweaOHGEj4uTYBLlMipt2bSedSoD8s+tY8gri2FAs12lb3/KX58VSlWxryzLOCCL/oQOxsajz5IyNRQTUEiRNpeBMqUoQRGityLamcR2NnNPUWIue96FS8zEGPFeRTHh/JkdWCGAtRHGMoxWH3j/GwTeOorXixWfv4KG7e2hEMa6jMdaiRPhwaISXDg8zPecTG4PrKLoLeQ7s6+XKrfnFuqYBRMB1NADpVIpy3WCtIWwYRATX0dj5pm8f+ZqHn34XHBcn7SICCc/l27EZToxOMnTocdqy6UW5mwKo1UPmSjU8V1Ms13AdhQDlis/0TJlGFNOeW4fran6bKvPMvl5aUg533Vwg05Lg0f0DjE+U+WF8jsHhH3mgbydRbHC0LC3h2SLF6+98wf5XBmnPpan5EX5gAEglNElPU60HvPfyg+y+vhM/CBkYHOHUTIVqLcQifDA0ytivRaq1gNeev5PH7tu12LupCZSqATMTJWp+jHYULUkXEGZLPo1GTFAPsBbCRkTv3jf57PjvKFdjqgFgybRnyGaSlCs+eiUpWLB5z+3b2bZxHamky8dHf+LwkRFAeGLPtdx64zbqfoNrCpfxyZc/89X3U2zelAMMB57sY9OGLC+89SnHT06jlGBXsooXJOnqzNPVmQdgctanf+A7wHLDdVu4p7d7sb5cDfAcTWwMWlnuvW0H+bYM/QPfEMVm2WV00Ssw1hI2YlytmCvWqRTrAMwW68SxIYxikp7D7p1byLV6VPwGSc/hlr39XNXZSrUe4nkOsR9fYH5TAGo+aloJ3YU8j9zfg4hwdVcerRWeCNZCRz7Lq8/18dTBj5ir+ExOlrAmYmM+TaUWEPgBURRdulW8kO1TU0WGT/yCtdCzo4MwjDh9pgbWUtjazuXtrX+7B5oCsNZizNkypeSCJmb+PbCqHyTnQooSsGDn/VciF/VA1v6M1gD+9wB/AKL/o7AtRii8AAAAAElFTkSuQmCC">
@@ -141,6 +189,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Kalam:wght@400;700&family=Permanent+Marker&family=Yuji+Mai&family=Yuji+Boku&family=Klee+One:wght@400;600&family=Zen+Kurenaido&family=Hachi+Maru+Pop&family=Fraunces:ital,wght@0,400;1,400&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <!-- (Phase 17.N-10) 世界地図 choropleth 用 d3 + topojson-client -->
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
@@ -1699,7 +1748,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5m</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5v</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -1721,7 +1770,7 @@ svg{display:block}
       <a href="#notifications" class="nav-item" data-nav="notifications">
         <svg class="ic" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
         通知センター
-        <span class="n-badge">12</span>
+        <span class="n-badge" id="notifUnreadBadge" style="display:none"></span>
       </a>
     </div>
 
@@ -6034,7 +6083,9 @@ function SessionMementoRow({ sess, busy, onSave, eventLevelId }){
   return (
     <div style={{padding:12,border:'1px solid var(--line)',borderRadius:8,background:'var(--white)',marginBottom:10}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
-        <span style={{fontWeight:700,fontSize:13}}>Day {sess.order}</span>
+        {eventLevelId
+          ? <span style={{fontWeight:700,fontSize:13}}>記念写真</span>
+          : <span style={{fontWeight:700,fontSize:13}}>Day {sess.order}</span>}
         <span style={{fontSize:12,color:'var(--ink3)'}}>{sess.date || ''}{sess.name ? ' ・ ' + sess.name : ''}</span>
         {pubStatus === 'public' && <span className="badge badge-green"><span className="badge-dot"></span>公開中</span>}
         {pubStatus === 'scheduled' && <span className="badge badge-amber"><span className="badge-dot"></span>{pubWhen} 公開予約</span>}
@@ -6188,6 +6239,50 @@ function SessionMementoRow({ sess, busy, onSave, eventLevelId }){
   );
 }
 
+// (Phase 18.E 改善) 当日飛び入りアンケート QRポスター発行 — URL + QR画像 (DL可)
+function WalkinPosterBlock({ eventId }) {
+  const [qrSvg, setQrSvg] = useState('');
+  const [copied, setCopied] = useState(false);
+  const base = (localStorage.getItem('cca_participants_base_url') || 'https://connectahubis-source.github.io/event/').replace(/\/+$/, '/') ;
+  const walkUrl = base + (base.endsWith('/') ? '' : '/') + '#/walkin?event=' + encodeURIComponent(eventId) + '&src=poster';
+  useEffect(() => {
+    if (!eventId) { setQrSvg(''); return; }
+    let stop = false, count = 0;
+    const gen = () => {
+      if (!window.qrcode) return false;
+      try { const qr = window.qrcode(0, 'M'); qr.addData(walkUrl); qr.make(); if (!stop) setQrSvg(qr.createSvgTag({ scalable: true, margin: 1 })); return true; }
+      catch (e) { return false; }
+    };
+    if (gen()) return;
+    const iv = setInterval(() => { count++; if (gen() || count > 50) clearInterval(iv); }, 100);
+    return () => { stop = true; clearInterval(iv); };
+  }, [eventId, walkUrl]);
+  const copy = () => { try { navigator.clipboard.writeText(walkUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {} };
+  const download = () => {
+    if (!qrSvg) return;
+    const blob = new Blob([qrSvg], { type: 'image/svg+xml' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'walkin-qr-' + eventId + '.svg'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  if (!eventId) return null;
+  return (
+    <div style={{margin:'10px 16px',padding:'12px 14px',border:'1px dashed var(--line)',borderRadius:10,background:'var(--bg2)'}}>
+      <div style={{fontSize:12,fontWeight:700,color:'var(--ink2)',marginBottom:8}}>当日飛び入りアンケート（ログイン不要・QRポスター用）</div>
+      <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
+        <div style={{width:120,height:120,background:'#fff',borderRadius:8,padding:6,flexShrink:0}} dangerouslySetInnerHTML={{ __html: qrSvg || '' }} />
+        <div style={{flex:'1 1 220px',minWidth:200}}>
+          <div style={{fontSize:11,color:'var(--ink4)',marginBottom:4}}>このQR・URLを会場ポスターに掲示すると、未会員でも匿名で満足度を回答できます。</div>
+          <div style={{fontFamily:'var(--mono)',fontSize:11,wordBreak:'break-all',background:'#fff',border:'1px solid var(--line)',borderRadius:6,padding:'6px 8px',marginBottom:6}}>{walkUrl}</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <button onClick={copy} className="btn btn-ghost" style={{fontSize:12}}>{copied ? 'コピーしました' : 'URLをコピー'}</button>
+            <button onClick={download} className="btn btn-ghost" style={{fontSize:12}} disabled={!qrSvg}>QR画像(SVG)を保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PagePostEvent(){
   const [events, setEvents] = useState([]);
   const [eventId, setEventId] = useState("");
@@ -6201,6 +6296,7 @@ function PagePostEvent(){
   const [filter, setFilter] = useState("active");        // active / archived / all
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [walkinCount, setWalkinCount] = useState(0);  // (Phase 18.E #7) 当日飛び入り回答数
   const [editingSurvey, setEditingSurvey] = useState(null); // {mode, initialValues}
   const [responseModal, setResponseModal] = useState(null); // survey or null
   const [builderSurvey, setBuilderSurvey] = useState(null); // survey or null
@@ -6216,7 +6312,8 @@ function PagePostEvent(){
   const isMulti = !!selectedEvent && (selectedEvent.format === 'multi' || sessions.length > 0);
 
   const loadDetail = useCallback(() => {
-    if (!eventId) { setSessions([]); setSurveys([]); setResponses([]); setRegistrations([]); setAnalytics({}); setExpandedSurvey(null); return; }
+    if (!eventId) { setSessions([]); setSurveys([]); setResponses([]); setRegistrations([]); setAnalytics({}); setExpandedSurvey(null); setWalkinCount(0); return; }
+    window.fetchData('getWalkinStats', { eventId }).then(r => setWalkinCount(r && r.ok ? (r.walkinCount || 0) : 0)).catch(() => setWalkinCount(0));
     window.fetchData('listEventSessions', { eventId }).then(s => setSessions(Array.isArray(s) ? s : [])).catch(() => setSessions([]));
     Promise.all([
       window.fetchData('listSurveys'),
@@ -6410,6 +6507,11 @@ function PagePostEvent(){
           {/* 記念写真 */}
           <div className="card" style={{marginBottom:16}}>
             <div className="card-head"><div className="card-title">🎖 記念写真</div></div>
+            {selectedEvent && selectedEvent.status === '公開中' && !isMulti && !selectedEvent.mementoPhotoUrl && (
+              <div style={{margin:'0 16px',marginTop:10,padding:'8px 12px',background:'var(--amber-50,#fff7e6)',border:'1px solid var(--amber-100,#fde68a)',borderRadius:8,fontSize:12,color:'var(--amber-700,#b45309)',fontWeight:600}}>
+                公開中のイベントですが記念写真が未設定です。 下で写真を設定し公開のお知らせを送れます。
+              </div>
+            )}
             <div className="card-body">
               <div style={{display:'inline-flex',alignItems:'center',gap:6,marginBottom:10,padding:'5px 10px',borderRadius:999,background:'#fdf4ff',border:'1px dashed #c026d3',color:'#a21caf',fontSize:11.5,fontWeight:700}}>
                 テスト参加者は公開日時の前でも記念写真を表示できます（実機検証用）。本番参加者には公開日時どおりに表示されます。
@@ -6439,7 +6541,7 @@ function PagePostEvent(){
                       mementoNewsId: selectedEvent.mementoNewsId || '',
                       sealType: selectedEvent.sealType || '',
                       sealPos: selectedEvent.sealPos || '',
-                      'セッション名': selectedEvent.title || '',
+                      name: selectedEvent.title || '',
                     }}
                     busy={busy}
                     onSave={saveEventMemento}
@@ -6454,6 +6556,7 @@ function PagePostEvent(){
           <div className="card" style={{marginBottom:16}}>
             <div className="card-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
               <div className="card-title">⭐ 満足度調査</div>
+              {walkinCount > 0 && <span className="badge badge-teal">当日飛び入り {walkinCount}件</span>}
               {window.canDo('surveys.create') && (
                 <button className="btn btn-pri btn-sm" onClick={()=>setEditingSurvey({mode:'create', initialValues:{ eventId }})}>
                   <Icon n="plus" s={13}/> アンケートを作成
@@ -6461,6 +6564,7 @@ function PagePostEvent(){
               )}
             </div>
             <div className="card-body">
+              {eventId && <WalkinPosterBlock eventId={eventId} />}
               <div className="kpi-grid" style={{marginBottom:14}}>
                 <MiniStat label="アンケート数" value={String(surveys.filter(s=>s.status!=='アーカイブ').length)} sub="公開中 + 下書き" icon="star" color="indigo"/>
                 <MiniStat label="総回答数" value={String(totalResponses)} sub="このイベント合計" icon="users" color="teal"/>
@@ -9435,7 +9539,9 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
     // 全 active reg が チェックイン済?
     if (activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済')) return 'チェックイン済';
     // (無料イベント) 金額0は支払い概念なし → 未チェックインは「申込済」(当日決済済を出さない)
-    if (activeRegs.length > 0 && activeRegs.every(r => (Number(r.amount) || 0) === 0)) return '申込済';
+    // (Phase 18.E #10) 無料判定: 全reg金額0 または イベントの料金タイプ=free/参加費0 (金額誤入力にも頑健)
+    const eventFree = event && (String(event.feeType) === 'free' || Number(event.fee) === 0);
+    if (activeRegs.length > 0 && (eventFree || activeRegs.every(r => (Number(r.amount) || 0) === 0))) return '申込済';
     // 申込時の方法 (= 備考 + 申込時の支払い方法 から判定)
     const notes = appRegs.map(r => String(r.note || '') + ' ' + String(r.actualPaymentMethod || '')).join(' ');
     const isPrepayApp = /PayPay.*事前|事前決済|事前/.test(notes);
@@ -9534,6 +9640,24 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
         </span>
         {apps.length > 0 && <span style={{color:'var(--jb-ink-ghost)',fontSize:9,letterSpacing:'0.1em',textTransform:'none'}}>クリックで詳細</span>}
       </div>
+      {(() => {
+        const pendingApps = filteredApps.filter(a => {
+          const ar = getRegsForApp(a);
+          const isFreeA = ar.length > 0 && ar.every(r => (Number(r.amount) || 0) === 0);
+          const st = getStatus(a);
+          return st === 'チェックイン保留' || (isFreeA && ['チェックイン済', 'キャンセル', '返金待ち', '一部キャンセル'].indexOf(st) < 0);
+        });
+        if (!pendingApps.length) return null;
+        return (
+          <div style={{marginBottom:10,padding:'8px 12px',background:'var(--coral-50,#fdecea)',border:'1px solid var(--coral)',borderRadius:6,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <span style={{fontSize:12,fontWeight:700,color:'var(--coral-600,#c0392b)'}}>チェックイン可能 {pendingApps.length} 件</span>
+            <button onClick={async () => {
+              if (!(await window.confirmDialog({ title: 'まとめてチェックイン', body: pendingApps.length + ' 件をチェックイン済にします。 よろしいですか?', confirmLabel: '実行' }))) return;
+              for (const a of pendingApps) { await handleQuickCheckin(a); }
+            }} style={{padding:'4px 12px',background:'var(--jb-blue-deep)',color:'#fff',border:'none',borderRadius:4,fontSize:12,fontWeight:700,cursor:'pointer'}}>まとめてチェックイン</button>
+          </div>
+        );
+      })()}
       {apps.length === 0 ? (
         <div style={{padding:20,background:'var(--jb-paper-mist)',borderRadius:6,fontFamily:'var(--jb-mono)',fontSize:11,color:'var(--jb-ink-soft)',textAlign:'center',letterSpacing:'0.05em'}}>申込なし</div>
       ) : (
@@ -13958,9 +14082,21 @@ function ParticipantDetail({p, onEdit, onDelete}){
     if (!p.events && !p.lastJoin) { setHistory([]); return; }  // 参加実績なし → フェッチ省略
     setHistory(null);
     window.fetchData('getParticipantHistory', { userId: p.id }).then(res => { if (!cancelled && res && res.ok) setHistory(res.items || []); }).catch(() => {});
+    setHistoryFilter(null);  // (Phase 18.E) 会員切替時に絞り込みをリセット
     return () => { cancelled = true; };
   }, [p && p.id]);
   const latestEvent = (history && history.length) ? history[0] : null;
+  const noShowRate = React.useMemo(() => {
+    if (!history || !history.length) return null;
+    let ci = 0, ns = 0;
+    history.forEach(h => {
+      const past = h.date && new Date(h.date) < new Date();
+      const cl = ['キャンセル', '返金', '返金待ち'].indexOf(h.status) >= 0;
+      if (h.status === 'チェックイン済') ci++; else if (!cl && past) ns++;
+    });
+    const t = ci + ns;
+    return t ? Math.round(ns / t * 100) : null;
+  }, [history]);
   return (
     <div className="stack">
       <div className="card">
@@ -13973,6 +14109,7 @@ function ParticipantDetail({p, onEdit, onDelete}){
               <div className="row mt8" style={{gap:6,flexWrap:'wrap'}}>
                 {p.status === "アーカイブ" && <span className="badge badge-ink"><span className="badge-dot"></span>アーカイブ</span>}
                 {(p.tags || []).map(t => <span key={t} className="badge badge-indigo">{t}</span>)}
+                {noShowRate != null && noShowRate >= 30 && <span className="badge badge-coral"><span className="badge-dot"></span>ドタキャン注意 {noShowRate}%</span>}
               </div>
               {(() => {
                 const la = Math.max(p.lastJoin ? new Date(p.lastJoin).getTime() : 0, p.lastLoginAt ? new Date(p.lastLoginAt).getTime() : 0);
@@ -14049,7 +14186,7 @@ function ParticipantDetail({p, onEdit, onDelete}){
                 const target = s.ci + s.noshow;  // 参加対象 = 開催済かつ非キャンセル
                 const nsRate = target ? Math.round(s.noshow / target * 100) : null;
                 const seg = (k, label, color) => (
-                  <button onClick={() => setHistoryFilter(f => f === k ? null : k)}
+                  <button title={historyFilter === k ? 'クリックで絞り込み解除' : 'クリックでこの区分だけ表示'} onClick={() => setHistoryFilter(f => f === k ? null : k)}
                     style={{ background: historyFilter === k ? color : 'transparent', color: historyFilter === k ? '#fff' : color, border: `1px solid ${color}`, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                     {label}
                   </button>
@@ -14984,6 +15121,44 @@ function EventPayPayPanel({ event, regs, participants, onReload }) {
 
   return (
     <section style={{marginBottom:24}}>
+      {(() => {
+        const now = Date.now();
+        const pending = (regs || []).filter(r => r && r.status === '返金待ち').map(r => {
+          const at = r.cancelledAt ? new Date(r.cancelledAt).getTime() : null;
+          return { reg: r, days: at ? Math.floor((now - at) / 86400000) : null };
+        }).sort((a, b) => (b.days || 0) - (a.days || 0));
+        if (!pending.length) return null;
+        const overdue = pending.filter(x => x.days != null && x.days >= 7).length;
+        return (
+          <div style={{marginBottom:12,padding:'10px 14px',background:'var(--coral-50,#fdecea)',border:'1px solid var(--coral)',borderRadius:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--coral-600,#c0392b)',marginBottom:6}}>返金待ち {pending.length} 件{overdue > 0 ? `（7日以上 ${overdue} 件）` : ''}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              {pending.slice(0, 8).map((x, i) => {
+                const p = partMap[x.reg.userId];
+                return (
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,gap:8}}>
+                    <span>{p ? p.name : x.reg.userId}</span>
+                    <span style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontFamily:'var(--jb-mono)',color: (x.days != null && x.days >= 7) ? 'var(--coral-600,#c0392b)' : 'var(--jb-ink-soft)',fontWeight:700}}>{x.days != null ? `滞留 ${x.days}日` : '日数不明'}{x.reg.refundAmount ? ` ・ ¥${Number(x.reg.refundAmount).toLocaleString()}` : ''}</span>
+                      {x.reg.applicationId && (
+                        <button onClick={async () => {
+                          if (!(await window.confirmDialog({ title: '返金処理済みにする', body: (p ? p.name : x.reg.userId) + ' の返金待ちを「返金」 ステータスに確定します。 実際の送金は別途行ってください。', confirmLabel: '確定' }))) return;
+                          try {
+                            const res = await window.postData('admin.application.refund', { applicationId: x.reg.applicationId, regIds: [x.reg.id], operator: '', memo: '返金処理済みに確定（ワンクリック）' });
+                            if (res && (res.ok || res.refundedRegIds)) { if (onReload) onReload(); }
+                            else if (window.showToast) window.showToast((res && res.error) || '返金処理に失敗しました');
+                          } catch (e) { if (window.showToast) window.showToast((e && e.message) || String(e)); }
+                        }} style={{padding:'2px 8px',background:'var(--jb-blue-deep)',color:'#fff',border:'none',borderRadius:4,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>返金処理済みにする</button>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+              {pending.length > 8 && <div style={{fontSize:11,color:'var(--jb-ink-soft)'}}>ほか {pending.length - 8} 件</div>}
+            </div>
+          </div>
+        );
+      })()}
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}>
         <span>PayPay 決済管理 (= ¥{fee.toLocaleString()}/名)</span>
         <a href="#paypay" className="jb-btn" style={{padding:'3px 9px',fontSize:9,letterSpacing:'0.04em',textTransform:'none'}}>
@@ -17659,7 +17834,7 @@ function PageDepartments(){
           </div>
           {settings.grade_update_last_run && (
             <div style={{fontFamily:'var(--jb-mono)',fontSize:9,color:'var(--jb-ink-ghost)',marginTop:6,textAlign:'right',lineHeight:1.5}}>
-              {(() => { try { const d = new Date(settings.grade_update_last_run); const p = (n)=>String(n).padStart(2,'0'); return `学年更新 最終実行: ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; } catch (e) { return '学年更新 最終実行: ' + settings.grade_update_last_run; } })()}{settings.grade_update_last_count ? `（${settings.grade_update_last_count}名）` : ''}
+              {(() => { try { const d = new Date(settings.grade_update_last_run); const p = (n)=>String(n).padStart(2,'0'); return `学年更新 最終実行: ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; } catch (e) { return '学年更新 最終実行: ' + settings.grade_update_last_run; } })()}{settings.grade_update_last_count ? `（${settings.grade_update_last_count}名）` : ''}{settings.grade_update_last_ms != null && settings.grade_update_last_ms !== '' ? `・${(Number(settings.grade_update_last_ms)/1000).toFixed(1)}秒` : ''}
             </div>
           )}
         </div>
@@ -19904,7 +20079,9 @@ function PageNotifications(){
   const [notifs, setNotifs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(() => { try { return localStorage.getItem('cca_notif_filter') || 'all'; } catch (e) { return 'all'; } });
+  useEffect(() => { try { localStorage.setItem('cca_notif_filter', filter); } catch (e) {} }, [filter]);
+  const lastOpRef = useRef(0);  // (Phase 18.E) 直近の既読操作時刻 — ポーリング競合ガード用
 
   useEffect(() => {
     let cancelled = false;
@@ -19924,13 +20101,33 @@ function PageNotifications(){
     return () => { cancelled = true; };
   }, []);
 
+  // (Phase 18.E) 軽量ポーリング — 画面表示中のみ30秒間隔でサイレント再取得 (準リアルタイム)
+  useEffect(() => {
+    let stopped = false;
+    async function silentRefresh() {
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - lastOpRef.current < 5000) return;  // (Phase 18.E) 直近の既読操作直後はスキップ (楽観的UIとの競合回避)
+      try {
+        const data = await window.fetchData('listNotifications');
+        if (!stopped && Array.isArray(data)) setNotifs(data);
+        if (typeof window.refreshNotifBadge === 'function') window.refreshNotifBadge();
+      } catch (e) {}
+    }
+    const iv = setInterval(silentRefresh, 30000);
+    const onVis = () => { if (document.visibilityState === 'visible') silentRefresh(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { stopped = true; clearInterval(iv); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
+
   // 既読/未読トグル (通知をクリックで既読に)
   async function toggleRead(notifId) {
     const n = notifs.find(x => x.id === notifId);
     if (!n) return;
+    lastOpRef.current = Date.now();
     setNotifs(prev => prev.map(x => x.id === notifId ? {...x, unread: !x.unread} : x));
     try {
       await window.postData('toggleNotification', { notifId });
+      if (typeof window.refreshNotifBadge === 'function') window.refreshNotifBadge();
     } catch (err) {
       setNotifs(prev => prev.map(x => x.id === notifId ? {...x, unread: n.unread} : x));
     }
@@ -19942,12 +20139,14 @@ function PageNotifications(){
     if (unreadOnes.length === 0) return;
     if (!await window.confirmDialog({title:`${unreadOnes.length} 件の未読通知をすべて既読にしますか?`, body:'この操作は元に戻せません。'})) return;
 
+    lastOpRef.current = Date.now();
     // 楽観的UI
     setNotifs(prev => prev.map(x => ({...x, unread: false})));
 
     try {
       // 並列で実行
       await Promise.all(unreadOnes.map(n => window.postData('toggleNotification', { notifId: n.id })));
+      if (typeof window.refreshNotifBadge === 'function') window.refreshNotifBadge();
     } catch (err) {
       window.location.reload();
     }
@@ -19955,6 +20154,7 @@ function PageNotifications(){
 
   // 削除
   async function handleDelete(notifId) {
+    lastOpRef.current = Date.now();
     setNotifs(prev => prev.filter(x => x.id !== notifId));
     try {
       await window.postData('deleteNotification', { notifId });
@@ -20010,9 +20210,11 @@ function PageNotifications(){
   async function handleClick(n) {
     // 未読なら 既読に
     if (n.unread) {
+      lastOpRef.current = Date.now();
       setNotifs(prev => prev.map(x => x.id === n.id ? {...x, unread: false} : x));
       try {
         await window.postData('toggleNotification', { notifId: n.id });
+        if (typeof window.refreshNotifBadge === 'function') window.refreshNotifBadge();
       } catch (err) {
         setNotifs(prev => prev.map(x => x.id === n.id ? {...x, unread: true} : x));
       }
@@ -20087,12 +20289,17 @@ function PageNotifications(){
               <div className="notif-list">
                 {sorted.map(n => (
                   <div key={n.id} className={clsx("notif", n.unread && "unread")}
-                    style={{cursor:'pointer',position:'relative'}}
+                    style={{cursor:'pointer',position:'relative',...(n.isTest ? {borderLeft:'4px solid var(--red)',background:'var(--red-50)'} : {})}}
                     onClick={()=>handleClick(n)}>
                     <div className="notif-icon" style={{background:`var(--${n.color}-50)`,color:`var(--${n.color})`}}>
                       <Icon n={n.icon} s={16}/>
                     </div>
                     <div style={{flex:1,minWidth:0}}>
+                      {n.isTest && (
+                        <div style={{display:'inline-flex',alignItems:'center',gap:6,background:'var(--red)',color:'#fff',fontWeight:800,fontSize:14,letterSpacing:'0.04em',padding:'4px 12px',borderRadius:6,marginBottom:6}}>
+                          <Icon n="warning" s={15}/> これはテストです
+                        </div>
+                      )}
                       <div className="notif-title">{n.title}</div>
                       <div className="notif-body">{n.body}</div>
                       {n.relatedId && (
@@ -26029,13 +26236,16 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
 
     // No-show (過去イベントで 確定/決済 だが チェックイン未到達)
     let noShowBase = 0, noShow = 0;
+    const nsByUser = {};  // (Phase 18.E #13) userId -> {base, ns} 属性別クロス用
     regs.forEach(r => {
       const s = String(r.status || '');
       const e = eventMap[r.eventId];
       const evt = e && e.date ? new Date(e.date).getTime() : 0;
       if (evt && evt < now && (s === '決済済み' || s === '確定' || s === 'チェックイン済')) {
         noShowBase++;
-        if (s !== 'チェックイン済') noShow++;
+        const isNs = s !== 'チェックイン済';
+        if (isNs) noShow++;
+        if (r.userId) { const u = nsByUser[r.userId] = nsByUser[r.userId] || { base: 0, ns: 0 }; u.base++; if (isNs) u.ns++; }
       }
     });
     const noShowRate = noShowBase ? Math.round(noShow / noShowBase * 100) : null;
@@ -26115,14 +26325,15 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
       const g = {};
       parts.forEach(p => {
         const k = keyFn(p);
-        const row = g[k] = g[k] || { key: k, size: 0, exp: 0, rep: 0, npsSum: 0, npsN: 0 };
+        const row = g[k] = g[k] || { key: k, size: 0, exp: 0, rep: 0, npsSum: 0, npsN: 0, nsBase: 0, ns: 0 };
         row.size++;
         const ev = evCount(p.id);
         if (ev >= 1) row.exp++;
         if (ev >= 2) row.rep++;
         if (p.nps !== null && p.nps !== undefined) { row.npsSum += Number(p.nps); row.npsN++; }
+        const u = nsByUser[p.id]; if (u) { row.nsBase += u.base; row.ns += u.ns; }
       });
-      return Object.keys(g).map(k => { const r = g[k]; r.npsAvg = r.npsN ? Math.round(r.npsSum / r.npsN * 10) / 10 : null; return r; }).sort((a, b) => b.size - a.size);
+      return Object.keys(g).map(k => { const r = g[k]; r.npsAvg = r.npsN ? Math.round(r.npsSum / r.npsN * 10) / 10 : null; r.nsRate = r.nsBase ? Math.round(r.ns / r.nsBase * 100) : null; return r; }).sort((a, b) => b.size - a.size);
     };
     const crossResidency = crossBy(p => p.residencyStatus || '未設定');
     const crossJpSchool = crossBy(p => p.jpSchool ? '日本語学校 在籍' : '非在籍');
@@ -26385,13 +26596,15 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
 
         {/* 属性別クロス */}
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>属性別クロス (参加経験率 / 継続率)</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>属性別クロス (参加経験率 / 継続率 / No-show率)
+            <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink5)', marginLeft: 8 }}>No-show率: 過去イベントで確定/決済だが未チェックインの割合。 <span style={{ color: 'var(--red)', fontWeight: 700 }}>30%以上は赤</span></span>
+          </div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
             {[['在留ステータス', data.crossResidency], ['日本語学校', data.crossJpSchool]].map(([label, rows]) => (
               <div key={label} style={{ flex: '1 1 300px', minWidth: 260 }}>
                 <div style={{ fontSize: 11, color: 'var(--ink3)', marginBottom: 4 }}>{label}</div>
                 <table className="tbl" style={{ fontSize: 11 }}><thead><tr>
-                  <th style={{ textAlign: 'left' }}>区分</th><th style={{ textAlign: 'right' }}>人数</th><th style={{ textAlign: 'right' }}>参加経験</th><th style={{ textAlign: 'right' }}>継続</th><th style={{ textAlign: 'right' }}>NPS平均</th>
+                  <th style={{ textAlign: 'left' }}>区分</th><th style={{ textAlign: 'right' }}>人数</th><th style={{ textAlign: 'right' }}>参加経験</th><th style={{ textAlign: 'right' }}>継続</th><th style={{ textAlign: 'right' }}>No-show</th><th style={{ textAlign: 'right' }}>NPS平均</th>
                 </tr></thead><tbody>
                   {(rows || []).map(r => (
                     <tr key={r.key}>
@@ -26399,6 +26612,7 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size ? Math.round(r.exp / r.size * 100) : 0}%</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size ? Math.round(r.rep / r.size * 100) : 0}%</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: r.nsRate == null ? 'var(--ink5)' : (r.nsRate >= 30 ? 'var(--red)' : 'var(--ink2)'), fontWeight: r.nsRate != null && r.nsRate >= 30 ? 700 : 400 }}>{r.nsRate == null ? '—' : r.nsRate + '%'}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: r.npsAvg == null ? 400 : 700, color: r.npsAvg == null ? 'var(--ink5)' : (r.npsAvg >= npsHigh ? 'var(--green)' : r.npsAvg >= npsMid ? 'var(--ink2)' : 'var(--red)') }}>{r.npsAvg == null ? '—' : r.npsAvg}{r.npsN ? <span style={{ color: 'var(--ink5)', fontSize: 9, fontWeight: 400 }}> (n{r.npsN})</span> : null}</td>
                     </tr>
                   ))}
