@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P5i'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P5l'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1699,7 +1699,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5i</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5l</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -7828,6 +7828,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
       if (s === 'キャンセル') return 'キャンセル';
       if (s === '返金待ち' || s === '返金') return '返金待ち';
       if (s === 'チェックイン済') return 'チェックイン済';
+      if ((Number(r.amount) || 0) === 0) return '申込済';  // (無料) 支払いラベルを出さない
       const note = String(r.note || '') + ' ' + String(r.actualPaymentMethod || '');
       const isPrepay = /PayPay.*事前|事前決済|事前/.test(note);
       const isDayPay = /現金|当日/.test(note);
@@ -9372,7 +9373,7 @@ function LinkBuilderModal({ event, onClose }) {
 }
 window.LinkBuilderModal = LinkBuilderModal;
 
-function ApplicationsListSection({ apps, participantMap, regs, sessions, event, onPickApp }) {
+function ApplicationsListSection({ apps, participantMap, regs, sessions, event, onPickApp, onReload }) {
   // (Phase 17.S-fix) ステータスを 9 種に 細分化
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -9397,6 +9398,8 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
     const activeRegs = appRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
     // 全 active reg が チェックイン済?
     if (activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済')) return 'チェックイン済';
+    // (無料イベント) 金額0は支払い概念なし → 未チェックインは「申込済」(当日決済済を出さない)
+    if (activeRegs.length > 0 && activeRegs.every(r => (Number(r.amount) || 0) === 0)) return '申込済';
     // 申込時の方法 (= 備考 + 申込時の支払い方法 から判定)
     const notes = appRegs.map(r => String(r.note || '') + ' ' + String(r.actualPaymentMethod || '')).join(' ');
     const isPrepayApp = /PayPay.*事前|事前決済|事前/.test(notes);
@@ -9418,6 +9421,20 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
   };
   // (テストデータ) 申込がテスト参加者のものか — 集計から除外する判定
   const isTestApp = (a) => getRegsForApp(a).some(r => r.isTest);
+  // (Phase 18.D) 申込者一覧から直接チェックイン済にする (出席者管理を開かずに対応)
+  const handleQuickCheckin = async (a, ev) => {
+    if (ev) ev.stopPropagation();
+    const targets = getRegsForApp(a).filter(r => r.status !== 'チェックイン済' && r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
+    if (!targets.length) return;
+    try {
+      await Promise.all(targets.map(r => window.postData('admin.checkin', { regId: r.id })));
+      if (window.invalidateCache) window.invalidateCache('listRegistrations');
+      window.toast.success('チェックイン済にしました');
+      if (onReload) onReload();
+    } catch (err) {
+      window.toast.error('チェックイン失敗: ' + (err.message || err));
+    }
+  };
   // (Phase 17.N-13) フィルタリング
   const filteredApps = React.useMemo(() => {
     return apps.filter(a => {
@@ -9586,6 +9603,9 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
                 const status = getStatus(a);
                 const opt = STATUS_OPTIONS.find(o => o.v === status);
                 const stateColor = opt ? opt.c : 'var(--jb-ink-soft)';
+                const appRegs = getRegsForApp(a);
+                const isFreeApp = appRegs.length > 0 && appRegs.every(r => (Number(r.amount) || 0) === 0);
+                const canQuickCheckin = status === 'チェックイン保留' || (isFreeApp && ['チェックイン済', 'キャンセル', '返金待ち', '一部キャンセル'].indexOf(status) < 0);
                 return (
                   <div key={a.applicationId}
                     onClick={() => onPickApp(a)}
@@ -9613,6 +9633,12 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
                       {a.totalCount} reg · ¥{Number(a.totalAmount || 0).toLocaleString()}
                       {a.kind !== 'original' && <span style={{marginLeft:6,color:'var(--jb-shouwa)'}}>· {a.kind}</span>}
                     </div>
+                    {canQuickCheckin && (
+                      <button onClick={(ev) => handleQuickCheckin(a, ev)}
+                        style={{marginTop:8,padding:'4px 10px',background:'var(--jb-blue-deep)',color:'#fff',border:'none',borderRadius:4,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'var(--jb-sans)'}}>
+                        チェックイン済にする
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -10153,6 +10179,20 @@ function PageEventAdminDetail() {
     <div style={{padding:'24px 28px',maxWidth:1100,margin:'0 auto'}}>
       {/* (Phase 17.S) タブ — 概要 / 申込者 / 決済 / 分析 */}
       <EventDetailTabsBar tab={tab} onChange={setTab} kpi={kpi}/>
+
+      {/* (Phase 18.D) チェックイン保留の対応漏れアラート */}
+      {(() => {
+        const pendingCount = (regs || []).filter(r => r && r.status === 'チェックイン保留').length;
+        if (!pendingCount) return null;
+        return (
+          <div style={{margin:'12px 0',padding:'10px 14px',background:'var(--coral-50,#fdecea)',border:'1px solid var(--coral)',borderRadius:8,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <Icon n="warning" s={16}/>
+            <span style={{fontSize:13,fontWeight:700,color:'var(--coral-600,#c0392b)'}}>チェックイン保留 {pendingCount} 件</span>
+            <span style={{fontSize:12,color:'var(--jb-ink-soft)'}}>未対応の入場待ちがあります。申込者一覧の「チェックイン済にする」か、出席者管理で対応してください。</span>
+            {tab !== 'apps' && <button className="jb-btn" style={{padding:'3px 10px',fontSize:11}} onClick={() => setTab('apps')}>申込者一覧へ</button>}
+          </div>
+        );
+      })()}
 
       {/* (受付・当日) 未到着 (未チェックイン) 一覧 — 複数日はセッション別。 チェックインすると自動的に消える */}
       {(() => {
@@ -10880,6 +10920,7 @@ function PageEventAdminDetail() {
         sessions={sessions}
         event={event}
         onPickApp={setDetailModalApp}
+        onReload={loadAll}
       />
       </>
       )}
@@ -11832,6 +11873,7 @@ function BulkMailModal({ event, appCount, preset, onClose }) {
 // =============================================================================
 function SessionDayList({ sessions, stats, regs, participantMap, event, onReload }) {
   const [expandedId, setExpandedId] = useState(null);
+  const isFreeEvent = event && (String(event.feeType) === 'free' || Number(event.fee) === 0);  // (Phase 18.D) 無料=決済不要
   const miniBtnStyle = (color, outline) => ({
     padding:'2px 8px',
     fontSize:9,fontWeight:700,
@@ -11967,6 +12009,7 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
       <div style={{fontFamily:'var(--jb-mono)',fontSize:10,letterSpacing:'0.16em',color:'var(--jb-ink-soft)',textTransform:'uppercase',fontWeight:600,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
         <span>Day / セッション ({sessions.length})</span>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {isFreeEvent && <span style={{padding:'2px 8px',background:'var(--jb-success)',color:'#fff',fontSize:9,fontWeight:800,borderRadius:999,letterSpacing:'0.04em',textTransform:'none'}}>無料 ・ 決済不要</span>}
           <button onClick={exportAllCsv} className="jb-btn" style={{padding:'3px 9px',fontSize:9,letterSpacing:'0.04em'}}>
             <Icon n="download" s={10}/> 全 Day CSV
           </button>
@@ -12048,13 +12091,15 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
                         const p = participantMap[r.userId];
                         const isCheckedIn = r.status === 'チェックイン済';
                         const isPending = r.status === 'チェックイン保留';
+                        const isFreeReg = (Number(r.amount) || 0) === 0;
                         const isPaidStatus = r.paid || r.status === '決済済';
                         const statusColor = isCheckedIn ? 'var(--jb-blue-deep)'
                                           : isPending ? 'var(--jb-shouwa)'
                                           : isPaidStatus ? 'var(--jb-success)'
                                           : 'var(--jb-blue)';
                         const statusLabel = isCheckedIn ? '入場済'
-                                          : isPending ? '決済確認待ち'
+                                          : isPending ? (isFreeReg ? '未入場（無料）' : '決済確認待ち')
+                                          : isFreeReg ? '申込済'
                                           : isPaidStatus ? '決済済'
                                           : '未決済';
                         // (Phase 17.M-A4) 「[当日申告] 現金 / PayPay」 抽出
@@ -12096,9 +12141,11 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
                                 <button onClick={() => handleManualCheckin(r)} style={miniBtnStyle('var(--jb-blue-deep)')}>入場</button>
                               )}
                               {isPending && (
-                                <button onClick={() => handleConfirmPayment(r)} style={miniBtnStyle('var(--jb-success)')}>決済確認</button>
+                                isFreeReg
+                                  ? <button onClick={() => handleManualCheckin(r)} style={miniBtnStyle('var(--jb-blue-deep)')}>チェックイン済にする</button>
+                                  : <button onClick={() => handleConfirmPayment(r)} style={miniBtnStyle('var(--jb-success)')}>決済確認</button>
                               )}
-                              {!isPaidStatus && !isCheckedIn && (
+                              {!isFreeReg && !isPaidStatus && !isCheckedIn && (
                                 <button onClick={() => handleMarkPaid(r)} style={miniBtnStyle('var(--jb-success)', true)}>決済済</button>
                               )}
                               {(isCheckedIn || isPending) && (
@@ -23093,6 +23140,7 @@ function PageQR(){
     const active = rs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
     if (active.length === 0) return { label: 'キャンセル', cls: 'badge-ink' };
     if (active.length > 0 && active.every(r => r.status === 'チェックイン済')) return { label: 'チェックイン済', cls: 'badge-green' };
+    if (active.length > 0 && active.every(r => (Number(r.amount) || 0) === 0)) return { label: '申込済', cls: 'badge-amber' };  // (無料) 支払いラベルを出さない
     const notes = rs.map(r => String(r.note || '') + ' ' + String(r.actualPaymentMethod || '')).join(' ');
     const isPrepay = /PayPay.*事前|事前決済|事前/.test(notes);
     const isDayPay = /現金|当日/.test(notes);
