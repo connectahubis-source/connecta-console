@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P5a'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P5i'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1699,7 +1699,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5a</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5i</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -13867,6 +13867,17 @@ const QuestionBuilderModal = window.QuestionBuilderModal;
 // -------------------- PageParticipants --------------------
 
 function ParticipantDetail({p, onEdit, onDelete}){
+  const [history, setHistory] = React.useState(null);  // (Phase 18.C) 参加履歴 (イベント名つき)
+  const [historyFilter, setHistoryFilter] = React.useState(null);  // (Phase 18.C) ci|noshow|cancel|upcoming
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!p || !p.id) { setHistory(null); return; }
+    if (!p.events && !p.lastJoin) { setHistory([]); return; }  // 参加実績なし → フェッチ省略
+    setHistory(null);
+    window.fetchData('getParticipantHistory', { userId: p.id }).then(res => { if (!cancelled && res && res.ok) setHistory(res.items || []); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [p && p.id]);
+  const latestEvent = (history && history.length) ? history[0] : null;
   return (
     <div className="stack">
       <div className="card">
@@ -13880,6 +13891,20 @@ function ParticipantDetail({p, onEdit, onDelete}){
                 {p.status === "アーカイブ" && <span className="badge badge-ink"><span className="badge-dot"></span>アーカイブ</span>}
                 {(p.tags || []).map(t => <span key={t} className="badge badge-indigo">{t}</span>)}
               </div>
+              {(() => {
+                const la = Math.max(p.lastJoin ? new Date(p.lastJoin).getTime() : 0, p.lastLoginAt ? new Date(p.lastLoginAt).getTime() : 0);
+                if (!la) return null;
+                const days = Math.floor((Date.now() - la) / 86400000);
+                const col = days >= 120 ? 'var(--red)' : days >= 60 ? 'var(--coral)' : 'var(--green)';
+                return (
+                  <div className="mt8" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, background: 'var(--bg2)', border: `1px solid ${col}` }}>
+                    <span style={{ fontSize: 10, color: 'var(--ink4)', fontWeight: 600 }}>最終活動</span>
+                    <span style={{ fontFamily: 'var(--mono)', fontWeight: 800, color: col }}>{days}日前</span>
+                    {days >= 60 && <span style={{ fontSize: 10, color: col }}>{days >= 120 ? '要フォロー' : '休眠化注意'}</span>}
+                    {latestEvent && latestEvent.title && <span style={{ fontSize: 10, color: 'var(--ink4)' }}>・ 直近: {latestEvent.title}</span>}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -13921,13 +13946,66 @@ function ParticipantDetail({p, onEdit, onDelete}){
       </div>
 
       <div className="card">
-        <div className="card-head"><div className="card-title"><Icon n="clock" s={16}/> 参加履歴</div></div>
+        <div className="card-head"><div className="card-title"><Icon n="clock" s={16}/> 参加履歴</div>{history && <span style={{fontSize:11,color:'var(--ink4)'}}>{history.length} 件</span>}</div>
         <div style={{padding:16}}>
-          <div className="empty" style={{padding:'30px 14px'}}>
-            <Icon n="clock" s={24}/>
-            <div style={{fontSize:12}}>参加履歴は Registrations 連動後に表示されます</div>
-            <div style={{fontSize:11,color:'var(--ink5)',marginTop:4}}>準備中</div>
-          </div>
+          {history == null ? (
+            <div className="empty" style={{padding:'24px 14px'}}><div style={{fontSize:12,color:'var(--ink5)'}}>読み込み中…</div></div>
+          ) : history.length === 0 ? (
+            <div className="empty" style={{padding:'24px 14px'}}><Icon n="clock" s={24}/><div style={{fontSize:12}}>参加履歴はありません</div></div>
+          ) : (
+            <div className="stack" style={{gap:6}}>
+              {(() => {
+                const cls = (h) => {
+                  const past = h.date && new Date(h.date) < new Date();
+                  const cl = ['キャンセル', '返金', '返金待ち'].indexOf(h.status) >= 0;
+                  if (h.status === 'チェックイン済') return 'ci';
+                  if (cl) return 'cancel';
+                  return past ? 'noshow' : 'upcoming';
+                };
+                const s = history.reduce((a, h) => { a[cls(h)]++; return a; }, { ci: 0, noshow: 0, cancel: 0, upcoming: 0 });
+                const target = s.ci + s.noshow;  // 参加対象 = 開催済かつ非キャンセル
+                const nsRate = target ? Math.round(s.noshow / target * 100) : null;
+                const seg = (k, label, color) => (
+                  <button onClick={() => setHistoryFilter(f => f === k ? null : k)}
+                    style={{ background: historyFilter === k ? color : 'transparent', color: historyFilter === k ? '#fff' : color, border: `1px solid ${color}`, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    {label}
+                  </button>
+                );
+                const filtered = historyFilter ? history.filter(h => cls(h) === historyFilter) : history;
+                return (
+                  <React.Fragment>
+                    <div className="row" style={{gap:6,flexWrap:'wrap',marginBottom:2,alignItems:'center'}}>
+                      {seg('ci', `参加 ${s.ci}`, 'var(--green)')}
+                      {seg('noshow', `No-show ${s.noshow}`, 'var(--coral)')}
+                      {seg('cancel', `キャンセル ${s.cancel}`, 'var(--ink4)')}
+                      {s.upcoming > 0 && seg('upcoming', `予定 ${s.upcoming}`, 'var(--indigo)')}
+                      {nsRate != null && <span style={{fontSize:11,color: nsRate >= 30 ? 'var(--red)' : 'var(--ink4)',fontWeight:700,marginLeft:4}}>No-show率 {nsRate}%</span>}
+                      {historyFilter && <button onClick={() => setHistoryFilter(null)} style={{background:'none',border:'none',color:'var(--indigo)',cursor:'pointer',fontSize:11}}>解除</button>}
+                    </div>
+                    {filtered.slice(0, 20).map((h, i) => {
+                      const k = cls(h);
+                      const noShow = k === 'noshow';
+                      const checkedIn = k === 'ci';
+                      const cancelledLike = k === 'cancel';
+                      return (
+                        <div key={i} className="row between" style={{padding:'8px 10px',background: noShow ? 'var(--coral-50,#fdecea)' : 'var(--bg2)',borderRadius:8,gap:10,border: noShow ? '1px solid var(--coral)' : '1px solid transparent'}}>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{h.title}</div>
+                            <div style={{fontSize:10,color:'var(--ink4)'}}>{h.date || '日付なし'}</div>
+                          </div>
+                          {noShow
+                            ? <span className="badge" style={{flexShrink:0,background:'var(--coral)',color:'#fff'}}>No-show</span>
+                            : <span className="badge" style={{flexShrink:0,background:checkedIn?'var(--green-50,#e6f6ec)':cancelledLike?'var(--bg2)':'var(--indigo-50)',color:checkedIn?'var(--green)':'var(--ink3)'}}>{h.status}</span>}
+                        </div>
+                      );
+                    })}
+                    {filtered.length > 20 && <div style={{fontSize:10,color:'var(--ink5)',textAlign:'center'}}>ほか {filtered.length - 20} 件</div>}
+                    {filtered.length === 0 && <div style={{fontSize:11,color:'var(--ink5)',textAlign:'center',padding:'8px'}}>該当なし</div>}
+                  </React.Fragment>
+                );
+              })()}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -14076,6 +14154,20 @@ function PageParticipants(){
   const [sel, setSel] = useState(null);
   const [filter, setFilter] = useState("全員");
   const [query, setQuery] = useState("");
+  const [pendingSelId, setPendingSelId] = useState(null);  // (Phase 18.C) #participants?id= で選択予約
+
+  // (Phase 18.C) 行動分析の離脱予兆リスト等から #participants?q=氏名&id=ID で遷移した場合、検索と選択に反映
+  useEffect(() => {
+    try {
+      const h = window.location.hash || '';
+      const qi = h.indexOf('?');
+      if (qi >= 0) {
+        const sp = new URLSearchParams(h.substring(qi + 1));
+        const q = sp.get('q'); if (q) setQuery(q);
+        const id = sp.get('id'); if (id) setPendingSelId(id);
+      }
+    } catch (e) {}
+  }, []);
 
   // データ層: 初期は空配列、マウント時に API から取得
   const [participants, setParticipants] = useState([]);
@@ -14106,6 +14198,13 @@ function PageParticipants(){
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // (Phase 18.C) id 予約があり、参加者が読み込まれたら該当者を選択
+  useEffect(() => {
+    if (!pendingSelId || !participants.length) return;
+    const found = participants.find(x => x.id === pendingSelId);
+    if (found) { setSel(found); setPendingSelId(null); }
+  }, [pendingSelId, participants]);
 
   // 作成 / 編集の保存ハンドラ
   async function handleSave(fields) {
@@ -23543,6 +23642,8 @@ function PageQRLive(){
     const activeRegs = appRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
     const allCheckedIn = activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済');
     const isPaid = appRegs.some(r => r.paid === true || r.paid === 'TRUE') || appRegs.some(r => { const s = String(r.status || ''); return s === '決済済' || s === '決済済み'; });
+    // (無料イベント) 全 reg が金額0 → 決済不要。決済確認フローを挟まず直接入場確定する。
+    const isFree = appRegs.length > 0 && appRegs.every(r => (Number(r.amount) || 0) === 0);
     const kana = (appRegs.find(r => r.userKana) || {}).userKana || '';
     const ageVal = (() => { const r = appRegs.find(r => r.age != null); return r ? r.age : null; })();
     const isRepeater = app ? repeaterUserIds.has(app.userId) : false;
@@ -23566,7 +23667,7 @@ function PageQRLive(){
       targetRegs = activeRegs.filter(r => r.status !== 'チェックイン済');
       targetCheckedIn = false;
     }
-    return { app, appRegs, activeRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent, multiDay, targetSid, targetRegs, targetCheckedIn, noTargetReg, targetLabel, targetUnresolved };
+    return { app, appRegs, activeRegs, allCheckedIn, isPaid, isFree, kana, ageVal, isRepeater, wrongEvent, multiDay, targetSid, targetRegs, targetCheckedIn, noTargetReg, targetLabel, targetUnresolved };
   }
 
   // 入場確定 (楽観的)。 ボタンを押した瞬間に一覧から除去し、 checkin/決済確認はバックグラウンドで実行。
@@ -23801,7 +23902,7 @@ function PageQRLive(){
             <div style={{fontSize:11,color:'var(--ink4)',marginTop:2}}>約10分操作が無い項目は自動で消えます。同じ人を続けて読み取ると「再スキャン」、同一人物が複数件あると注意表示します。</div>
           </div>
           {pending.map(item => {
-            const { app, appRegs, allCheckedIn, isPaid, kana, ageVal, isRepeater, wrongEvent, multiDay, targetCheckedIn, noTargetReg, targetLabel, targetUnresolved } = resolveArrival(item);
+            const { app, appRegs, allCheckedIn, isPaid, isFree, kana, ageVal, isRepeater, wrongEvent, multiDay, targetCheckedIn, noTargetReg, targetLabel, targetUnresolved } = resolveArrival(item);
             if (!app) {
               return (
                 <div key={item.seq} className="card"><div className="card-body" style={{padding:'14px 18px'}}>
@@ -23866,6 +23967,8 @@ function PageQRLive(){
                       </>
                     ) : isPaid ? (
                       <button className="jb-btn jb-btn-primary" onClick={() => admit(item, false)} style={{fontSize:15,padding:'12px 22px'}}>✓ 入場を確定（決済済み）</button>
+                    ) : isFree ? (
+                      <button className="jb-btn jb-btn-primary" onClick={() => admit(item, false)} style={{fontSize:15,padding:'12px 22px'}}>✓ 入場を確定（無料）</button>
                     ) : (
                       <>
                         <button className="jb-btn jb-btn-primary" onClick={() => admit(item, true)} style={{fontSize:15,padding:'12px 22px',background:'var(--green)'}}>決済を確認して入場</button>
@@ -25789,7 +25892,10 @@ window.AutomationStatusPanel = AutomationStatusPanel;
 // (Phase 18.B1) ParticipantBehaviorAnalytics — 参加者行動分析 (既存タイムスタンプから算出)
 //   参加ファネル / 活性度セグメント / リピート・No-show / 時間帯ヒートマップ
 //   注: 申込日時(appliedAt)など現存データのみ使用。 ログイン/閲覧/通知開封は Phase 2 (ActionLog) で拡張予定。
-function ParticipantBehaviorAnalytics({ events, registrations, participants, actionLogStats, actionStats, actionDays, onDaysChange }) {
+function ParticipantBehaviorAnalytics({ events, registrations, participants, actionLogStats, actionStats, actionDays, onDaysChange, settings }) {
+  const npsHigh = (settings && isFinite(Number(settings.nps_color_high))) ? Number(settings.nps_color_high) : 8;
+  const npsMid = (settings && isFinite(Number(settings.nps_color_mid))) ? Number(settings.nps_color_mid) : 6;
+  const [legendOpen, setLegendOpen] = React.useState(false);  // (Phase 18.C) 残存率カラー凡例の開閉
   const data = React.useMemo(() => {
     const now = Date.now();
     const DAY = 86400000;
@@ -25877,19 +25983,37 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
     Object.keys(userEventDates).forEach(u => userEventDates[u].sort((a, b) => a - b));
     const evCount = (u) => (evByUser[u] ? evByUser[u].size : 0);
 
-    // 1) コホート定着 (初回参加月別: 規模 / 継続率(>=2) / 直近90日活性)
-    const cohorts = {};
+    // 1) コホート残存率カーブ (初回参加月 × 初回からNか月後に参加した率)
+    const MAXOFF = 6;
+    const nowDt = new Date(now);
+    const nowIdx = nowDt.getFullYear() * 12 + nowDt.getMonth();
+    const retCohorts = {};
     Object.keys(userEventDates).forEach(u => {
-      const first = userEventDates[u][0];
-      const dt = new Date(first);
-      const key = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
-      const c = cohorts[key] = cohorts[key] || { month: key, size: 0, repeat: 0, active: 0 };
-      c.size++;
-      if (evCount(u) >= 2) c.repeat++;
-      const last = userEventDates[u][userEventDates[u].length - 1];
-      if (now - last <= 90 * DAY) c.active++;
+      const ds = userEventDates[u];
+      const f = new Date(ds[0]);
+      const fIdx = f.getFullYear() * 12 + f.getMonth();
+      const key = f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0');
+      const rc = retCohorts[key] = retCohorts[key] || { month: key, fIdx: fIdx, size: 0, counts: new Array(MAXOFF + 1).fill(0) };
+      rc.size++;
+      const offs = new Set();
+      ds.forEach(t => { const dt = new Date(t); const off = (dt.getFullYear() * 12 + dt.getMonth()) - fIdx; if (off >= 0 && off <= MAXOFF) offs.add(off); });
+      offs.forEach(o => rc.counts[o]++);
     });
-    const cohortRows = Object.keys(cohorts).sort().slice(-8).map(k => cohorts[k]);
+    const retentionRows = Object.keys(retCohorts).sort().slice(-8).map(k => {
+      const rc = retCohorts[k];
+      const cells = rc.counts.map((c, o) => ((nowIdx - rc.fIdx) >= o) ? Math.round(c / rc.size * 100) : null);
+      return { month: rc.month, size: rc.size, cells: cells };
+    });
+    const retMaxOff = MAXOFF;
+    // 全コホート平均 (各 offset で、その月に到達済みのコホートを母数に加重平均)
+    const retAvg = new Array(MAXOFF + 1).fill(null).map((_, o) => {
+      let num = 0, den = 0;
+      Object.keys(retCohorts).forEach(k => {
+        const rc = retCohorts[k];
+        if ((nowIdx - rc.fIdx) >= o) { num += rc.counts[o]; den += rc.size; }
+      });
+      return den ? Math.round(num / den * 100) : null;
+    });
 
     // 2) 初回→2回目転換 (機会のあった人=初回が30日以上前 / 中央値日数)
     let f2Base = 0, f2Conv = 0; const gaps = [];
@@ -25902,18 +26026,19 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
     const f2Rate = f2Base ? Math.round(f2Conv / f2Base * 100) : null;
     const medGap = gaps.length ? Math.round(gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)]) : null;
 
-    // 3) 属性別クロス (在留ステータス / 日本語学校 × 参加経験率・継続率)
+    // 3) 属性別クロス (在留ステータス / 日本語学校 × 参加経験率・継続率・NPS平均)
     const crossBy = (keyFn) => {
       const g = {};
       parts.forEach(p => {
         const k = keyFn(p);
-        const row = g[k] = g[k] || { key: k, size: 0, exp: 0, rep: 0 };
+        const row = g[k] = g[k] || { key: k, size: 0, exp: 0, rep: 0, npsSum: 0, npsN: 0 };
         row.size++;
         const ev = evCount(p.id);
         if (ev >= 1) row.exp++;
         if (ev >= 2) row.rep++;
+        if (p.nps !== null && p.nps !== undefined) { row.npsSum += Number(p.nps); row.npsN++; }
       });
-      return Object.values(g).sort((a, b) => b.size - a.size);
+      return Object.keys(g).map(k => { const r = g[k]; r.npsAvg = r.npsN ? Math.round(r.npsSum / r.npsN * 10) / 10 : null; return r; }).sort((a, b) => b.size - a.size);
     };
     const crossResidency = crossBy(p => p.residencyStatus || '未設定');
     const crossJpSchool = crossBy(p => p.jpSchool ? '日本語学校 在籍' : '非在籍');
@@ -25929,7 +26054,7 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
       .sort((a, b) => b.days - a.days).slice(0, 12);
 
     return { funnel, seg, segTotal: parts.length, repeatUsers, repeatRate, repeatBase: userIds.length, noShow, noShowBase, noShowRate, heat, heatMax, heatTotal, byHour, bestDow, bestHour, bestVal,
-      cohortRows, f2Rate, f2Base, f2Conv, medGap, crossResidency, crossJpSchool, churnRisk };
+      retentionRows, retMaxOff, retAvg, f2Rate, f2Base, f2Conv, medGap, crossResidency, crossJpSchool, churnRisk };
   }, [events, registrations, participants]);
 
   const DOW = ['日', '月', '火', '水', '木', '金', '土'];
@@ -26123,24 +26248,54 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
             ) : <div style={{ fontSize: 11, color: 'var(--ink5)' }}>対象データなし</div>}
           </div>
 
-          {/* コホート定着 */}
-          <div style={{ flex: '1 1 320px', minWidth: 280 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>コホート定着 (初回参加月別)</div>
-            {data.cohortRows && data.cohortRows.length ? (
+          {/* コホート残存率 */}
+          <div style={{ flex: '1 1 360px', minWidth: 300 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', marginBottom: 8 }}>コホート残存率 (初回参加月 × Nか月後)</div>
+            {data.retentionRows && data.retentionRows.length ? (
               <table className="tbl" style={{ fontSize: 11 }}><thead><tr>
-                <th style={{ textAlign: 'left' }}>初回月</th><th style={{ textAlign: 'right' }}>人数</th><th style={{ textAlign: 'right' }}>継続率</th><th style={{ textAlign: 'right' }}>直近活性</th>
+                <th style={{ textAlign: 'left' }}>初回月</th><th style={{ textAlign: 'right' }}>人数</th>
+                {Array.from({ length: (data.retMaxOff || 6) + 1 }).map((_, o) => <th key={o} style={{ textAlign: 'right' }}>M{o}</th>)}
               </tr></thead><tbody>
-                {data.cohortRows.map(c => (
-                  <tr key={c.month}>
-                    <td>{c.month}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{c.size}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{c.size ? Math.round(c.repeat / c.size * 100) : 0}%</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: c.size && (c.active / c.size) < 0.3 ? 'var(--red)' : 'var(--ink2)' }}>{c.size ? Math.round(c.active / c.size * 100) : 0}%</td>
+                {data.retentionRows.map(r => (
+                  <tr key={r.month}>
+                    <td>{r.month}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size}</td>
+                    {r.cells.map((v, o) => {
+                      const avg = data.retAvg ? data.retAvg[o] : null;
+                      let bg = 'transparent', col = 'var(--ink1)';
+                      if (v == null) { col = 'var(--ink5)'; }
+                      else if (o === 0 || avg == null) { bg = 'var(--bg2)'; }
+                      else { const up = v >= avg; const dev = Math.min(1, Math.abs(v - avg) / 40); bg = (up ? 'rgba(34,160,90,' : 'rgba(220,60,60,') + (0.08 + dev * 0.4).toFixed(2) + ')'; }
+                      return (
+                        <td key={o} title={avg != null && v != null && o > 0 ? `平均 ${avg}% との差 ${(v - avg >= 0 ? '+' : '') + (v - avg)}pt` : ''} style={{ textAlign: 'right', fontFamily: 'var(--mono)', background: bg, color: col }}>
+                          {v == null ? '—' : v + '%'}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
-              </tbody></table>
+              </tbody>
+              {data.retAvg && (
+                <tfoot><tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700, background: 'var(--paper, #f1f5f9)' }}>
+                  <td style={{ background: 'var(--paper, #f1f5f9)' }}>全平均</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', background: 'var(--paper, #f1f5f9)' }}>—</td>
+                  {data.retAvg.map((v, o) => (
+                    <td key={o} style={{ textAlign: 'right', fontFamily: 'var(--mono)', background: 'var(--paper, #f1f5f9)', color: v == null ? 'var(--ink5)' : 'var(--ink1)' }}>{v == null ? '—' : v + '%'}</td>
+                  ))}
+                </tr></tfoot>
+              )}
+              </table>
             ) : <div style={{ fontSize: 11, color: 'var(--ink5)' }}>対象データなし</div>}
-            <div style={{ fontSize: 10, color: 'var(--ink5)', marginTop: 4 }}>継続率=2回以上参加 / 直近活性=90日以内に参加</div>
+            <div style={{ fontSize: 10, color: 'var(--ink5)', marginTop: 4 }}>
+              <button onClick={() => setLegendOpen(o => !o)} style={{ background: 'none', border: 'none', color: 'var(--indigo)', cursor: 'pointer', fontSize: 10, padding: 0 }}>凡例 {legendOpen ? '▲' : '▼'}</button>
+              {legendOpen && (
+                <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: 'rgba(34,160,90,0.4)', borderRadius: 2, display: 'inline-block' }} />平均超</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: 'rgba(220,60,60,0.4)', borderRadius: 2, display: 'inline-block' }} />平均未満</span>
+                  <span>M0=初回月(100%) / Mn=初回からnか月後に参加した率 / —=未到来</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -26152,7 +26307,7 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
               <div key={label} style={{ flex: '1 1 300px', minWidth: 260 }}>
                 <div style={{ fontSize: 11, color: 'var(--ink3)', marginBottom: 4 }}>{label}</div>
                 <table className="tbl" style={{ fontSize: 11 }}><thead><tr>
-                  <th style={{ textAlign: 'left' }}>区分</th><th style={{ textAlign: 'right' }}>人数</th><th style={{ textAlign: 'right' }}>参加経験</th><th style={{ textAlign: 'right' }}>継続</th>
+                  <th style={{ textAlign: 'left' }}>区分</th><th style={{ textAlign: 'right' }}>人数</th><th style={{ textAlign: 'right' }}>参加経験</th><th style={{ textAlign: 'right' }}>継続</th><th style={{ textAlign: 'right' }}>NPS平均</th>
                 </tr></thead><tbody>
                   {(rows || []).map(r => (
                     <tr key={r.key}>
@@ -26160,6 +26315,7 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size ? Math.round(r.exp / r.size * 100) : 0}%</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{r.size ? Math.round(r.rep / r.size * 100) : 0}%</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: r.npsAvg == null ? 400 : 700, color: r.npsAvg == null ? 'var(--ink5)' : (r.npsAvg >= npsHigh ? 'var(--green)' : r.npsAvg >= npsMid ? 'var(--ink2)' : 'var(--red)') }}>{r.npsAvg == null ? '—' : r.npsAvg}{r.npsN ? <span style={{ color: 'var(--ink5)', fontSize: 9, fontWeight: 400 }}> (n{r.npsN})</span> : null}</td>
                     </tr>
                   ))}
                 </tbody></table>
@@ -26177,7 +26333,7 @@ function ParticipantBehaviorAnalytics({ events, registrations, participants, act
             </tr></thead><tbody>
               {data.churnRisk.map(u => (
                 <tr key={u.id}>
-                  <td>{u.name}</td>
+                  <td><a href={`#participants?q=${encodeURIComponent(u.name)}&id=${encodeURIComponent(u.id)}`} style={{ color: 'var(--indigo)', textDecoration: 'none' }}>{u.name}</a></td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: u.days >= 120 ? 'var(--red)' : 'var(--ink2)' }}>{u.days}日前</td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{u.events}</td>
                 </tr>
@@ -26599,7 +26755,7 @@ function PageAnalytics(){
       {(() => { const EB = window.ErrorBoundary; const Inner = <AutomationStatusPanel settings={autoSettings} actionLogStats={actionLogStats} onChanged={reloadActionLogStats} fetchedAt={alFetchedAt} />; return EB ? <EB label="自動処理ステータスの表示でエラーが発生しました">{Inner}</EB> : Inner; })()}
 
       {/* (Phase 18.B1) 参加者行動分析 — 既存タイムスタンプ基準 */}
-      {(() => { const EB = window.ErrorBoundary; const Inner = <ParticipantBehaviorAnalytics events={events} registrations={registrations} participants={participants} actionLogStats={actionLogStats} actionStats={actionStats} actionDays={actionDays} onDaysChange={reloadActionStats} />; return EB ? <EB label="参加者行動分析の表示でエラーが発生しました">{Inner}</EB> : Inner; })()}
+      {(() => { const EB = window.ErrorBoundary; const Inner = <ParticipantBehaviorAnalytics events={events} registrations={registrations} participants={participants} actionLogStats={actionLogStats} actionStats={actionStats} actionDays={actionDays} onDaysChange={reloadActionStats} settings={autoSettings} />; return EB ? <EB label="参加者行動分析の表示でエラーが発生しました">{Inner}</EB> : Inner; })()}
     </div>
   );
 }
@@ -29799,6 +29955,8 @@ function PageHomepageSettings(){
     { section: 'システム / 運用', label: 'システム / 運用', help: '内部処理のしきい値など。 参加者サイトには表示されません。' },
     { key: 'recompute_ms_warn', label: '参加回数 再集計の警告しきい値 (ms)', ph: '3000', type: 'number', min: 0, step: 100, help: 'この値(ミリ秒)を超えると、最終再集計の所要時間を警告色で表示します。 未設定時は3000ms。' },
     { key: 'admin_settings_ttl_ms', label: '管理設定キャッシュの寿命 (ms)', ph: '300000', type: 'number', min: 0, step: 60000, help: '管理画面が getSettings をキャッシュする時間(ミリ秒)。 未設定時は300000ms(5分)。 小さくすると鮮度優先、大きくするとフェッチ削減。', note: (v) => (String(v) === '0' ? 'キャッシュ無効（毎回サーバから取得）' : '') },
+    { key: 'nps_color_high', label: 'NPS 色分け: 緑の下限', ph: '8', type: 'number', min: 0, max: 10, step: 1, help: '行動分析の属性別 NPS 平均で、この値以上を緑(高満足)で表示します。 未設定時は8。' },
+    { key: 'nps_color_mid', label: 'NPS 色分け: 赤の上限', ph: '6', type: 'number', min: 0, max: 10, step: 1, help: 'この値未満を赤(低満足)で表示します。 緑の下限との間は標準色。 未設定時は6。' },
   ];
 
   async function fetchAll() {
