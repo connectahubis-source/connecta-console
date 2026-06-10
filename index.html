@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P5l'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-08 P5m'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1699,7 +1699,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5l</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5m</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -5890,7 +5890,7 @@ function SurveyAnalytics({ analytics, loading }){
   );
 }
 
-function SessionMementoRow({ sess, busy, onSave }){
+function SessionMementoRow({ sess, busy, onSave, eventLevelId }){
   const draftKey = 'cca_admin_memento_draft_' + sess.id;
   // 公開日時を datetime-local 形式(ローカル YYYY-MM-DDTHH:mm)へ正規化。 文字列保存でもDate/UTC ISO戻りでも一致するようにする。
   const normDT = (v) => {
@@ -6148,7 +6148,7 @@ function SessionMementoRow({ sess, busy, onSave }){
           <button className="btn btn-sm" disabled={newsBusy} onClick={async ()=>{
             setNewsBusy(true);
             try {
-              const r = await window.postData('createMementoNews', { sessionId: sess.id });
+              const r = await window.postData('createMementoNews', eventLevelId ? { eventId: eventLevelId } : { sessionId: sess.id });
               if (r && r.newsId) { setNewsId(r.newsId); setNewsStatus(r.status || '下書き'); if(window.toast) window.toast.success(r.reused ? 'お知らせは作成済みです' : 'お知らせの下書きを作成しました'); }
               else if(window.toast) window.toast.error('作成に失敗しました');
             } catch(e) { if(window.toast) window.toast.error('作成に失敗しました'); }
@@ -6163,7 +6163,7 @@ function SessionMementoRow({ sess, busy, onSave }){
               if (!(await window.confirmDialog({ title: 'お知らせを公開', body: 'この開催日にチェックインした参加者のみへ通知します。 公開しますか?', confirmLabel: '公開する' }))) return;
               setNewsBusy(true);
               try {
-                const r = await window.postData('publishMementoNews', { newsId: newsId, sessionId: sess.id });
+                const r = await window.postData('publishMementoNews', eventLevelId ? { newsId: newsId, eventId: eventLevelId } : { newsId: newsId, sessionId: sess.id });
                 if (r && r.ok) { setNewsStatus('公開中'); if(window.toast) window.toast.success(r.alreadyPublished ? '既に公開済みです' : ('公開しました (通知 ' + (r.sent || 0) + '件)')); }
                 else if(window.toast) window.toast.error('公開に失敗しました');
               } catch(e) { if(window.toast) window.toast.error('公開に失敗しました'); }
@@ -6293,6 +6293,25 @@ function PagePostEvent(){
     finally { setBusy(false); }
   }
 
+  // (Phase 18.D) 単一イベントの記念写真を保存 (イベント行へ header ベースで書込)
+  async function saveEventMemento(sess, url, publishAt, gallery, sealType, sealPos) {
+    setBusy(true);
+    try {
+      await window.postData('updateEventMemento', { eventId: eventId, fields: {
+        mementoPhotoUrl: url || '',
+        mementoPublishAt: publishAt || '',
+        mementoGallery: Array.isArray(gallery) ? gallery : [],
+        sealType: sealType || '',
+        sealPos: sealPos || '',
+      } });
+      window.toast.success('記念写真を保存しました');
+      if (window.invalidateCache) window.invalidateCache('listEvents');
+      loadDetail();
+      return true;
+    } catch (e) { window.toast.error('保存に失敗: ' + (e.message || e)); return false; }
+    finally { setBusy(false); }
+  }
+
   async function handleSurveySave(payload) {
     const tplQuestions = Array.isArray(payload._templateQuestions) ? payload._templateQuestions : null;
     const action = payload._action;
@@ -6407,9 +6426,26 @@ function PagePostEvent(){
                   )}
                 </React.Fragment>
               ) : (
-                <div className="field-hint">
-                  単日イベントの記念写真（写真URL・公開予約）は、イベント編集の「参加記念コレクション」で設定します。複数日にするとここで日ごとに分けて設定できます。
-                </div>
+                <React.Fragment>
+                  <div className="field-hint" style={{marginBottom:10}}>単一イベントの記念写真を、写真・公開予約・スタンプ・公開のお知らせ（チェックインした人へ通知）までここで管理できます。</div>
+                  <SessionMementoRow
+                    key={'evt-' + eventId}
+                    sess={{
+                      id: eventId,
+                      date: selectedEvent.date || '',
+                      mementoPhotoUrl: selectedEvent.mementoPhotoUrl || '',
+                      mementoPublishAt: selectedEvent.mementoPublishAt || '',
+                      mementoGallery: Array.isArray(selectedEvent.mementoGallery) ? selectedEvent.mementoGallery : [],
+                      mementoNewsId: selectedEvent.mementoNewsId || '',
+                      sealType: selectedEvent.sealType || '',
+                      sealPos: selectedEvent.sealPos || '',
+                      'セッション名': selectedEvent.title || '',
+                    }}
+                    busy={busy}
+                    onSave={saveEventMemento}
+                    eventLevelId={eventId}
+                  />
+                </React.Fragment>
               )}
             </div>
           </div>
