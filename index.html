@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-11 P6h'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-11 P6i'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1748,7 +1748,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-11 P6h</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-11 P6i</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -32613,6 +32613,17 @@ function PageInbox(){
   const [judgeResult, setJudgeResult] = useState(null);
   const [copyMsg, setCopyMsg] = useState('');
 
+  const loadList = useCallback(async ()=>{
+    try{
+      setError('');
+      const rows = await window.fetchData('admin.listInquiries', {});
+      setList(Array.isArray(rows)?rows:[]);
+    }catch(e){ setError(`一覧の取得に失敗しました: ${e.message||e}`); }
+    finally{ setLoading(false); }
+  },[]);
+
+  // (I3 fix P6i) 判定系コルバックは loadList を参照するため、必ず loadList の定義より後に置く
+  // (const の TDZ: 前に置くと "Cannot access 'loadList' before initialization" で画面全体が落ちる)
   const startJudge = useCallback(async (ids)=>{
     if(!ids||ids.length===0){ setCopyMsg(''); return; }
     setJudgeResult(null); setCopyMsg('');
@@ -32651,14 +32662,6 @@ function PageInbox(){
     finally{ setJudgeBusy(false); }
   },[judge,selectedId,loadList]);
 
-  const loadList = useCallback(async ()=>{
-    try{
-      setError('');
-      const rows = await window.fetchData('admin.listInquiries', {});
-      setList(Array.isArray(rows)?rows:[]);
-    }catch(e){ setError(`一覧の取得に失敗しました: ${e.message||e}`); }
-    finally{ setLoading(false); }
-  },[]);
 
   useEffect(()=>{
     let alive = true;
