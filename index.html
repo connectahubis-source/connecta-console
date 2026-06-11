@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-08 P5v'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-11 P6h'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1748,7 +1748,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-08 P5v</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-11 P6h</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -1787,6 +1787,7 @@ svg{display:block}
     <div class="nav-section">
       <div class="nav-label"><span>コミュニケーション</span></div>
       <a href="#mail" class="nav-item" data-nav="mail"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-10 5L2 7"/></svg>メール配信</a>
+      <a href="#inbox" class="nav-item" data-nav="inbox"><svg class="ic" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>問い合わせ</a>
       <a href="#news" class="nav-item" data-nav="news"><svg class="ic" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg>ニュース管理</a>
       <a href="#chat" class="nav-item" data-nav="chat"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>チャット<span class="n-dot"></span></a>
       <a href="#templates" class="nav-item" data-nav="templates"><svg class="ic" viewBox="0 0 24 24"><rect width="8" height="8" x="3" y="3" rx="1"/><path d="M7 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4"/></svg>定型文</a>
@@ -2699,6 +2700,16 @@ const Icon = ({n, s=16, cls="", style={}}) => {
 };
 window.Icon = Icon;
 
+// (Phase 18.E) フロント側 申込ステータス正準モジュール — バックエンドと同じ語彙判定
+window.regStatus = (function () {
+  var CANON = { '申込済み': 1, '決済済み': 1, 'チェックイン済': 1, '一部キャンセル': 1, '返金待ち': 1, '返金': 1, 'キャンセル': 1 };
+  function normalize(s) { var v = (s == null) ? '' : String(s).trim(); if (v === '' || v === '確定' || v === '未決済') return '申込済み'; if (v === '決済済') return '決済済み'; return v; }
+  function isActive(s) { var v = normalize(s); return v === '申込済み' || v === '決済済み' || v === 'チェックイン済'; }
+  function isPaid(s) { return normalize(s) === '決済済み'; }
+  function isCanonical(s) { return !!CANON[String(s)]; }
+  return { CANON: CANON, normalize: normalize, isActive: isActive, isPaid: isPaid, isCanonical: isCanonical };
+})();
+
 })();
 </script>
 
@@ -3298,7 +3309,7 @@ function PageDashboard(){
 
   // 出席率: チェックイン済み / (確定 + チェックイン済み) — activeRegs は既にテスト除外済み
   const checkedIn = activeRegs.filter(r => r.status === "チェックイン済").length;
-  const confirmed = activeRegs.filter(r => r.status === "確定").length;
+  const confirmed = activeRegs.filter(r => r.status === "申込済み").length;
   const attendBase = checkedIn + confirmed;
   const attendRate = attendBase > 0 ? Math.round(checkedIn / attendBase * 100) : null;
 
@@ -3375,6 +3386,7 @@ function PageDashboard(){
 
   return (
     <div className="jb-page" data-page="dashboard">
+      {window.StatusDataQualityBanner && <window.StatusDataQualityBanner/>}
 
       {/* ===== 表紙 ===== */}
       <header className="jb-cover">
@@ -4769,7 +4781,7 @@ function RegistrationModal({events, participants, onSave, onCancel}){
         paid: paid,
         amount: Number(amount) || 0,
         note: note,
-        status: '確定',
+        status: '申込済み',
       });
     } catch (err) {
       setError(err.message || String(err));
@@ -4927,6 +4939,56 @@ function RegistrationModal({events, participants, onSave, onCancel}){
   );
 }
 
+function StatusDataQualityBanner(){
+  const [dq, setDq] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
+  useEffect(() => {
+    let on = true;
+    window.fetchData('getStatusDataQuality').then(r => { if (on && r && r.ok) setDq(r); }).catch(() => {});
+    return () => { on = false; };
+  }, []);
+  const runPreview = async () => {
+    setPreviewing(true);
+    try { const r = await window.fetchData('previewStatusMigrations'); setPreview(r && r.ok ? r : { error: (r && r.error) || '取得失敗' }); }
+    catch (e) { setPreview({ error: (e && e.message) || String(e) }); }
+    finally { setPreviewing(false); }
+  };
+  if (!dq || !dq.legacyTotal) return null;
+  const L = dq.legacy || {};
+  const parts = [];
+  if (L['決済済']) parts.push('決済済→決済済み ' + L['決済済']);
+  if (L['確定']) parts.push('確定→申込済み ' + L['確定']);
+  if (L['未決済']) parts.push('未決済→申込済み ' + L['未決済']);
+  if (L['(空欄)']) parts.push('空欄→申込済み ' + L['(空欄)']);
+  return (
+    <div style={{margin:'0 0 16px',padding:'10px 14px',background:'var(--amber-50,#fff7e6)',border:'1px solid var(--amber-100,#fde68a)',borderRadius:8,fontSize:12,color:'var(--amber-700,#b45309)'}}>
+      <b>データ品質: 旧表記ステータスが {dq.legacyTotal} 件残っています。</b> 表示は自動正規化されますが、 恒久整理は GASエディタで migratePaidStatusToCanonical()（決済済→決済済み）/ migrateUnpaidToApplied() 等を手動実行してください。
+      {parts.length > 0 && <div style={{fontFamily:'var(--mono)',fontSize:11,marginTop:4}}>{parts.join(' ・ ')}</div>}
+      <div style={{marginTop:8,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <button onClick={runPreview} disabled={previewing} style={{padding:'3px 10px',background:'var(--amber-700,#b45309)',color:'#fff',border:'none',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',opacity:previewing?0.6:1}}>{previewing ? '取得中…' : '移行プレビュー実行'}</button>
+        <span style={{fontSize:10,color:'var(--ink5)'}}>※プレビューは非破壊。 本実行は GASエディタで手動。</span>
+      </div>
+      {preview && (
+        <div style={{marginTop:8,padding:'8px 10px',background:'#fff',border:'1px solid var(--line)',borderRadius:6,fontSize:11}}>
+          {preview.error ? <span style={{color:'var(--red)'}}>取得失敗: {preview.error}</span> : (
+            <div style={{display:'flex',flexDirection:'column',gap:3}}>
+              {[['決済済→決済済み', preview.paid], ['未決済→申込済み', preview.unpaid], ['確定→申込済み', preview.confirmed]].map(([label, p]) => (
+                <div key={label}>
+                  <span>{label}: <b>{(p && p.target) || 0}</b> 件</span>
+                  {p && p.sample && p.sample.length > 0 && <span style={{fontFamily:'var(--mono)',color:'var(--ink4)',marginLeft:6}}>例: {p.sample.filter(Boolean).join(', ')}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+window.StatusDataQualityBanner = StatusDataQualityBanner;
+
 function PageRegistrations(){
   const [registrations, setRegistrations] = useState([]);
   const [events, setEvents] = useState([]);
@@ -5001,13 +5063,14 @@ function PageRegistrations(){
 
   // 集計
   const total = registrations.length;
-  const confirmed = registrations.filter(r => r.status === "確定").length;
+  const confirmed = registrations.filter(r => r.status === "申込済み").length;
   const unpaid = registrations.filter(r => r.status === "未決済").length;
   const cancelled = registrations.filter(r => r.status === "キャンセル").length;
   const pct = (n) => total > 0 ? Math.round(n / total * 100) : 0;
 
   return (
     <div className="jb-page" data-page="registrations">
+      <StatusDataQualityBanner/>
       <div className="page-head">
         <div className="ph-left">
           <div className="ph-crumbs"><span>イベント</span><span className="sep">/</span><span style={{color:'var(--ink2)'}}>申込一覧</span></div>
@@ -5031,7 +5094,7 @@ function PageRegistrations(){
 
       <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
         <MiniStat label="申込総数" value={loading ? '…' : String(total)} sub="" icon="users" color="indigo"/>
-        <MiniStat label="確定" value={loading ? '…' : String(confirmed)} sub={total > 0 ? `${pct(confirmed)}%` : ''} icon="check2" color="green"/>
+        <MiniStat label="申込済み" value={loading ? '…' : String(confirmed)} sub={total > 0 ? `${pct(confirmed)}%` : ''} icon="check2" color="green"/>
         <MiniStat label="未決済" value={loading ? '…' : String(unpaid)} sub={total > 0 ? '要対応' : ''} icon="card" color="amber"/>
         <MiniStat label="キャンセル" value={loading ? '…' : String(cancelled)} sub={total > 0 ? `${pct(cancelled)}%` : ''} icon="x" color="red"/>
       </div>
@@ -5041,7 +5104,7 @@ function PageRegistrations(){
           <Icon n="search" s={14}/>
           <input className="input" placeholder="名前・メール・ID・イベント名..." value={query} onChange={e=>setQuery(e.target.value)}/>
         </div>
-        {[["all","すべて"],["確定","確定"],["未決済","未決済"],["キャンセル","キャンセル"]].map(([k,l]) => (
+        {[["all","すべて"],["申込済み","申込済み"],["未決済","未決済"],["キャンセル","キャンセル"]].map(([k,l]) => (
           <div key={k} className={clsx("chip", filter===k && "on")} onClick={()=>setFilter(k)}>{l}</div>
         ))}
         <div style={{flex:1}}></div>
@@ -5105,7 +5168,7 @@ function PageRegistrations(){
                   </td>
                   <td>
                     <span className={clsx("badge",
-                      r.status==="確定"?"badge-green"
+                      r.status==="申込済み"?"badge-green"
                       : r.status==="未決済"?"badge-amber"
                       : r.status==="チェックイン済"?"badge-indigo"
                       : "badge-ink")}>
@@ -6240,11 +6303,32 @@ function SessionMementoRow({ sess, busy, onSave, eventLevelId }){
 }
 
 // (Phase 18.E 改善) 当日飛び入りアンケート QRポスター発行 — URL + QR画像 (DL可)
-function WalkinPosterBlock({ eventId }) {
+function WalkinPosterBlock({ eventId, title, date, time, endTime, venue }) {
+  const DEFAULT_BASE = 'https://connectahubis-source.github.io/event/';
   const [qrSvg, setQrSvg] = useState('');
   const [copied, setCopied] = useState(false);
-  const base = (localStorage.getItem('cca_participants_base_url') || 'https://connectahubis-source.github.io/event/').replace(/\/+$/, '/') ;
-  const walkUrl = base + (base.endsWith('/') ? '' : '/') + '#/walkin?event=' + encodeURIComponent(eventId) + '&src=poster';
+  const [base, setBase] = useState(() => { try { return localStorage.getItem('cca_participants_base_url') || DEFAULT_BASE; } catch (e) { return DEFAULT_BASE; } });
+  const [baseSaved, setBaseSaved] = useState('');  // '保存しました' / '保存に失敗'
+  // (Phase 18.E) サーバ設定 participants_base_url を真実源にして端末依存を解消。 localStorage はキャッシュ。
+  useEffect(() => {
+    let on = true;
+    if (!window.getAdminSettings) return;
+    window.getAdminSettings(false, false).then(s => {
+      const v = s && s.participants_base_url ? String(s.participants_base_url) : '';
+      if (on && v) { setBase(v); try { localStorage.setItem('cca_participants_base_url', v); } catch (e) {} }
+    }).catch(() => {});
+    return () => { on = false; };
+  }, []);
+  // リンクは1か所で構築し、 QR・印字・印刷で完全一致させる。 末尾スラッシュを正規化し # の前に必ず1個だけ入れる。
+  const cleanBase = String(base || '').trim().replace(/\s+/g, '').replace(/\/+$/, '');
+  const walkUrl = cleanBase + '/#/walkin?event=' + encodeURIComponent(eventId) + '&src=poster';
+  const isDefaultBase = cleanBase === DEFAULT_BASE.replace(/\/+$/, '');
+  const onBaseChange = (v) => { setBase(v); setBaseSaved(''); try { localStorage.setItem('cca_participants_base_url', v); } catch (e) {} };
+  const persistBase = async () => {
+    try { await window.postData('updateSettings', { settings: { participants_base_url: String(base || '').trim() } }); setBaseSaved('保存しました'); if (window.getAdminSettings) window.getAdminSettings(true, false).catch(() => {}); }
+    catch (e) { setBaseSaved('保存に失敗'); }
+    setTimeout(() => setBaseSaved(''), 2000);
+  };
   useEffect(() => {
     if (!eventId) { setQrSvg(''); return; }
     let stop = false, count = 0;
@@ -6258,11 +6342,46 @@ function WalkinPosterBlock({ eventId }) {
     return () => { stop = true; clearInterval(iv); };
   }, [eventId, walkUrl]);
   const copy = () => { try { navigator.clipboard.writeText(walkUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {} };
-  const download = () => {
+  const downloadSvg = () => {
     if (!qrSvg) return;
     const blob = new Blob([qrSvg], { type: 'image/svg+xml' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = 'walkin-qr-' + eventId + '.svg'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+  const metaLine = [date, (time ? (time + (endTime ? '〜' + endTime : '')) : ''), venue].filter(Boolean).join(' ・ ');
+  const previewLink = () => { try { window.open(walkUrl, '_blank', 'noopener,noreferrer'); } catch (e) {} };
+  const printPoster = () => {
+    if (!qrSvg) return;
+    const w = window.open('', '_blank', 'width=820,height=1160');
+    if (!w) { if (window.showToast) window.showToast('ポップアップがブロックされました。 ブラウザでこのサイトのポップアップを許可してください。'); else alert('ポップアップがブロックされました。'); return; }
+    // QR は raw walkUrl をエンコード済み。 表示URLのみ HTML エスケープ（QRと印字は同一リンク）。
+    const html = '<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>walkin-poster-' + esc(eventId) + '</title>'
+      + '<style>'
+      + '@page { size: A4 portrait; margin: 14mm; }'
+      + '*{box-sizing:border-box;} html,body{margin:0;}'
+      + "body{font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic',system-ui,sans-serif;color:#0a2960;text-align:center;}"
+      + '.wrap{display:flex;flex-direction:column;align-items:center;padding-top:8mm;}'
+      + '.eyebrow{font-size:13pt;letter-spacing:.12em;color:#5b6b8c;}'
+      + 'h1{font-size:30pt;margin:6mm 0 1mm;line-height:1.25;}'
+      + '.meta{font-size:13pt;color:#5b6b8c;margin:0 0 5mm;}'
+      + '.lead{font-size:16pt;margin:1mm 0 7mm;}'
+      + '.qr{width:90mm;height:90mm;background:#fff;padding:4mm;border:1px solid #e5e7eb;}'
+      + '.qr svg{width:100%;height:100%;display:block;}'
+      + '.url{font-family:ui-monospace,Menlo,monospace;font-size:10.5pt;word-break:break-all;margin-top:5mm;color:#334155;max-width:150mm;}'
+      + '.ml{font-size:12pt;color:#5b6b8c;margin-top:7mm;line-height:1.8;}'
+      + '.foot{margin-top:7mm;font-size:10pt;color:#94a3b8;}'
+      + '</style></head><body><div class="wrap">'
+      + '<div class="eyebrow">connec+a ・ 当日参加アンケート</div>'
+      + '<h1>' + (esc(title) || 'イベント') + '</h1>'
+      + (metaLine ? '<div class="meta">' + esc(metaLine) + '</div>' : '')
+      + '<div class="lead">スマホのカメラで QR を読み取って、 ご感想をお聞かせください。</div>'
+      + '<div class="qr">' + qrSvg + '</div>'
+      + '<div class="url">' + esc(walkUrl) + '</div>'
+      + '<div class="ml">Scan the QR with your phone camera to share your feedback.<br>QRコードを よみとって アンケートに こたえてください。</div>'
+      + '<div class="foot">ログイン不要・匿名でご回答いただけます</div>'
+      + '</div><script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};<\/script></body></html>';
+    w.document.open(); w.document.write(html); w.document.close();
   };
   if (!eventId) return null;
   return (
@@ -6270,13 +6389,26 @@ function WalkinPosterBlock({ eventId }) {
       <div style={{fontSize:12,fontWeight:700,color:'var(--ink2)',marginBottom:8}}>当日飛び入りアンケート（ログイン不要・QRポスター用）</div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <div style={{width:120,height:120,background:'#fff',borderRadius:8,padding:6,flexShrink:0}} dangerouslySetInnerHTML={{ __html: qrSvg || '' }} />
-        <div style={{flex:'1 1 220px',minWidth:200}}>
+        <div style={{flex:'1 1 240px',minWidth:220}}>
           <div style={{fontSize:11,color:'var(--ink4)',marginBottom:4}}>このQR・URLを会場ポスターに掲示すると、未会員でも匿名で満足度を回答できます。</div>
           <div style={{fontFamily:'var(--mono)',fontSize:11,wordBreak:'break-all',background:'#fff',border:'1px solid var(--line)',borderRadius:6,padding:'6px 8px',marginBottom:6}}>{walkUrl}</div>
+          {/* リンク先（参加者サイトのベースURL）の確認・修正。 取り違え防止のため既定値のままなら警告。 */}
+          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+            <span style={{fontSize:10,color:'var(--ink5)'}}>リンク先（参加者サイト）:</span>
+            <input value={base} onChange={e => onBaseChange(e.target.value)} onBlur={persistBase} style={{flex:'1 1 200px',minWidth:180,fontSize:11,fontFamily:'var(--mono)',padding:'3px 6px',border:'1px solid var(--line)',borderRadius:5}} placeholder="https://example.com/event/"/>
+            {baseSaved && <span style={{fontSize:10,color: baseSaved === '保存しました' ? 'var(--green)' : 'var(--red)'}}>{baseSaved}</span>}
+          </div>
+          <div style={{fontSize:10,color:'var(--ink5)',marginBottom:6}}>※全運営者で共有（サーバ設定に保存）。 入力欄からフォーカスを外すと保存します。</div>
+          {isDefaultBase && (
+            <div style={{fontSize:10.5,color:'var(--coral-600,#c0392b)',marginBottom:6}}>⚠ 既定のサンプルURLのままです。 実際の参加者サイトURLに合わせてから掲示してください（QRもこのURLを指します）。</div>
+          )}
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <button onClick={copy} className="btn btn-ghost" style={{fontSize:12}}>{copied ? 'コピーしました' : 'URLをコピー'}</button>
-            <button onClick={download} className="btn btn-ghost" style={{fontSize:12}} disabled={!qrSvg}>QR画像(SVG)を保存</button>
+            <button onClick={previewLink} className="btn btn-ghost" style={{fontSize:12}}>リンク先プレビュー</button>
+            <button onClick={downloadSvg} className="btn btn-ghost" style={{fontSize:12}} disabled={!qrSvg}>QR画像(SVG)を保存</button>
+            <button onClick={printPoster} className="btn btn-primary" style={{fontSize:12}} disabled={!qrSvg}>ポスターを印刷・PDF保存</button>
           </div>
+          <div style={{fontSize:10,color:'var(--ink5)',marginTop:4}}>※印刷ダイアログの「送信先」で「PDFに保存」を選ぶとPDF化できます。</div>
         </div>
       </div>
     </div>
@@ -6564,7 +6696,7 @@ function PagePostEvent(){
               )}
             </div>
             <div className="card-body">
-              {eventId && <WalkinPosterBlock eventId={eventId} />}
+              {eventId && <WalkinPosterBlock eventId={eventId} title={selectedEvent ? selectedEvent.title : ''} date={selectedEvent ? selectedEvent.date : ''} time={selectedEvent ? selectedEvent.time : ''} endTime={selectedEvent ? selectedEvent.endTime : ''} venue={selectedEvent ? selectedEvent.venue : ''} />}
               <div className="kpi-grid" style={{marginBottom:14}}>
                 <MiniStat label="アンケート数" value={String(surveys.filter(s=>s.status!=='アーカイブ').length)} sub="公開中 + 下書き" icon="star" color="indigo"/>
                 <MiniStat label="総回答数" value={String(totalResponses)} sub="このイベント合計" icon="users" color="teal"/>
@@ -7972,7 +8104,7 @@ function ApplicationTrendChart({ event, sessions, regs, pattern, sessionStats, p
       const note = String(r.note || '') + ' ' + String(r.actualPaymentMethod || '');
       const isPrepay = /PayPay.*事前|事前決済|事前/.test(note);
       const isDayPay = /現金|当日/.test(note);
-      const isPaid = r.paid === true || r.paid === 'TRUE' || s === '決済済' || s === '決済済み';
+      const isPaid = r.paid === true || r.paid === 'TRUE' || window.regStatus.isPaid(s);
       if (isPaid) {
         if (isPrepay) return '前払い済';
         return '当日決済済';
@@ -9551,7 +9683,7 @@ function ApplicationsListSection({ apps, participantMap, regs, sessions, event, 
       || appRegs.some(r => r.paid === true || r.paid === 'TRUE')
       || appRegs.some(r => {
         const s = String(r.status || '');
-        return s === '決済済' || s === '決済済み';
+        return window.regStatus.isPaid(s);
       });
     if (isPaid) {
       if (isPrepayApp) return '前払い済';
@@ -12129,7 +12261,7 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
     });
     if (!ok) return;
     try {
-      await window.postData('updateRegistration', { regId: reg.id, fields: { paid: true, status: '決済済' } });
+      await window.postData('updateRegistration', { regId: reg.id, fields: { paid: true, status: '決済済み' } });
       if (window.invalidateCache) window.invalidateCache('listRegistrations');
       window.toast.success('決済済にしました');
       if (onReload) onReload();
@@ -12252,7 +12384,7 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
                         const isCheckedIn = r.status === 'チェックイン済';
                         const isPending = r.status === 'チェックイン保留';
                         const isFreeReg = (Number(r.amount) || 0) === 0;
-                        const isPaidStatus = r.paid || r.status === '決済済';
+                        const isPaidStatus = r.paid || window.regStatus.isPaid(r.status);
                         const statusColor = isCheckedIn ? 'var(--jb-blue-deep)'
                                           : isPending ? 'var(--jb-shouwa)'
                                           : isPaidStatus ? 'var(--jb-success)'
@@ -18577,7 +18709,7 @@ function PageApplications() {
         const next = Object.assign({}, a);
         if (Array.isArray(a.registrations)) {
           next.registrations = a.registrations.map(function(r) {
-            return paidSet[String(r.regId || r.RegID)] ? Object.assign({}, r, { paid: true, status: '決済済' }) : r;
+            return paidSet[String(r.regId || r.RegID)] ? Object.assign({}, r, { paid: true, status: '決済済み' }) : r;
           });
           const active = next.registrations.filter(function(r) { const s = String(r.status || ''); return s !== 'キャンセル' && s !== '返金' && s !== '返金待ち'; });
           next._allPaid = active.length > 0 && active.every(function(r) { return r.paid === true || r.paid === 'TRUE'; });
@@ -19063,7 +19195,7 @@ function ApplicationDetailModal({ app, event, participant, onClose, onReload }) 
 
   // 各 reg の状態判定
   const regsByStatus = {
-    active:    appRegs.filter(r => r.status === '申込済み' || r.status === '決済済' || r.status === 'チェックイン済' || r.status === '確定'),
+    active:    appRegs.filter(r => window.regStatus.isActive(r.status)),
     pending:   appRegs.filter(r => r.status === '返金待ち'),
     cancelled: appRegs.filter(r => r.status === 'キャンセル' || r.status === '返金'),
   };
@@ -19213,7 +19345,7 @@ function ApplicationDetailModal({ app, event, participant, onClose, onReload }) 
             )}
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
               {appRegs.map(r => {
-                const isActive = r.status === '申込済み' || r.status === '決済済' || r.status === 'チェックイン済' || r.status === '確定';
+                const isActive = window.regStatus.isActive(r.status);
                 const isPending = r.status === '返金待ち';
                 const isCancelled = r.status === 'キャンセル' || r.status === '返金';
                 const sess = r.sessionId ? sessionMap[r.sessionId] : null;
@@ -19339,7 +19471,7 @@ function ApplicationDetailModal({ app, event, participant, onClose, onReload }) 
 // =============================================================================
 function MarkPaidModal({ app, appRegs, sessionMap, onCancel, onSubmit }) {
   const unpaidRegs = appRegs.filter(r => {
-    const isActive = r.status === '申込済み' || r.status === '決済済' || r.status === 'チェックイン済' || r.status === '確定';
+    const isActive = window.regStatus.isActive(r.status);
     return isActive && !r.paid;
   });
   const [selectedRegIds, setSelectedRegIds] = useState(new Set(unpaidRegs.map(r => r.id)));
@@ -23388,7 +23520,7 @@ function PageQR(){
     const isPrepay = /PayPay.*事前|事前決済|事前/.test(notes);
     const isDayPay = /現金|当日/.test(notes);
     const isPaid = rs.some(r => r.paid === true || r.paid === 'TRUE')
-      || rs.some(r => { const s = String(r.status || ''); return s === '決済済' || s === '決済済み'; });
+      || rs.some(r => window.regStatus.isPaid(r.status));
     if (isPaid) return isPrepay ? { label: '前払い済', cls: 'badge-green' } : { label: '当日決済済', cls: 'badge-green' };
     if (isPrepay) return { label: '前払い待ち', cls: 'badge-amber' };
     if (isDayPay) return { label: '当日払い予定', cls: 'badge-amber' };
@@ -23932,7 +24064,7 @@ function PageQRLive(){
     const appRegs = app ? (app.regs || []) : [];
     const activeRegs = appRegs.filter(r => r.status !== 'キャンセル' && r.status !== '返金' && r.status !== '返金待ち');
     const allCheckedIn = activeRegs.length > 0 && activeRegs.every(r => r.status === 'チェックイン済');
-    const isPaid = appRegs.some(r => r.paid === true || r.paid === 'TRUE') || appRegs.some(r => { const s = String(r.status || ''); return s === '決済済' || s === '決済済み'; });
+    const isPaid = appRegs.some(r => r.paid === true || r.paid === 'TRUE') || appRegs.some(r => window.regStatus.isPaid(r.status));
     // (無料イベント) 全 reg が金額0 → 決済不要。決済確認フローを挟まず直接入場確定する。
     const isFree = appRegs.length > 0 && appRegs.every(r => (Number(r.amount) || 0) === 0);
     const kana = (appRegs.find(r => r.userKana) || {}).userKana || '';
@@ -32225,6 +32357,522 @@ window.PageNewsFront = PageNewsFront;
 
 <script type="text/babel" data-presets="react">
 (function(){
+// ============================================================================
+// (Phase 19.I1) hub問い合わせCRM — PageInbox 骨格 (第11ブロック)
+//   一覧 (薄い射影・状態フィルタ) + 詳細 (スレッド都度取得) + 今すぐ同期 + セットアップ状態バナ
+//   照合・Claude判定・返信生成は I2/I3/I5 で追加。ブロック間共有は window.InboxAPI に集約。
+// ============================================================================
+const {useState, useEffect, useMemo, useCallback} = React;
+const {Spinner, ErrorBanner} = window;
+
+const INBOX_STATES = ['未対応','AI下書き済み','担当者確認待ち','修正中','Gmail下書き保存済み','返信済み','他担当者へ依頼中','保留','返信不要','要責任者確認','FAQ化候補','返信雛形化候補','再確認予定','対応完了'];
+const INBOX_FILTERS = ['すべて','未対応','AI下書き済み','担当者確認待ち','要責任者確認','返信済み','対応完了'];
+
+const STATE_COLORS = {
+  '未対応':'#e85d4a', 'AI下書き済み':'#7c6fd9', '担当者確認待ち':'#d99a2b', '修正中':'#d99a2b',
+  'Gmail下書き保存済み':'#2b8fd9', '返信済み':'#2ba66b', '対応完了':'#8a939e', '要責任者確認':'#c0392b',
+  '保留':'#8a939e', '返信不要':'#8a939e', '他担当者へ依頼中':'#d99a2b',
+  'FAQ化候補':'#2b8fd9', '返信雛形化候補':'#2b8fd9', '再確認予定':'#d99a2b',
+};
+
+function inboxFmtDt(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    const pad = (n)=>String(n).padStart(2,'0');
+    return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }catch(e){ return String(iso); }
+}
+
+function StateBadge({state}){
+  const c = STATE_COLORS[state] || '#8a939e';
+  return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,fontSize:11,fontWeight:700,color:'#fff',background:c,whiteSpace:'nowrap'}}>{state||'未対応'}</span>;
+}
+
+// セットアップ状態バナ (StatusDataQualityBanner と同型の常設点検)
+function InboxSetupBanner({status}){
+  if(!status) return null;
+  const issues = [];
+  if(status.accountMatch === false) issues.push(`実行アカウント (${status.executingAccount}) が対象箱 ${status.mailbox} と一致しません`);
+  if(status.labels){
+    Object.keys(status.labels).forEach(k=>{
+      if(status.labels[k] !== true) issues.push(`ラベル ${k} が未作成またはスコープ未認可です (GASエディタで setupInboxLabels() を実行)`);
+    });
+  }
+  if(status.sheetsReady && !status.sheetsReady.error){
+    const missing = Object.keys(status.sheetsReady).filter(k=>status.sheetsReady[k] !== true);
+    if(missing.length>0) issues.push(`シート未作成: ${missing.join(', ')} (GASエディタで migrateSchema() を実行)`);
+  }
+  // (I3) AI判定はブラウザClaudeのコピペ方式のため、APIキは不要 (警告を出さない)
+  if(issues.length === 0) return null;
+  return (
+    <div style={{background:'#fff4ec',border:'1px solid #f0c8a8',borderRadius:10,padding:'10px 14px',marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:13,color:'#b4530a',marginBottom:4}}>セットアップ未完了の項目があります</div>
+      {issues.map((t,i)=><div key={i} style={{fontSize:12,color:'#8a4a12',lineHeight:1.7}}>・{t}</div>)}
+      <div style={{fontSize:11,color:'#a87b55',marginTop:4}}>送信上限の残量: {status.mailQuotaRemaining == null ? '取得不可' : `${status.mailQuotaRemaining} 通/日`}</div>
+    </div>
+  );
+}
+
+// スレッド表示 (本文はシート非保存 → 詳細READで都度取得した結果を表示)
+function InboxThread({thread}){
+  if(!thread) return null;
+  if(!thread.ok) return <div style={{fontSize:12,color:'var(--ink3)',padding:'10px 0'}}>スレッドを取得できませんでした{thread.error?`: ${thread.error}`:''}</div>;
+  return (
+    <div>
+      {thread.totalMessages > thread.messages.length &&
+        <div style={{fontSize:11,color:'var(--ink3)',marginBottom:8}}>全 {thread.totalMessages} 通のうち直近 {thread.messages.length} 通を表示</div>}
+      {thread.messages.map((m,i)=>(
+        <div key={i} style={{border:'1px solid #e3e6ea',borderRadius:10,padding:'10px 12px',marginBottom:10,background:i===thread.messages.length-1?'#f7fbfa':'#fff'}}>
+          <div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:6}}>
+            <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.from}</div>
+            <div style={{fontSize:11,color:'var(--ink3)',whiteSpace:'nowrap'}}>{inboxFmtDt(m.date)}</div>
+          </div>
+          <div style={{fontSize:12,whiteSpace:'pre-wrap',lineHeight:1.7,maxHeight:280,overflow:'auto'}}>{m.body}</div>
+          {m.attachments && m.attachments.length>0 &&
+            <div style={{fontSize:11,color:'var(--ink3)',marginTop:6}}>添付: {m.attachments.join(' / ')}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 相手の文脈 (I2: 参加者・申込履歴・PWA行動・学校/企業・過去問い合わせ)
+function InboxContext({ctx, loading}){
+  if(loading) return <div style={{fontSize:12,color:'var(--ink3)',padding:'4px 0 10px'}}>相手情報を照合中…</div>;
+  if(!ctx) return null;
+  const p = ctx.participant;
+  const typeLabel = {event_view:'閲覧', event_save:'保存', apply_start:'申込開始'};
+  return (
+    <div style={{border:'1px solid #e3e6ea',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#fbfcfd'}}>
+      <div style={{fontSize:12,fontWeight:800,marginBottom:6,color:'var(--ink2,#3a4450)'}}>相手の文脈</div>
+      {p ? (
+        <div style={{fontSize:12,lineHeight:1.8}}>
+          <span style={{fontWeight:700}}>{p.name}</span>{p.nickname?`（${p.nickname}）`:''}<span style={{color:'var(--ink3)'}}> {p.userId}</span>
+          <span>・{p.residency||'属性未設定'}・表示言語 {p.language||'ja'}{p.jpSchool?'・日本語学校':''}</span>
+          <span>・参加 {p.joinCount||0} 回{p.lastJoinedAt?`（最終 ${String(p.lastJoinedAt).slice(0,10)}）`:''}</span>
+          {p.affiliation&&<span>・{p.affiliation}</span>}
+        </div>
+      ) : (
+        <div style={{fontSize:12,color:'#b4530a'}}>
+          参加者未照合（未知の送信者）
+          {ctx.candidates&&ctx.candidates.length>0&&
+            <span> — 同一人物候補: {ctx.candidates.map(c=>`${c.name} (${c.userId})`).join(' / ')}</span>}
+        </div>
+      )}
+      {(ctx.school||ctx.company)&&(
+        <div style={{fontSize:12,marginTop:4}}>
+          {ctx.school&&<span style={{fontWeight:700,color:'#2b6cb0'}}>学校: {ctx.school.name}</span>}
+          {ctx.company&&<span style={{fontWeight:700,color:'#6b46c1',marginLeft:ctx.school?10:0}}>企業: {ctx.company.name}</span>}
+        </div>
+      )}
+      {ctx.registrations&&ctx.registrations.length>0&&(
+        <div style={{marginTop:8}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--ink3)',marginBottom:2}}>申込履歴（直近{ctx.registrations.length}件）</div>
+          {ctx.registrations.map((r,i)=>(
+            <div key={i} style={{fontSize:12,display:'flex',gap:6,alignItems:'baseline'}}>
+              <span style={{color:r.isActive?'var(--teal,#0f8a7a)':'#8a939e',fontWeight:r.isActive?700:400,whiteSpace:'nowrap'}}>{r.status}</span>
+              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.eventTitle||r.eventId}</span>
+              <span style={{color:'var(--ink3)',fontSize:11,whiteSpace:'nowrap'}}>{r.eventDate?String(r.eventDate).slice(0,10):''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {ctx.pwa&&(
+        <div style={{marginTop:8,fontSize:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--ink3)',marginBottom:2}}>PWA行動（直近30日）</div>
+          {['event_view','event_save','apply_start'].map(k=>{
+            const list = ctx.pwa.recent && ctx.pwa.recent[k];
+            if(!list||list.length===0) return null;
+            return <div key={k}>{typeLabel[k]}: {list.map(x=>x.title||x.id).join(' / ')}</div>;
+          })}
+          {ctx.pwa.lastUsedAt&&<div style={{color:'var(--ink3)',fontSize:11,marginTop:2}}>最終利用 {inboxFmtDt(ctx.pwa.lastUsedAt)}</div>}
+        </div>
+      )}
+      {ctx.pastInquiries&&ctx.pastInquiries.length>0&&(
+        <div style={{marginTop:8}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--ink3)',marginBottom:2}}>同じ送信者の過去問い合わせ</div>
+          {ctx.pastInquiries.map((q,i)=>(
+            <div key={i} style={{fontSize:12}}>
+              {q.subject||'(件名なし)'} <span style={{color:'var(--ink3)',fontSize:11}}>{q.state} / {inboxFmtDt(q.receivedAt)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// AI判定パネル (I3: ブラウザClaude コピペ方式)
+//   手順: プロンプト生成 → コピペで claude.ai に送信 → 返ってきたJSONを貼り付け → 取り込み
+function InboxJudgePanel({judge, onPaste, onApply, onClose, busy, result, copyMsg, onCopy}){
+  if(!judge) return null;
+  return (
+    <div style={{border:'1px solid #cfd8de',borderRadius:12,padding:'12px 16px',marginBottom:14,background:'#fff'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontSize:14,fontWeight:800}}>AI判定（{judge.count}件 / 約{Math.round(judge.chars/1000)}千字）</div>
+        <button onClick={onClose} style={{border:0,background:'transparent',fontSize:13,color:'var(--ink3)',cursor:'pointer'}}>閉じる ✕</button>
+      </div>
+      <div style={{fontSize:12,color:'var(--ink3)',marginBottom:8,lineHeight:1.7}}>
+        1. プロンプトをコピー → 2. claude.ai に貼り付けて送信 → 3. Claude が返したJSONを下の欄に貼り付け → 4. 取り込み。
+        メール本文は信頼できない入力として封入済みです。Claudeの出力でも最終判断は人間が行ってください。
+      </div>
+      <textarea readOnly value={judge.prompt} rows={5}
+        style={{width:'100%',fontSize:11,fontFamily:'monospace',border:'1px solid #e3e6ea',borderRadius:8,padding:8,boxSizing:'border-box',background:'#f8fafb'}}/>
+      <div style={{display:'flex',gap:8,margin:'8px 0 14px',flexWrap:'wrap',alignItems:'center'}}>
+        <button onClick={onCopy}
+          style={{padding:'7px 14px',borderRadius:9,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer'}}>
+          プロンプトをコピー
+        </button>
+        <a href="https://claude.ai/new" target="_blank" rel="noopener noreferrer"
+          style={{padding:'7px 14px',borderRadius:9,border:'1px solid var(--teal,#0f8a7a)',color:'var(--teal,#0f8a7a)',fontWeight:700,fontSize:12,textDecoration:'none'}}>
+          claude.ai を開く ↗
+        </a>
+        {judge.desktopUrl&&
+          <a href={judge.desktopUrl}
+            style={{padding:'7px 14px',borderRadius:9,border:'1px solid #d8dde2',color:'var(--ink2,#3a4450)',fontWeight:600,fontSize:12,textDecoration:'none'}}
+            title="デスクトップ版 Claude がインストルされている場合のみ動作 (プロンプト事前入力)">
+            デスクトップ版で開く
+          </a>}
+        {copyMsg&&<span style={{fontSize:12,color:'var(--teal,#0f8a7a)',fontWeight:700}}>{copyMsg}</span>}
+      </div>
+      <textarea value={judge.paste} onChange={e=>onPaste(e.target.value)} rows={5}
+        placeholder='Claude が出力したJSONをここに貼り付け（例: [{"inquiryId":"INQ-000001","category":"キャンセル",...}]）'
+        style={{width:'100%',fontSize:11,fontFamily:'monospace',border:'1px solid #e3e6ea',borderRadius:8,padding:8,boxSizing:'border-box'}}/>
+      <div style={{display:'flex',gap:10,alignItems:'center',marginTop:8,flexWrap:'wrap'}}>
+        <button onClick={onApply} disabled={busy||!judge.paste.trim()}
+          style={{padding:'7px 16px',borderRadius:9,border:0,background:'#3a4450',color:'#fff',fontWeight:700,fontSize:12,
+            cursor:'pointer',opacity:(busy||!judge.paste.trim())?.5:1}}>
+          {busy?'取り込み中…':'判定結果を取り込み'}
+        </button>
+        {result&&(
+          <span style={{fontSize:12,fontWeight:700,color:result.failed>0?'#c0392b':'var(--teal,#0f8a7a)'}}>
+            取り込み {result.applied} 件{result.failed>0?` / 失敗 ${result.failed} 件`:''}
+          </span>
+        )}
+      </div>
+      {result&&result.results&&result.results.some(r=>!r.ok||r.escalated)&&(
+        <div style={{marginTop:6}}>
+          {result.results.filter(r=>!r.ok).map((r,i)=>
+            <div key={`e${i}`} style={{fontSize:11,color:'#c0392b'}}>{r.inquiryId}: {r.error}</div>)}
+          {result.results.filter(r=>r.ok&&r.escalated).map((r,i)=>
+            <div key={`s${i}`} style={{fontSize:11,color:'#b4530a'}}>{r.inquiryId}: 要責任者確認へ自動エスカレション（{r.category}）</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// AI判定の結果表示 (詳細画面用)
+function InboxJudgement({inq}){
+  if(!inq||!inq['Claude要約']) return null;
+  const conf = String(inq['推定確信度']||'低');
+  const flags = [];
+  if(inq['要注意判定']===true) flags.push(['要注意','#c0392b']);
+  if(inq['指示注入リスク']===true) flags.push(['指示注入','#c0392b']);
+  if(inq['迷惑判定']===true) flags.push(['迷惑','#b4530a']);
+  if(inq['危険文判定']===true) flags.push(['危険文','#c0392b']);
+  if(String(inq['情報取扱い区分']||'通常')!=='通常') flags.push([`取扱${inq['情報取扱い区分']}`,'#b4530a']);
+  if(inq['FAQ候補']===true) flags.push(['FAQ候補','#2b8fd9']);
+  if(inq['雛形候補']===true) flags.push(['雛形候補','#2b8fd9']);
+  return (
+    <div style={{border:'1px solid #d9e8e4',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#f4faf8'}}>
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:6}}>
+        <span style={{fontSize:12,fontWeight:800}}>AI判定</span>
+        {inq['種別']&&<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:9,background:'var(--teal,#0f8a7a)',color:'#fff'}}>{inq['種別']}</span>}
+        {(inq['EventID']||inq['SessionID'])&&
+          <span style={{fontSize:11,color:'var(--ink2,#3a4450)'}}>推定: {inq['EventID']||''}{inq['SessionID']?` / ${inq['SessionID']}`:''}</span>}
+        <span style={{fontSize:11,color:conf==='高'?'var(--teal,#0f8a7a)':conf==='中'?'#d99a2b':'#c0392b',fontWeight:700}}>確信度 {conf}</span>
+        {flags.map((f,i)=><span key={i} style={{fontSize:11,fontWeight:700,color:f[1]}}>{f[0]}</span>)}
+      </div>
+      <div style={{fontSize:12,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{inq['Claude要約']}</div>
+      {inq['Claude返信根拠']&&
+        <div style={{fontSize:11,color:'var(--ink3)',marginTop:4,lineHeight:1.6}}>根拠: {inq['Claude返信根拠']}</div>}
+    </div>
+  );
+}
+
+function PageInbox(){
+  const [list, setList] = useState([]);
+  const [setup, setSetup] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState('すべて');
+  const [selectedId, setSelectedId] = useState('');
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [ctx, setCtx] = useState(null);
+  const [ctxLoading, setCtxLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
+  const [stateDraft, setStateDraft] = useState('');
+  const [stateSaving, setStateSaving] = useState(false);
+  // (I3) AI判定パネル
+  const [judge, setJudge] = useState(null);          // {count, chars, prompt, desktopUrl, paste}
+  const [judgeBusy, setJudgeBusy] = useState(false);
+  const [judgeResult, setJudgeResult] = useState(null);
+  const [copyMsg, setCopyMsg] = useState('');
+
+  const startJudge = useCallback(async (ids)=>{
+    if(!ids||ids.length===0){ setCopyMsg(''); return; }
+    setJudgeResult(null); setCopyMsg('');
+    try{
+      const j = await window.fetchData('admin.buildInquiryJudgePrompt', {inquiryIds: ids});
+      setJudge({...j, paste:''});
+    }catch(e){ alert(`プロンプト生成に失敗しました: ${e.message||e}`); }
+  },[]);
+
+  const copyJudgePrompt = useCallback(async ()=>{
+    if(!judge) return;
+    try{
+      await navigator.clipboard.writeText(judge.prompt);
+      setCopyMsg('コピしました。claude.ai に貼り付けて送信してください');
+    }catch(e){ setCopyMsg('コピに失敗しました。上の欄を全選択して手動でコピしてください'); }
+  },[judge]);
+
+  const applyJudge = useCallback(async ()=>{
+    if(!judge||!judge.paste.trim()) return;
+    setJudgeBusy(true); setJudgeResult(null);
+    try{
+      const res = await window.postData('admin.applyInquiryJudgement', {jsonText: judge.paste});
+      setJudgeResult(res);
+      window.invalidateCache('admin.listInquiries');
+      window.invalidateCache('admin.getInquiryDetail');
+      window.invalidateCache('admin.getInquiryContext');
+      await loadList();
+      // 詳細を開いている場合は再取得して判定結果を反映
+      if(selectedId){
+        try{
+          const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: selectedId});
+          setDetail(d);
+        }catch(e){}
+      }
+    }catch(e){ alert(`取り込みに失敗しました: ${e.message||e}\nJSON全体が壊れている可能性があります。Claudeの出力をそのまま貼り付けてください。`); }
+    finally{ setJudgeBusy(false); }
+  },[judge,selectedId,loadList]);
+
+  const loadList = useCallback(async ()=>{
+    try{
+      setError('');
+      const rows = await window.fetchData('admin.listInquiries', {});
+      setList(Array.isArray(rows)?rows:[]);
+    }catch(e){ setError(`一覧の取得に失敗しました: ${e.message||e}`); }
+    finally{ setLoading(false); }
+  },[]);
+
+  useEffect(()=>{
+    let alive = true;
+    (async ()=>{
+      try{
+        const st = await window.fetchData('admin.getInboxSetupStatus', {});
+        if(alive) setSetup(st);
+      }catch(e){ /* バナ非表示で続行 */ }
+    })();
+    loadList();
+    return ()=>{ alive = false; };
+  },[loadList]);
+
+  const filtered = useMemo(()=>{
+    if(filter==='すべて') return list;
+    return list.filter(r=>r.state===filter);
+  },[list,filter]);
+
+  const counts = useMemo(()=>{
+    const c = {};
+    list.forEach(r=>{ c[r.state]=(c[r.state]||0)+1; });
+    return c;
+  },[list]);
+
+  const openDetail = useCallback(async (row)=>{
+    setSelectedId(row.inquiryId);
+    setDetail(null);
+    setCtx(null);
+    setDetailLoading(true);
+    setCtxLoading(true);
+    setStateDraft(row.state);
+    try{
+      // 詳細 (スレッド) と相手文脈を並列取得 (I2)
+      const [d, c] = await Promise.all([
+        window.fetchData('admin.getInquiryDetail', {inquiryId: row.inquiryId}),
+        window.fetchData('admin.getInquiryContext', {inquiryId: row.inquiryId}).catch(()=>null),
+      ]);
+      setDetail(d);
+      setCtx(c);
+      if(row.unread){
+        window.postData('admin.markInquiryRead', {inquiryId: row.inquiryId}).catch(()=>{});
+        window.invalidateCache('admin.listInquiries');
+        setList(prev=>prev.map(r=>r.inquiryId===row.inquiryId?{...r,unread:false}:r));
+      }
+    }catch(e){ setDetail({inquiry:null, thread:{ok:false,messages:[],error:String(e.message||e)}}); }
+    finally{ setDetailLoading(false); setCtxLoading(false); }
+  },[]);
+
+  const runSync = useCallback(async ()=>{
+    setSyncing(true); setSyncMsg('');
+    try{
+      const s = await window.postData('admin.inboxSyncNow', {});
+      setSyncMsg(`同期完了: 新規 ${s.created} / 再浮上 ${s.resurfaced} / 返信検知 ${s.replied||0} / 既処理 ${s.skipped}${s.failed>0?` / 失敗 ${s.failed}`:''} (${s.ms}ms)`);
+      window.invalidateCache('admin.listInquiries');   // 30秒TTLキャッシュを失効してから再取得
+      window.invalidateCache('admin.getInquiryDetail');
+      await loadList();
+    }catch(e){ setSyncMsg(`同期失敗: ${e.message||e}`); }
+    finally{ setSyncing(false); }
+  },[loadList]);
+
+  const applyState = useCallback(async ()=>{
+    if(!selectedId || !stateDraft) return;
+    setStateSaving(true);
+    try{
+      await window.postData('admin.setInquiryState', {inquiryId: selectedId, newState: stateDraft});
+      window.invalidateCache('admin.listInquiries');
+      window.invalidateCache('admin.getInquiryDetail');
+      setList(prev=>prev.map(r=>r.inquiryId===selectedId?{...r,state:stateDraft}:r));
+      setDetail(prev=>prev && prev.inquiry ? {...prev, inquiry:{...prev.inquiry, '対応状態':stateDraft}} : prev);
+    }catch(e){ alert(`状態変更に失敗しました: ${e.message||e}`); }
+    finally{ setStateSaving(false); }
+  },[selectedId,stateDraft]);
+
+  const selRow = useMemo(()=>list.find(r=>r.inquiryId===selectedId)||null,[list,selectedId]);
+
+  return (
+    <div style={{padding:'18px 22px',maxWidth:1500}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:12}}>
+        <div>
+          <h1 style={{fontSize:20,margin:0}}>問い合わせ</h1>
+          <div style={{fontSize:12,color:'var(--ink3)',marginTop:2}}>対象箱: {setup?setup.mailbox:'…'} / ラベル hub/inbox 限定取り込み</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          {syncMsg && <span style={{fontSize:12,color:'var(--ink3)'}}>{syncMsg}</span>}
+          <button onClick={()=>{
+              const pending = list.filter(r=>!r.category && r.state!=='対応完了').slice(0,10).map(r=>r.inquiryId);
+              if(pending.length===0){ alert('未判定の問い合わせはありません'); return; }
+              startJudge(pending);
+            }}
+            style={{padding:'8px 14px',borderRadius:10,border:'1px solid var(--teal,#0f8a7a)',background:'#fff',color:'var(--teal,#0f8a7a)',fontWeight:700,fontSize:13,cursor:'pointer'}}>
+            未判定をまとめてAI判定
+          </button>
+          <button onClick={runSync} disabled={syncing}
+            style={{padding:'8px 16px',borderRadius:10,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontWeight:700,fontSize:13,cursor:syncing?'wait':'pointer',opacity:syncing?.6:1}}>
+            {syncing?'同期中…':'今すぐ同期'}
+          </button>
+        </div>
+      </div>
+
+      <InboxSetupBanner status={setup}/>
+
+      <InboxJudgePanel judge={judge}
+        onPaste={v=>setJudge(prev=>prev?{...prev,paste:v}:prev)}
+        onApply={applyJudge}
+        onClose={()=>{setJudge(null);setJudgeResult(null);setCopyMsg('');}}
+        busy={judgeBusy} result={judgeResult} copyMsg={copyMsg} onCopy={copyJudgePrompt}/>
+
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+        {INBOX_FILTERS.map(f=>{
+          const n = f==='すべて'?list.length:(counts[f]||0);
+          const active = filter===f;
+          return (
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{padding:'5px 12px',borderRadius:18,fontSize:12,fontWeight:active?700:500,cursor:'pointer',
+                border:`1px solid ${active?'var(--teal,#0f8a7a)':'#d8dde2'}`,
+                background:active?'var(--teal,#0f8a7a)':'#fff', color:active?'#fff':'var(--ink2,#3a4450)'}}>
+              {f} {n>0&&<span style={{opacity:.8}}>({n})</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <div style={{padding:40,textAlign:'center',color:'var(--ink3)'}}>{Spinner?<Spinner/>:'読み込み中…'}</div>
+      ) : error ? (
+        ErrorBanner ? <ErrorBanner message={error}/> : <div style={{color:'#c0392b',fontSize:13}}>{error}</div>
+      ) : (
+        <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+          {/* 一覧 */}
+          <div style={{flex:'1 1 46%',minWidth:380,border:'1px solid #e3e6ea',borderRadius:12,overflow:'hidden',background:'#fff'}}>
+            {filtered.length===0 ? (
+              <div style={{padding:30,textAlign:'center',fontSize:13,color:'var(--ink3)'}}>
+                該当する問い合わせはありません。テストメールに hub/inbox ラベルを付け「今すぐ同期」を実行してください。
+              </div>
+            ) : filtered.map(r=>(
+              <div key={r.inquiryId} onClick={()=>openDetail(r)}
+                style={{padding:'10px 14px',borderBottom:'1px solid #eef1f4',cursor:'pointer',
+                  background:r.inquiryId===selectedId?'#eef8f6':(r.unread?'#fffdf5':'#fff')}}>
+                <div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:3}}>
+                  <div style={{fontSize:13,fontWeight:r.unread?800:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {r.unread&&<span style={{color:'#e85d4a',marginRight:4}}>●</span>}{r.fromName||r.fromEmail||'(差出人不明)'}
+                  </div>
+                  <div style={{fontSize:11,color:'var(--ink3)',whiteSpace:'nowrap'}}>{inboxFmtDt(r.latestAt)}</div>
+                </div>
+                <div style={{fontSize:12,fontWeight:r.unread?700:500,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.subject||'(件名なし)'}</div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <StateBadge state={r.state}/>
+                  {r.risky&&<span style={{fontSize:11,color:'#c0392b',fontWeight:700}}>要注意</span>}
+                  {r.hasAttachments&&<span style={{fontSize:11,color:'var(--ink3)'}}>添付あり</span>}
+                  <span style={{fontSize:11,color:'var(--ink3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{r.excerpt}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 詳細 */}
+          <div style={{flex:'1 1 54%',minWidth:420,border:'1px solid #e3e6ea',borderRadius:12,background:'#fff',padding:'14px 16px'}}>
+            {!selectedId ? (
+              <div style={{padding:30,textAlign:'center',fontSize:13,color:'var(--ink3)'}}>左の一覧から問い合わせを選択してください</div>
+            ) : detailLoading ? (
+              <div style={{padding:30,textAlign:'center',color:'var(--ink3)'}}>{Spinner?<Spinner/>:'読み込み中…'}</div>
+            ) : (
+              <div>
+                <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'flex-start',marginBottom:8}}>
+                  <div>
+                    <div style={{fontSize:15,fontWeight:800,lineHeight:1.4}}>{selRow?selRow.subject||'(件名なし)':''}</div>
+                    <div style={{fontSize:12,color:'var(--ink3)',marginTop:2}}>{selRow?`${selRow.fromName} <${selRow.fromEmail}>`:''} / {selectedId}</div>
+                  </div>
+                  {selRow&&selRow.gmailUrl&&
+                    <a href={selRow.gmailUrl} target="_blank" rel="noopener noreferrer"
+                      style={{fontSize:12,fontWeight:700,color:'var(--teal,#0f8a7a)',whiteSpace:'nowrap'}}>Gmailで開く ↗</a>}
+                </div>
+
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'#f6f8f9',borderRadius:10,marginBottom:12,flexWrap:'wrap'}}>
+                  <span style={{fontSize:12,color:'var(--ink3)'}}>対応状態:</span>
+                  <select value={stateDraft} onChange={e=>setStateDraft(e.target.value)}
+                    style={{fontSize:12,padding:'4px 8px',borderRadius:8,border:'1px solid #d8dde2'}}>
+                    {INBOX_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <button onClick={applyState} disabled={stateSaving||!selRow||stateDraft===selRow.state}
+                    style={{padding:'4px 12px',borderRadius:8,border:0,background:'#3a4450',color:'#fff',fontSize:12,fontWeight:700,
+                      cursor:'pointer',opacity:(stateSaving||!selRow||stateDraft===(selRow&&selRow.state))?.5:1}}>
+                    {stateSaving?'変更中…':'変更'}
+                  </button>
+                  {selRow&&selRow.state==='要責任者確認'&&
+                    <span style={{fontSize:11,color:'#c0392b'}}>解除は 代表/副代表/オーナー/管理者 のみ</span>}
+                  <button onClick={()=>startJudge([selectedId])}
+                    style={{padding:'4px 12px',borderRadius:8,border:'1px solid var(--teal,#0f8a7a)',background:'#fff',color:'var(--teal,#0f8a7a)',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                    {detail&&detail.inquiry&&detail.inquiry['Claude要約']?'AI再判定':'AI判定'}
+                  </button>
+                </div>
+
+                <InboxJudgement inq={detail?detail.inquiry:null}/>
+
+                <InboxContext ctx={ctx} loading={ctxLoading}/>
+
+                <InboxThread thread={detail?detail.thread:null}/>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+window.PageInbox = PageInbox;
+window.InboxAPI = { fmtDt: inboxFmtDt, STATES: INBOX_STATES, StateBadge: StateBadge };
+
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+(function(){
 const {useState, useEffect, useRef, useMemo, useCallback, Fragment} = React;
 const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct, chartFont, IMEInput, IMETextarea, Spinner, LoadingState, ErrorBanner, Icon} = window;
 
@@ -32279,6 +32927,8 @@ const PAGES = {
 
   // ----- コミュニケーション (Phase 2新-B) -----
   mail:           () => renderPage('PageMail'),
+  // (Phase 19.I1) hub問い合わせCRM
+  inbox:          () => renderPage('PageInbox'),
   // (Phase 7.3) 「ニュース配信」と「ニュース管理」を統合 → PageNewsFront に一本化
   news:           () => renderPage('PageNewsFront'),
   chat:           () => renderPage('PageChat'),
