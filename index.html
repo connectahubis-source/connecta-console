@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-12 P6q'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-12 P6s'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1760,7 +1760,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6q</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6s</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -33103,7 +33103,7 @@ function PageInbox(){
             </select>
           </label>
           <button onClick={()=>{
-              const pending = list.filter(r=>!r.category && !r.spam && r.state!=='対応完了').slice(0,10).map(r=>r.inquiryId);
+              const pending = list.filter(r=>!r.judged && !r.spam && r.state!=='対応完了').slice(0,10).map(r=>r.inquiryId);  // (P6s) 規則判定済みでもAI未処理なら対象
               if(pending.length===0){ alert('未判定の問い合わせはありません'); return; }
               startJudge(pending);
             }}
