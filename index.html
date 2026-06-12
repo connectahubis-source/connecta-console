@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-12 P6j'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-12 P6m'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1748,7 +1748,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6j</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6m</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -32592,6 +32592,79 @@ function InboxJudgement({inq}){
   );
 }
 
+// (I5) AI返信案: 5文体タブ・編集・Gmail下書き保存
+function InboxDraft({inq, inquiryId, onSaved}){
+  const [tab, setTab] = useState('recommended');
+  const [texts, setTexts] = useState(null);   // {recommended:..,short:..,...} 編集済み本文
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState('');
+  const draft = useMemo(()=>{
+    if(!inq||!inq['AI返信案']) return null;
+    try{ const d = JSON.parse(String(inq['AI返信案'])); return d&&d.recommended?d:null; }catch(e){ return null; }
+  },[inq]);
+  useEffect(()=>{
+    if(draft){
+      setTexts({recommended:draft.recommended||'', short:draft.short||'', polite:draft.polite||'', english:draft.english||'', easyJapanese:draft.easyJapanese||''});
+      setTab('recommended'); setSavedMsg('');
+    } else { setTexts(null); }
+  },[draft]);
+  if(!draft||!texts) return null;
+  const TABS = [['recommended','推奨'],['short','短め'],['polite','丁寧'],['english','英語'],['easyJapanese','やさしい日本語']]
+    .filter(([k])=>k==='recommended'||String(draft[k]||'').trim());
+  const save = async ()=>{
+    setSaving(true); setSavedMsg('');
+    try{
+      const r = await window.postData('admin.saveInquiryDraft', {inquiryId, body: texts[tab]});
+      setSavedMsg(r.fromFallback?'保存しました（差出人エイリアスが使えず既定名義になりました）':'Gmail下書きに保存しました');
+      window.invalidateCache('admin.listInquiries');
+      window.invalidateCache('admin.getInquiryDetail');
+      if(onSaved) onSaved(r);
+    }catch(e){ setSavedMsg(`保存に失敗: ${e.message||e}`); }
+    finally{ setSaving(false); }
+  };
+  return (
+    <div style={{border:'1px solid #d9e0ee',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#f6f8fd'}}>
+      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
+        <span style={{fontSize:12,fontWeight:800}}>AI返信案</span>
+        {TABS.map(([k,label])=>(
+          <button key={k} onClick={()=>setTab(k)}
+            style={{padding:'3px 10px',borderRadius:14,fontSize:11,fontWeight:tab===k?700:500,cursor:'pointer',
+              border:`1px solid ${tab===k?'#4a5fc1':'#cdd5e8'}`,background:tab===k?'#4a5fc1':'#fff',color:tab===k?'#fff':'#3a4450'}}>
+            {label}
+          </button>
+        ))}
+        <span style={{fontSize:10,color:'var(--ink3)'}}>編集してから保存できます</span>
+      </div>
+      <textarea value={texts[tab]} onChange={e=>setTexts(prev=>({...prev,[tab]:e.target.value}))} rows={9}
+        style={{width:'100%',fontSize:12,lineHeight:1.7,border:'1px solid #d9e0ee',borderRadius:8,padding:10,boxSizing:'border-box',background:'#fff'}}/>
+      {(draft.checkpoints&&draft.checkpoints.length>0)&&(
+        <div style={{marginTop:6}}>
+          <span style={{fontSize:11,fontWeight:700,color:'#b4530a'}}>送信前に確認:</span>
+          {draft.checkpoints.map((c,i)=><div key={i} style={{fontSize:11,color:'#8a4a12'}}>・{c}</div>)}
+        </div>
+      )}
+      {(draft.uncertainties&&draft.uncertainties.length>0)&&(
+        <div style={{marginTop:4}}>
+          <span style={{fontSize:11,fontWeight:700,color:'var(--ink3)'}}>不確かな点:</span>
+          {draft.uncertainties.map((c,i)=><div key={i} style={{fontSize:11,color:'var(--ink3)'}}>・{c}</div>)}
+        </div>
+      )}
+      {draft.staffNote&&<div style={{fontSize:11,color:'var(--ink3)',marginTop:4}}>担当者向け補足: {draft.staffNote}</div>}
+      <div style={{display:'flex',gap:10,alignItems:'center',marginTop:8,flexWrap:'wrap'}}>
+        <button onClick={save} disabled={saving||!texts[tab].trim()}
+          style={{padding:'6px 16px',borderRadius:9,border:0,background:'#4a5fc1',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(saving||!texts[tab].trim())?.5:1}}>
+          {saving?'保存中…':'このタブの文面を Gmail下書きに保存'}
+        </button>
+        {inq['Gmail下書きURL']&&
+          <a href={inq['Gmail下書きURL']} target="_blank" rel="noopener noreferrer"
+            style={{fontSize:12,fontWeight:700,color:'#4a5fc1'}}>Gmailで下書きを開く ↗</a>}
+        {savedMsg&&<span style={{fontSize:11,fontWeight:700,color:savedMsg.indexOf('失敗')>=0?'#c0392b':'#2ba66b'}}>{savedMsg}</span>}
+      </div>
+      <div style={{fontSize:10,color:'var(--ink3)',marginTop:6}}>送信はGmail上で人間が行います（このボタンは下書き保存まで）</div>
+    </div>
+  );
+}
+
 function PageInbox(){
   const [list, setList] = useState([]);
   const [setup, setSetup] = useState(null);
@@ -32635,6 +32708,28 @@ function PageInbox(){
       window.invalidateCache('admin.getInquiryDetail');
     }catch(e){ setReqMsg(`依頼に失敗: ${e.message||e}`); }
   },[selectedId]);
+
+  // (P6l) ブリッジのAIモデル選択 (Settings: inbox_bridge_model)
+  const [bridgeModel, setBridgeModel] = useState('');
+  const [modelSaving, setModelSaving] = useState(false);
+  useEffect(()=>{
+    let alive = true;
+    (async ()=>{
+      try{
+        const s = await window.getAdminSettings(false);
+        if(alive && s) setBridgeModel(String(s['inbox_bridge_model']||''));
+      }catch(e){}
+    })();
+    return ()=>{ alive=false; };
+  },[]);
+  const changeModel = useCallback(async (v)=>{
+    setBridgeModel(v); setModelSaving(true);
+    try{
+      await window.postData('updateSettings', {settings:{inbox_bridge_model: v}});
+    }catch(e){ alert(`モデル設定の保存に失敗: ${e.message||e}`); }
+    finally{ setModelSaving(false); }
+  },[]);
+
 
   const startJudge = useCallback(async (ids)=>{
     if(!ids||ids.length===0){ setCopyMsg(''); return; }
@@ -32759,6 +32854,17 @@ function PageInbox(){
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           {syncMsg && <span style={{fontSize:12,color:'var(--ink3)'}}>{syncMsg}</span>}
+          <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--ink2,#3a4450)'}}
+            title="ブリッジ (判定・返信案生成) が使うモデル。変更は次回ブリッジ実行から反映。Fable 5 は6月22日以降クレジット消費に注意">
+            AIモデル
+            <select value={bridgeModel} onChange={e=>changeModel(e.target.value)} disabled={modelSaving}
+              style={{fontSize:12,padding:'5px 8px',borderRadius:8,border:'1px solid #d8dde2',opacity:modelSaving?.6:1}}>
+              <option value="">既定 (PC側設定)</option>
+              <option value="claude-fable-5">Fable 5</option>
+              <option value="opus">Opus</option>
+              <option value="sonnet">Sonnet</option>
+            </select>
+          </label>
           <button onClick={()=>{
               const pending = list.filter(r=>!r.category && r.state!=='対応完了').slice(0,10).map(r=>r.inquiryId);
               if(pending.length===0){ alert('未判定の問い合わせはありません'); return; }
@@ -32861,9 +32967,9 @@ function PageInbox(){
                   </button>
                   {selRow&&selRow.state==='要責任者確認'&&
                     <span style={{fontSize:11,color:'#c0392b'}}>解除は 代表/副代表/オーナー/管理者 のみ</span>}
-                  <button onClick={requestJudge}
+                  <button onClick={requestJudge} title="判定 (種別・要約・イベント推定) と返信案を1回のAI実行でまとめて生成します"
                     style={{padding:'4px 12px',borderRadius:8,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                    {detail&&detail.inquiry&&detail.inquiry['Claude要約']?'AI再判定を依頼':'AI判定を依頼'}
+                    {detail&&detail.inquiry&&detail.inquiry['Claude要約']?'AI処理を再依頼（判定+返信案）':'AI処理を依頼（判定+返信案）'}
                   </button>
                   <button onClick={()=>startJudge([selectedId])} title="claude.ai にコピペして手動で判定する（ブリッジ停止時の予備経路）"
                     style={{padding:'4px 10px',borderRadius:8,border:'1px solid #d8dde2',background:'#fff',color:'var(--ink3)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
@@ -32873,6 +32979,15 @@ function PageInbox(){
                 </div>
 
                 <InboxJudgement inq={detail?detail.inquiry:null}/>
+
+                <InboxDraft inq={detail?detail.inquiry:{}} inquiryId={selectedId}
+                  onSaved={async ()=>{
+                    try{
+                      const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: selectedId});
+                      setDetail(d);
+                      setList(prev=>prev.map(r=>r.inquiryId===selectedId?{...r,state:'Gmail下書き保存済み'}:r));
+                    }catch(e){}
+                  }}/>
 
                 <InboxContext ctx={ctx} loading={ctxLoading}/>
 
