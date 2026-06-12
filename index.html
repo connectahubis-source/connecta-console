@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-11 P6i'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-12 P6j'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1748,7 +1748,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-11 P6i</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6j</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -32624,6 +32624,18 @@ function PageInbox(){
 
   // (I3 fix P6i) 判定系コルバックは loadList を参照するため、必ず loadList の定義より後に置く
   // (const の TDZ: 前に置くと "Cannot access 'loadList' before initialization" で画面全体が落ちる)
+  // (P6j) 判定依頼: ボタン1つでブリッジ任せ (claude.ai を開かない主経路)
+  const [reqMsg, setReqMsg] = useState('');
+  const requestJudge = useCallback(async ()=>{
+    if(!selectedId) return;
+    setReqMsg('');
+    try{
+      const r = await window.postData('admin.requestInquiryJudgement', {inquiryId: selectedId});
+      setReqMsg(r.alreadyQueued ? '依頼済みです。ブリッジの次回実行をお待ちください' : '依頼しました。ブリッジが自動処理します（watch運用なら数分・cron運用なら次の実行時刻）');
+      window.invalidateCache('admin.getInquiryDetail');
+    }catch(e){ setReqMsg(`依頼に失敗: ${e.message||e}`); }
+  },[selectedId]);
+
   const startJudge = useCallback(async (ids)=>{
     if(!ids||ids.length===0){ setCopyMsg(''); return; }
     setJudgeResult(null); setCopyMsg('');
@@ -32688,6 +32700,7 @@ function PageInbox(){
 
   const openDetail = useCallback(async (row)=>{
     setSelectedId(row.inquiryId);
+    setReqMsg('');
     setDetail(null);
     setCtx(null);
     setDetailLoading(true);
@@ -32752,7 +32765,7 @@ function PageInbox(){
               startJudge(pending);
             }}
             style={{padding:'8px 14px',borderRadius:10,border:'1px solid var(--teal,#0f8a7a)',background:'#fff',color:'var(--teal,#0f8a7a)',fontWeight:700,fontSize:13,cursor:'pointer'}}>
-            未判定をまとめてAI判定
+            未判定をまとめて手動判定
           </button>
           <button onClick={runSync} disabled={syncing}
             style={{padding:'8px 16px',borderRadius:10,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontWeight:700,fontSize:13,cursor:syncing?'wait':'pointer',opacity:syncing?.6:1}}>
@@ -32848,10 +32861,15 @@ function PageInbox(){
                   </button>
                   {selRow&&selRow.state==='要責任者確認'&&
                     <span style={{fontSize:11,color:'#c0392b'}}>解除は 代表/副代表/オーナー/管理者 のみ</span>}
-                  <button onClick={()=>startJudge([selectedId])}
-                    style={{padding:'4px 12px',borderRadius:8,border:'1px solid var(--teal,#0f8a7a)',background:'#fff',color:'var(--teal,#0f8a7a)',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                    {detail&&detail.inquiry&&detail.inquiry['Claude要約']?'AI再判定':'AI判定'}
+                  <button onClick={requestJudge}
+                    style={{padding:'4px 12px',borderRadius:8,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                    {detail&&detail.inquiry&&detail.inquiry['Claude要約']?'AI再判定を依頼':'AI判定を依頼'}
                   </button>
+                  <button onClick={()=>startJudge([selectedId])} title="claude.ai にコピペして手動で判定する（ブリッジ停止時の予備経路）"
+                    style={{padding:'4px 10px',borderRadius:8,border:'1px solid #d8dde2',background:'#fff',color:'var(--ink3)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                    手動（コピペ）
+                  </button>
+                  {reqMsg&&<span style={{fontSize:11,color:'var(--teal,#0f8a7a)',fontWeight:700}}>{reqMsg}</span>}
                 </div>
 
                 <InboxJudgement inq={detail?detail.inquiry:null}/>
