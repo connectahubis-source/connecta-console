@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-12 P6m'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-12 P6q'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -347,6 +347,18 @@ svg{display:block}
   font-size:14px;line-height:1;display:block;flex:none;
 }
 .sidebar.collapsed .nav-item > *:not(.ic):not(svg){display:none !important}
+/* (P6q) 問い合わせサブメニュ (Gmail風) */
+.nav-sub{display:none;flex-direction:column;gap:1px;margin:0 0 4px 0;padding-left:36px}
+.nav-sub.open{display:flex}
+.nav-sub a{font-size:12px;color:var(--ink3,#6b7682);padding:5px 10px;border-radius:8px;text-decoration:none;line-height:1.4}
+.nav-sub a:hover{background:rgba(15,138,122,.07);color:var(--ink,#222)}
+.nav-sub a.active{background:rgba(15,138,122,.12);color:#0f8a7a;font-weight:700}
+.inbox-caret{margin-left:auto;font-size:10px;opacity:.55;transition:transform .15s}
+.inbox-caret.open{transform:rotate(90deg)}
+.sidebar.collapsed .nav-sub{display:none !important}
+:root[data-theme="night"] .nav-sub a{color:var(--ink3)}
+:root[data-theme="night"] .nav-sub a:hover{background:var(--bg3);color:var(--ink)}
+:root[data-theme="night"] .nav-sub a.active{background:rgba(56,189,248,0.12);color:var(--jb-blue)}
 .sidebar.collapsed .nav-label{display:none}
 .sidebar.collapsed .nav-section-toggle{display:none}
 .sidebar.collapsed .nav-section{margin-top:8px}
@@ -1748,7 +1760,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6m</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6q</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -1787,7 +1799,21 @@ svg{display:block}
     <div class="nav-section">
       <div class="nav-label"><span>コミュニケーション</span></div>
       <a href="#mail" class="nav-item" data-nav="mail"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-10 5L2 7"/></svg>メール配信</a>
-      <a href="#inbox" class="nav-item" data-nav="inbox"><svg class="ic" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>問い合わせ</a>
+      <a href="#inbox" class="nav-item" data-nav="inbox"><svg class="ic" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>問い合わせ<span class="inbox-caret" id="inbox-caret">▸</span></a>
+      <!-- (P6q) Gmail風サブメニュ: #inbox?view=◯ でPageInbox内のビューを切替 -->
+      <div class="nav-sub" id="inbox-sub">
+        <a href="#inbox?view=inbox" data-iview="inbox">受信トレイ</a>
+        <a href="#inbox?view=todo" data-iview="todo">未対応</a>
+        <a href="#inbox?view=ai" data-iview="ai">AI下書き</a>
+        <a href="#inbox?view=drafts" data-iview="drafts">下書き保存済み</a>
+        <a href="#inbox?view=scheduled" data-iview="scheduled">予約送信</a>
+        <a href="#inbox?view=sent" data-iview="sent">送信済み</a>
+        <a href="#inbox?view=waiting" data-iview="waiting">担当者確認待ち</a>
+        <a href="#inbox?view=attention" data-iview="attention">要責任者確認</a>
+        <a href="#inbox?view=done" data-iview="done">完了</a>
+        <a href="#inbox?view=all" data-iview="all">すべてのメール</a>
+        <a href="#inbox?view=spam" data-iview="spam">迷惑メール</a>
+      </div>
       <a href="#news" class="nav-item" data-nav="news"><svg class="ic" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg>ニュース管理</a>
       <a href="#chat" class="nav-item" data-nav="chat"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>チャット<span class="n-dot"></span></a>
       <a href="#templates" class="nav-item" data-nav="templates"><svg class="ic" viewBox="0 0 24 24"><rect width="8" height="8" x="3" y="3" rx="1"/><path d="M7 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4"/></svg>定型文</a>
@@ -2429,6 +2455,34 @@ svg{display:block}
       location.hash = key;
     }
   };
+
+  // (P6q) 問い合わせサブメニュ: #inbox 配下にいる間だけ展開し、view= に応じて active を同期
+  window.__parseInboxQuery__ = function () {
+    const h = (location.hash || '').replace(/^#/, '');
+    const out = { key: h.split('?')[0], view: 'inbox', account: '' };
+    (h.split('?')[1] || '').split('&').forEach(function (kv) {
+      const i = kv.indexOf('=');
+      if (i < 0) return;
+      const k = kv.slice(0, i), v = decodeURIComponent(kv.slice(i + 1) || '');
+      if (k === 'view') out.view = v || 'inbox';
+      if (k === 'account') out.account = v;
+    });
+    return out;
+  };
+  function __syncInboxSub__() {
+    const sub = document.getElementById('inbox-sub');
+    const caret = document.getElementById('inbox-caret');
+    if (!sub) return;
+    const q = window.__parseInboxQuery__();
+    const open = q.key === 'inbox';
+    sub.classList.toggle('open', open);
+    if (caret) caret.classList.toggle('open', open);
+    sub.querySelectorAll('a').forEach(function (a) {
+      a.classList.toggle('active', open && a.getAttribute('data-iview') === q.view);
+    });
+  }
+  window.addEventListener('hashchange', __syncInboxSub__);
+  document.addEventListener('DOMContentLoaded', __syncInboxSub__);
 </script>
 
 <!-- ============================================================
@@ -32366,7 +32420,29 @@ const {useState, useEffect, useMemo, useCallback} = React;
 const {Spinner, ErrorBanner} = window;
 
 const INBOX_STATES = ['未対応','AI下書き済み','担当者確認待ち','修正中','Gmail下書き保存済み','返信済み','他担当者へ依頼中','保留','返信不要','要責任者確認','FAQ化候補','返信雛形化候補','再確認予定','対応完了'];
-const INBOX_FILTERS = ['すべて','未対応','AI下書き済み','担当者確認待ち','要責任者確認','返信済み','対応完了'];
+// (P6q) Gmail風ビュー定義: ナビのサブメニュ (#inbox?view=◯) と1対1対応。
+//   旧フィルタチップの絞り込みはすべてビューとして継承 (迷惑は専用ビューのみ・他から除外)
+const INBOX_VIEWS = {
+  inbox:    {label:'受信トレイ',     test:r=>!r.spam&&['未対応','AI下書き済み','担当者確認待ち','要責任者確認','返信不要'].indexOf(r.state)>=0},
+  todo:     {label:'未対応',         test:r=>!r.spam&&r.state==='未対応'},
+  ai:       {label:'AI下書き',       test:r=>!r.spam&&r.state==='AI下書き済み'},
+  drafts:   {label:'下書き保存済み', test:r=>!r.spam&&r.state==='Gmail下書き保存済み'},
+  scheduled:{label:'予約送信',       test:r=>!r.spam&&!!r.scheduledAt},
+  sent:     {label:'送信済み',       test:r=>!r.spam&&r.state==='返信済み'},
+  waiting:  {label:'担当者確認待ち', test:r=>!r.spam&&r.state==='担当者確認待ち'},
+  attention:{label:'要責任者確認',   test:r=>!r.spam&&r.state==='要責任者確認'},
+  done:     {label:'完了',           test:r=>!r.spam&&r.state==='対応完了'},
+  all:      {label:'すべてのメール', test:r=>!r.spam},
+  spam:     {label:'迷惑メール',     test:r=>r.spam===true},
+};
+// アカウント表示名 (Gmail風タブ用)
+function inboxAccountLabel(a){
+  const s = String(a||'').toLowerCase();
+  if(!s) return 'Hub';
+  if(s.indexOf('official')>=0) return 'Official';
+  if(s.indexOf('hub')>=0) return 'Hub';
+  return s.split('@')[0];
+}
 
 const STATE_COLORS = {
   '未対応':'#e85d4a', 'AI下書き済み':'#7c6fd9', '担当者確認待ち':'#d99a2b', '修正中':'#d99a2b',
@@ -32592,12 +32668,25 @@ function InboxJudgement({inq}){
   );
 }
 
-// (I5) AI返信案: 5文体タブ・編集・Gmail下書き保存
-function InboxDraft({inq, inquiryId, onSaved}){
+// (I5/P6o) AI返信案: 5文体タブ・編集・Gmail下書き保存・hub内送信。返信案なしでも手書き返信可
+function InboxDraft({inq, inquiryId, toEmail, onSaved, accounts}){
   const [tab, setTab] = useState('recommended');
-  const [texts, setTexts] = useState(null);   // {recommended:..,short:..,...} 編集済み本文
-  const [saving, setSaving] = useState(false);
+  const [texts, setTexts] = useState(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualText, setManualText] = useState('');
+  const [busy, setBusy] = useState('');        // '' | 'save' | 'send' | 'sched'
   const [savedMsg, setSavedMsg] = useState('');
+  // (P6p) 予約送信
+  const [schedOpen, setSchedOpen] = useState(false);
+  const [schedAt, setSchedAt] = useState(()=>{
+    const d = new Date(Date.now()+24*3600*1000);
+    d.setHours(9,0,0,0);
+    const p = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  });
+  const scheduledAt = inq&&inq['返信予定日'] ? String(inq['返信予定日']) : '';
+  // (P6q) 差出人: 既定 = 受信アカウント (Officialで受けたらOfficialで返す)
+  const [fromSel, setFromSel] = useState('');
   const draft = useMemo(()=>{
     if(!inq||!inq['AI返信案']) return null;
     try{ const d = JSON.parse(String(inq['AI返信案'])); return d&&d.recommended?d:null; }catch(e){ return null; }
@@ -32605,23 +32694,155 @@ function InboxDraft({inq, inquiryId, onSaved}){
   useEffect(()=>{
     if(draft){
       setTexts({recommended:draft.recommended||'', short:draft.short||'', polite:draft.polite||'', english:draft.english||'', easyJapanese:draft.easyJapanese||''});
-      setTab('recommended'); setSavedMsg('');
+      setTab('recommended');
     } else { setTexts(null); }
-  },[draft]);
-  if(!draft||!texts) return null;
-  const TABS = [['recommended','推奨'],['short','短め'],['polite','丁寧'],['english','英語'],['easyJapanese','やさしい日本語']]
-    .filter(([k])=>k==='recommended'||String(draft[k]||'').trim());
-  const save = async ()=>{
-    setSaving(true); setSavedMsg('');
+    setSavedMsg(''); setManualOpen(false); setManualText('');
+    setFromSel(String((inq&&inq['受信アカウント'])||'').toLowerCase());
+  },[draft, inquiryId]);
+
+  const currentBody = draft&&texts ? texts[tab] : manualText;
+
+  const doAction = async (kind)=>{
+    const body = String(currentBody||'').trim();
+    if(!body) return;
+    if(kind==='send'){
+      if(!window.confirm(`${toEmail||'相手'} へ今すぐ送信します。よろしいですか？\n差出人: ${fromSel||'既定 (hub.is)'}\n（取り消せません。迷ったら「Gmail下書きに保存」を使ってください）`)) return;
+    }
+    setBusy(kind); setSavedMsg('');
     try{
-      const r = await window.postData('admin.saveInquiryDraft', {inquiryId, body: texts[tab]});
-      setSavedMsg(r.fromFallback?'保存しました（差出人エイリアスが使えず既定名義になりました）':'Gmail下書きに保存しました');
+      const action = kind==='send'?'admin.sendInquiryReply':'admin.saveInquiryDraft';
+      const payload = {inquiryId, body};
+      if(fromSel) payload.from = fromSel;
+      const r = await window.postData(action, payload);
+      setSavedMsg(kind==='send'
+        ? (r.fromFallback?'送信しました（差出人エイリアスが使えず既定名義になりました）':'送信しました（状態: 返信済み）')
+        : (r.fromFallback?'保存しました（差出人エイリアスが使えず既定名義になりました）':'Gmail下書きに保存しました'));
       window.invalidateCache('admin.listInquiries');
       window.invalidateCache('admin.getInquiryDetail');
-      if(onSaved) onSaved(r);
-    }catch(e){ setSavedMsg(`保存に失敗: ${e.message||e}`); }
-    finally{ setSaving(false); }
+      if(onSaved) onSaved(kind==='send'?'返信済み':'Gmail下書き保存済み');
+    }catch(e){ setSavedMsg(`${kind==='send'?'送信':'保存'}に失敗: ${e.message||e}`); }
+    finally{ setBusy(''); }
   };
+
+  // (P6p) 予約送信の確定 / 取消
+  const doSchedule = async ()=>{
+    const body = String(currentBody||'').trim();
+    if(!body||!schedAt) return;
+    const t = new Date(schedAt);
+    if(isNaN(t.getTime())||t.getTime()<=Date.now()+60*1000){ setSavedMsg('予約に失敗: 送信日時は1分以上先を指定してください'); return; }
+    const label = `${t.getFullYear()}/${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+    if(!window.confirm(`${label} に ${toEmail||'相手'} へ自動送信する予約をします。よろしいですか？\n差出人: ${fromSel||'既定 (hub.is)'}\n（送信実行までは何度でも取消できます。実行タイミングは同期間隔ぶん前後します）`)) return;
+    setBusy('sched'); setSavedMsg('');
+    try{
+      const payload = {inquiryId, body, sendAt: t.toISOString()};
+      if(fromSel) payload.from = fromSel;
+      await window.postData('admin.scheduleInquiryReply', payload);
+      setSavedMsg(`予約しました（${label} に送信予定）`);
+      setSchedOpen(false);
+      window.invalidateCache('admin.listInquiries');
+      window.invalidateCache('admin.getInquiryDetail');
+      if(onSaved) onSaved(null);
+    }catch(e){ setSavedMsg(`予約に失敗: ${e.message||e}`); }
+    finally{ setBusy(''); }
+  };
+  const doCancelSchedule = async ()=>{
+    if(!window.confirm('予約送信を取り消します。よろしいですか？')) return;
+    setBusy('sched'); setSavedMsg('');
+    try{
+      await window.postData('admin.cancelInquiryScheduledReply', {inquiryId});
+      setSavedMsg('予約を取り消しました');
+      window.invalidateCache('admin.listInquiries');
+      window.invalidateCache('admin.getInquiryDetail');
+      if(onSaved) onSaved(null);
+    }catch(e){ setSavedMsg(`取消に失敗: ${e.message||e}`); }
+    finally{ setBusy(''); }
+  };
+
+  // 予約済みバナ (本文編集域の上に常時表示)
+  const schedBanner = scheduledAt ? (
+    <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',padding:'6px 10px',marginBottom:8,
+      border:'1px solid #e8c98a',borderRadius:8,background:'#fdf6e7'}}>
+      <span style={{fontSize:12,fontWeight:700,color:'#8a6210'}}>⏰ 予約送信: {inboxFmtDt(scheduledAt)} に送信予定</span>
+      <button onClick={doCancelSchedule} disabled={!!busy}
+        style={{padding:'2px 10px',borderRadius:7,border:'1px solid #d8b35e',background:'#fff',color:'#8a6210',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+        予約を取消
+      </button>
+    </div>
+  ) : null;
+
+  const actionButtons = (
+    <div style={{display:'flex',gap:10,alignItems:'center',marginTop:8,flexWrap:'wrap'}}>
+      {accounts&&accounts.length>0&&(
+        <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12,color:'var(--ink2,#3a4450)'}}
+          title="返信の差出人。既定は受信アカウント (Officialで受けたらOfficialで返す)。送信・下書き・予約のすべてに適用">
+          差出人
+          <select value={fromSel} onChange={e=>setFromSel(e.target.value)}
+            style={{fontSize:12,padding:'5px 8px',borderRadius:8,border:'1px solid #d8dde2',maxWidth:220}}>
+            <option value="">既定 (hub.is)</option>
+            {accounts.map(a=><option key={a} value={a}>{inboxAccountLabel(a)} ({a})</option>)}
+          </select>
+        </label>
+      )}
+      <button onClick={()=>doAction('save')} disabled={!!busy||!String(currentBody||'').trim()}
+        style={{padding:'6px 16px',borderRadius:9,border:0,background:'#4a5fc1',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(busy||!String(currentBody||'').trim())?.5:1}}>
+        {busy==='save'?'保存中…':'Gmail下書きに保存'}
+      </button>
+      <button onClick={()=>doAction('send')} disabled={!!busy||!String(currentBody||'').trim()}
+        title="確認のうえ、この文面をスレッド返信として今すぐ送信します（Gmailを開く必要なし）"
+        style={{padding:'6px 16px',borderRadius:9,border:0,background:'#c0573a',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(busy||!String(currentBody||'').trim())?.5:1}}>
+        {busy==='send'?'送信中…':'このまま送信'}
+      </button>
+      <button onClick={()=>setSchedOpen(v=>!v)} disabled={!!busy||!String(currentBody||'').trim()}
+        title="この文面を指定日時に自動送信する予約をします（実行までは取消可能）"
+        style={{padding:'6px 14px',borderRadius:9,border:'1px solid #d8b35e',background:schedOpen?'#fdf6e7':'#fff',color:'#8a6210',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(busy||!String(currentBody||'').trim())?.5:1}}>
+        予約送信…
+      </button>
+      {inq['Gmail下書きURL']&&
+        <a href={inq['Gmail下書きURL']} target="_blank" rel="noopener noreferrer"
+          style={{fontSize:12,fontWeight:700,color:'#4a5fc1'}}>Gmailで下書きを開く ↗</a>}
+      {savedMsg&&<span style={{fontSize:11,fontWeight:700,color:savedMsg.indexOf('失敗')>=0||savedMsg.indexOf('指定してください')>=0?'#c0392b':'#2ba66b'}}>{savedMsg}</span>}
+      {schedOpen&&(
+        <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',marginTop:4}}>
+          <span style={{fontSize:12,color:'#8a6210',fontWeight:700}}>送信日時:</span>
+          <input type="datetime-local" value={schedAt} onChange={e=>setSchedAt(e.target.value)}
+            style={{fontSize:12,padding:'4px 8px',borderRadius:7,border:'1px solid #d8b35e'}}/>
+          <button onClick={doSchedule} disabled={!!busy}
+            style={{padding:'5px 14px',borderRadius:8,border:0,background:'#b88a2e',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer'}}>
+            {busy==='sched'?'予約中…':'この日時で予約'}
+          </button>
+          <span style={{fontSize:10,color:'var(--ink3)'}}>実行は同期トリガ（5分間隔なら最大5分の前後）</span>
+        </div>
+      )}
+    </div>
+  );
+
+  // 返信案なし (spam/危険/旧案件など) → 手書きモド
+  if(!draft||!texts){
+    if(!inquiryId) return null;
+    return (
+      <div style={{border:'1px solid #d9e0ee',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#f6f8fd'}}>
+        {!manualOpen ? (
+          <button onClick={()=>setManualOpen(true)}
+            style={{padding:'5px 12px',borderRadius:8,border:'1px solid #cdd5e8',background:'#fff',color:'#3a4450',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+            手書きで返信を書く
+          </button>
+        ) : (
+          <div>
+            <div style={{fontSize:12,fontWeight:800,marginBottom:6}}>手書き返信</div>
+            {schedBanner}
+            <textarea value={manualText} onChange={e=>setManualText(e.target.value)} rows={8}
+              placeholder="返信文をここに書く（宛名と結びも含めて）"
+              style={{width:'100%',fontSize:12,lineHeight:1.7,border:'1px solid #d9e0ee',borderRadius:8,padding:10,boxSizing:'border-box',background:'#fff'}}/>
+            {actionButtons}
+            <div style={{fontSize:10,color:'var(--ink3)',marginTop:6}}>「このまま送信」は確認ダイアログの後に即送信されます。迷う場合は下書き保存を</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const TABS = [['recommended','推奨'],['short','短め'],['polite','丁寧'],['english','英語'],['easyJapanese','やさしい日本語']]
+    .filter(([k])=>k==='recommended'||String(draft[k]||'').trim());
   return (
     <div style={{border:'1px solid #d9e0ee',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#f6f8fd'}}>
       <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
@@ -32633,8 +32854,9 @@ function InboxDraft({inq, inquiryId, onSaved}){
             {label}
           </button>
         ))}
-        <span style={{fontSize:10,color:'var(--ink3)'}}>編集してから保存できます</span>
+        <span style={{fontSize:10,color:'var(--ink3)'}}>編集してから保存/送信できます</span>
       </div>
+      {schedBanner}
       <textarea value={texts[tab]} onChange={e=>setTexts(prev=>({...prev,[tab]:e.target.value}))} rows={9}
         style={{width:'100%',fontSize:12,lineHeight:1.7,border:'1px solid #d9e0ee',borderRadius:8,padding:10,boxSizing:'border-box',background:'#fff'}}/>
       {(draft.checkpoints&&draft.checkpoints.length>0)&&(
@@ -32650,17 +32872,8 @@ function InboxDraft({inq, inquiryId, onSaved}){
         </div>
       )}
       {draft.staffNote&&<div style={{fontSize:11,color:'var(--ink3)',marginTop:4}}>担当者向け補足: {draft.staffNote}</div>}
-      <div style={{display:'flex',gap:10,alignItems:'center',marginTop:8,flexWrap:'wrap'}}>
-        <button onClick={save} disabled={saving||!texts[tab].trim()}
-          style={{padding:'6px 16px',borderRadius:9,border:0,background:'#4a5fc1',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(saving||!texts[tab].trim())?.5:1}}>
-          {saving?'保存中…':'このタブの文面を Gmail下書きに保存'}
-        </button>
-        {inq['Gmail下書きURL']&&
-          <a href={inq['Gmail下書きURL']} target="_blank" rel="noopener noreferrer"
-            style={{fontSize:12,fontWeight:700,color:'#4a5fc1'}}>Gmailで下書きを開く ↗</a>}
-        {savedMsg&&<span style={{fontSize:11,fontWeight:700,color:savedMsg.indexOf('失敗')>=0?'#c0392b':'#2ba66b'}}>{savedMsg}</span>}
-      </div>
-      <div style={{fontSize:10,color:'var(--ink3)',marginTop:6}}>送信はGmail上で人間が行います（このボタンは下書き保存まで）</div>
+      {actionButtons}
+      <div style={{fontSize:10,color:'var(--ink3)',marginTop:6}}>「このまま送信」は確認ダイアログの後に即送信、「下書きに保存」は従来どおりGmailの下書きへ</div>
     </div>
   );
 }
@@ -32670,7 +32883,21 @@ function PageInbox(){
   const [setup, setSetup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('すべて');
+  // (P6q) ビューとアカウントはハッシュ (#inbox?view=◯&account=◯) と双方向同期
+  const [hashQ, setHashQ] = useState(()=>window.__parseInboxQuery__?window.__parseInboxQuery__():{view:'inbox',account:''});
+  useEffect(()=>{
+    const onHash = ()=>{
+      const q = window.__parseInboxQuery__?window.__parseInboxQuery__():{key:'',view:'inbox',account:''};
+      if(q.key==='inbox') setHashQ({view:q.view,account:q.account});
+    };
+    window.addEventListener('hashchange', onHash);
+    return ()=>window.removeEventListener('hashchange', onHash);
+  },[]);
+  const view = INBOX_VIEWS[hashQ.view]?hashQ.view:'inbox';
+  const account = hashQ.account||'';
+  const setAccount = useCallback((a)=>{
+    window.location.hash = `inbox?view=${view}${a?`&account=${encodeURIComponent(a)}`:''}`;
+  },[view]);
   const [selectedId, setSelectedId] = useState('');
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -32782,16 +33009,26 @@ function PageInbox(){
     return ()=>{ alive = false; };
   },[loadList]);
 
-  const filtered = useMemo(()=>{
-    if(filter==='すべて') return list;
-    return list.filter(r=>r.state===filter);
-  },[list,filter]);
+  // (P6n) 迷惑判定は既定で非表示。「迷惑」タブを選んだ時だけ表示 (誤判定の救済用)
+  // (P6q) 行のアカウント (未判定の旧データは hub.is 扱い)
+  const rowAccount = useCallback((r)=>String(r.account||'').toLowerCase()||(setup&&setup.mailbox?String(setup.mailbox).toLowerCase():''),[setup]);
 
-  const counts = useMemo(()=>{
-    const c = {};
-    list.forEach(r=>{ c[r.state]=(c[r.state]||0)+1; });
+  const filtered = useMemo(()=>{
+    const base = list.filter(INBOX_VIEWS[view].test);
+    if(!account) return base;
+    return base.filter(r=>rowAccount(r)===account);
+  },[list,view,account,rowAccount]);
+
+  // アカウントタブ用の件数 (現在ビュー内・要対応感を出すため受信トレイ基準ではなくビュー基準)
+  const accountCounts = useMemo(()=>{
+    const c = {__all:0};
+    list.filter(INBOX_VIEWS[view].test).forEach(r=>{
+      c.__all++;
+      const a = rowAccount(r);
+      c[a]=(c[a]||0)+1;
+    });
     return c;
-  },[list]);
+  },[list,view,rowAccount]);
 
   const openDetail = useCallback(async (row)=>{
     setSelectedId(row.inquiryId);
@@ -32866,7 +33103,7 @@ function PageInbox(){
             </select>
           </label>
           <button onClick={()=>{
-              const pending = list.filter(r=>!r.category && r.state!=='対応完了').slice(0,10).map(r=>r.inquiryId);
+              const pending = list.filter(r=>!r.category && !r.spam && r.state!=='対応完了').slice(0,10).map(r=>r.inquiryId);
               if(pending.length===0){ alert('未判定の問い合わせはありません'); return; }
               startJudge(pending);
             }}
@@ -32889,18 +33126,28 @@ function PageInbox(){
         busy={judgeBusy} result={judgeResult} copyMsg={copyMsg} onCopy={copyJudgePrompt}/>
 
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-        {INBOX_FILTERS.map(f=>{
-          const n = f==='すべて'?list.length:(counts[f]||0);
-          const active = filter===f;
-          return (
-            <button key={f} onClick={()=>setFilter(f)}
-              style={{padding:'5px 12px',borderRadius:18,fontSize:12,fontWeight:active?700:500,cursor:'pointer',
-                border:`1px solid ${active?'var(--teal,#0f8a7a)':'#d8dde2'}`,
-                background:active?'var(--teal,#0f8a7a)':'#fff', color:active?'#fff':'var(--ink2,#3a4450)'}}>
-              {f} {n>0&&<span style={{opacity:.8}}>({n})</span>}
-            </button>
-          );
-        })}
+        <span style={{fontSize:14,fontWeight:800,color:'var(--ink2,#3a4450)',marginRight:6}}>
+          {INBOX_VIEWS[view].label}
+          <span style={{fontWeight:500,color:'var(--ink3)',fontSize:12,marginLeft:6}}>{accountCounts.__all||0}件</span>
+        </span>
+        {/* (P6q) アカウントタブ: Officialで受けたものはOfficialで返す運用の入口 */}
+        {(()=>{
+          const accs = (setup&&setup.accounts&&setup.accounts.length)?setup.accounts:[];
+          if(accs.length===0) return null;
+          const tabs = [['','すべて'], ...accs.map(a=>[a, inboxAccountLabel(a)])];
+          return tabs.map(([a,label])=>{
+            const active = account===a;
+            const n = a===''?(accountCounts.__all||0):(accountCounts[a]||0);
+            return (
+              <button key={a||'__all'} onClick={()=>setAccount(a)} title={a||'全アカウント'}
+                style={{padding:'5px 12px',borderRadius:18,fontSize:12,fontWeight:active?700:500,cursor:'pointer',
+                  border:`1px solid ${active?'var(--teal,#0f8a7a)':'#d8dde2'}`,
+                  background:active?'var(--teal,#0f8a7a)':'#fff', color:active?'#fff':'var(--ink2,#3a4450)'}}>
+                {label} {n>0&&<span style={{opacity:.8}}>({n})</span>}
+              </button>
+            );
+          });
+        })()}
       </div>
 
       {loading ? (
@@ -32921,7 +33168,13 @@ function PageInbox(){
                   background:r.inquiryId===selectedId?'#eef8f6':(r.unread?'#fffdf5':'#fff')}}>
                 <div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:3}}>
                   <div style={{fontSize:13,fontWeight:r.unread?800:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                    {r.unread&&<span style={{color:'#e85d4a',marginRight:4}}>●</span>}{r.fromName||r.fromEmail||'(差出人不明)'}
+                    {r.unread&&<span style={{color:'#e85d4a',marginRight:4}}>●</span>}
+                    <span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,marginRight:6,verticalAlign:'1px',
+                      background:inboxAccountLabel(rowAccount(r))==='Official'?'#efe7fb':'#e3f4f1',
+                      color:inboxAccountLabel(rowAccount(r))==='Official'?'#6b46c1':'#0f8a7a'}}>
+                      {inboxAccountLabel(rowAccount(r))}
+                    </span>
+                    {r.fromName||r.fromEmail||'(差出人不明)'}
                   </div>
                   <div style={{fontSize:11,color:'var(--ink3)',whiteSpace:'nowrap'}}>{inboxFmtDt(r.latestAt)}</div>
                 </div>
@@ -32929,6 +33182,7 @@ function PageInbox(){
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
                   <StateBadge state={r.state}/>
                   {r.risky&&<span style={{fontSize:11,color:'#c0392b',fontWeight:700}}>要注意</span>}
+                  {r.scheduledAt&&<span title={`予約送信: ${inboxFmtDt(r.scheduledAt)}`} style={{fontSize:11,color:'#8a6210',fontWeight:700}}>⏰予約</span>}
                   {r.hasAttachments&&<span style={{fontSize:11,color:'var(--ink3)'}}>添付あり</span>}
                   <span style={{fontSize:11,color:'var(--ink3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{r.excerpt}</span>
                 </div>
@@ -32971,6 +33225,19 @@ function PageInbox(){
                     style={{padding:'4px 12px',borderRadius:8,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>
                     {detail&&detail.inquiry&&detail.inquiry['Claude要約']?'AI処理を再依頼（判定+返信案）':'AI処理を依頼（判定+返信案）'}
                   </button>
+                  <button onClick={async ()=>{
+                      if(!window.confirm('この問い合わせを「返信不要として完了」にします。よろしいですか？（一覧の既定表示から消えます。履歴は残ります）')) return;
+                      try{
+                        await window.postData('admin.setInquiryState', {inquiryId: selectedId, newState: '対応完了', note: '返信不要として完了'});
+                        window.invalidateCache('admin.listInquiries');
+                        window.invalidateCache('admin.getInquiryDetail');
+                        setList(prev=>prev.map(r=>r.inquiryId===selectedId?{...r,state:'対応完了'}:r));
+                        setStateDraft('対応完了');
+                      }catch(e){ alert(`変更に失敗: ${e.message||e}`); }
+                    }} title="返信が要らない案件をワンクリックで完了にします（履歴に記録され、後から検索可能）"
+                    style={{padding:'4px 10px',borderRadius:8,border:'1px solid #d8dde2',background:'#fff',color:'#8a939e',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                    不要で完了
+                  </button>
                   <button onClick={()=>startJudge([selectedId])} title="claude.ai にコピペして手動で判定する（ブリッジ停止時の予備経路）"
                     style={{padding:'4px 10px',borderRadius:8,border:'1px solid #d8dde2',background:'#fff',color:'var(--ink3)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
                     手動（コピペ）
@@ -32980,12 +33247,17 @@ function PageInbox(){
 
                 <InboxJudgement inq={detail?detail.inquiry:null}/>
 
-                <InboxDraft inq={detail?detail.inquiry:{}} inquiryId={selectedId}
-                  onSaved={async ()=>{
+                <InboxDraft inq={detail?detail.inquiry:{}} inquiryId={selectedId} toEmail={selRow?selRow.fromEmail:''}
+                  accounts={(setup&&setup.accounts)||[]}
+                  onSaved={async (newState)=>{
                     try{
                       const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: selectedId});
                       setDetail(d);
-                      setList(prev=>prev.map(r=>r.inquiryId===selectedId?{...r,state:'Gmail下書き保存済み'}:r));
+                      const sched = (d&&d.inquiry&&d.inquiry['返信予定日'])||'';
+                      if(newState) setStateDraft(newState);
+                      setList(prev=>prev.map(r=>r.inquiryId===selectedId
+                        ?{...r, ...(newState?{state:newState}:{}), scheduledAt: sched}
+                        :r));
                     }catch(e){}
                   }}/>
 
