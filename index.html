@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-12 P6s'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-12 P6u'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1760,7 +1760,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6s</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6u</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -33019,6 +33019,12 @@ function PageInbox(){
     return base.filter(r=>rowAccount(r)===account);
   },[list,view,account,rowAccount]);
 
+  // (P6u) ペジネション: Gmail同様 25件/ペジ。ビュー/アカウント切替でリセット
+  const PAGE_SIZE = 25;
+  const [page, setPage] = useState(0);
+  useEffect(()=>{ setPage(0); },[view, account]);
+  const pageRows = useMemo(()=>filtered.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE),[filtered,page]);
+
   // アカウントタブ用の件数 (現在ビュー内・要対応感を出すため受信トレイ基準ではなくビュー基準)
   const accountCounts = useMemo(()=>{
     const c = {__all:0};
@@ -33155,14 +33161,25 @@ function PageInbox(){
       ) : error ? (
         ErrorBanner ? <ErrorBanner message={error}/> : <div style={{color:'#c0392b',fontSize:13}}>{error}</div>
       ) : (
-        <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
-          {/* 一覧 */}
-          <div style={{flex:'1 1 46%',minWidth:380,border:'1px solid #e3e6ea',borderRadius:12,overflow:'hidden',background:'#fff'}}>
+        <div>
+          {/* (P6u) 一覧ペジ (詳細表示中は非表示 = Gmail風の2ペジ構成) */}
+          {!selectedId && (
+          <div>
+          <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:6,margin:'0 0 8px'}}>
+            <span style={{fontSize:12,color:'var(--ink3)'}}>
+              {filtered.length===0?'0件':`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE,filtered.length)} / ${filtered.length}件`}
+            </span>
+            <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
+              style={{width:30,height:30,borderRadius:8,border:'1px solid #d8dde2',background:'#fff',fontSize:15,cursor:'pointer',opacity:page===0?.35:1}}>‹</button>
+            <button disabled={(page+1)*PAGE_SIZE>=filtered.length} onClick={()=>setPage(p=>p+1)}
+              style={{width:30,height:30,borderRadius:8,border:'1px solid #d8dde2',background:'#fff',fontSize:15,cursor:'pointer',opacity:(page+1)*PAGE_SIZE>=filtered.length?.35:1}}>›</button>
+          </div>
+          <div style={{border:'1px solid #e3e6ea',borderRadius:12,overflow:'hidden',background:'#fff'}}>
             {filtered.length===0 ? (
               <div style={{padding:30,textAlign:'center',fontSize:13,color:'var(--ink3)'}}>
                 該当する問い合わせはありません。テストメールに hub/inbox ラベルを付け「今すぐ同期」を実行してください。
               </div>
-            ) : filtered.map(r=>(
+            ) : pageRows.map(r=>(
               <div key={r.inquiryId} onClick={()=>openDetail(r)}
                 style={{padding:'10px 14px',borderBottom:'1px solid #eef1f4',cursor:'pointer',
                   background:r.inquiryId===selectedId?'#eef8f6':(r.unread?'#fffdf5':'#fff')}}>
@@ -33189,12 +33206,17 @@ function PageInbox(){
               </div>
             ))}
           </div>
+          </div>
+          )}
 
-          {/* 詳細 */}
-          <div style={{flex:'1 1 54%',minWidth:420,border:'1px solid #e3e6ea',borderRadius:12,background:'#fff',padding:'14px 16px'}}>
-            {!selectedId ? (
-              <div style={{padding:30,textAlign:'center',fontSize:13,color:'var(--ink3)'}}>左の一覧から問い合わせを選択してください</div>
-            ) : detailLoading ? (
+          {/* (P6u) 詳細ペジ (選択中のみ・全幅) */}
+          {selectedId && (
+          <div style={{border:'1px solid #e3e6ea',borderRadius:12,background:'#fff',padding:'14px 16px'}}>
+            <button onClick={()=>{setSelectedId(null);setDetail(null);setCtx(null);}}
+              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',marginBottom:10,borderRadius:9,border:'1px solid #d8dde2',background:'#fff',color:'var(--ink2,#3a4450)',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+              ← 一覧に戻る
+            </button>
+            {detailLoading ? (
               <div style={{padding:30,textAlign:'center',color:'var(--ink3)'}}>{Spinner?<Spinner/>:'読み込み中…'}</div>
             ) : (
               <div>
@@ -33267,6 +33289,7 @@ function PageInbox(){
               </div>
             )}
           </div>
+          )}
         </div>
       )}
     </div>
