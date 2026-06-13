@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-12 P6u'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-13 P7c'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -350,7 +350,10 @@ svg{display:block}
 /* (P6q) 問い合わせサブメニュ (Gmail風) */
 .nav-sub{display:none;flex-direction:column;gap:1px;margin:0 0 4px 0;padding-left:36px}
 .nav-sub.open{display:flex}
-.nav-sub a{font-size:12px;color:var(--ink3,#6b7682);padding:5px 10px;border-radius:8px;text-decoration:none;line-height:1.4}
+.nav-sub a{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3,#6b7682);padding:5px 10px;border-radius:8px;text-decoration:none;line-height:1.4}
+.nav-sub-badge{margin-left:auto;font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;background:rgba(34,115,196,.12);color:#2273c4;line-height:1.5}
+.nav-sub a.active .nav-sub-badge{background:rgba(15,138,122,.22);color:#0c6e62}
+:root[data-theme="night"] .nav-sub-badge{background:rgba(56,189,248,.16);color:var(--jb-blue)}
 .nav-sub a:hover{background:rgba(15,138,122,.07);color:var(--ink,#222)}
 .nav-sub a.active{background:rgba(15,138,122,.12);color:#0f8a7a;font-weight:700}
 .inbox-caret{margin-left:auto;font-size:10px;opacity:.55;transition:transform .15s}
@@ -359,6 +362,68 @@ svg{display:block}
 :root[data-theme="night"] .nav-sub a{color:var(--ink3)}
 :root[data-theme="night"] .nav-sub a:hover{background:var(--bg3);color:var(--ink)}
 :root[data-theme="night"] .nav-sub a.active{background:rgba(56,189,248,0.12);color:var(--jb-blue)}
+/* (P6y) 問い合わせCRM デザイン: 紺青→青→teal の光沢グラデーションを signature に。
+   光沢 = 上端ハイライト(inset) + 斜めの光筋(::after)。動きは1pxの持ち上がりのみ */
+:root{--ibx-blue-deep:#1d4f8f;--ibx-blue:#2273c4;--ibx-teal:#0f8a7a;--ibx-sky:#eef5fb;--ibx-line:#dfe6ee}
+.ibx-hero{position:relative;border-radius:16px;padding:18px 22px;margin-bottom:16px;color:#fff;
+  background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,0) 42%),
+             linear-gradient(120deg,var(--ibx-blue-deep) 0%,var(--ibx-blue) 48%,var(--ibx-teal) 100%);
+  box-shadow:0 10px 24px -12px rgba(29,79,143,.45), inset 0 1px 0 rgba(255,255,255,.35);overflow:hidden}
+.ibx-hero::after{content:'';position:absolute;top:-60%;right:-8%;width:50%;height:220%;
+  background:linear-gradient(115deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.13) 45%,rgba(255,255,255,0) 62%);
+  transform:rotate(8deg);pointer-events:none}
+.ibx-hero h1{color:#fff !important}
+.ibx-hero .sub{color:rgba(255,255,255,.82)}
+.ibx-hero select{background:rgba(255,255,255,.94);border:1px solid rgba(255,255,255,.5)}
+.ibx-btn{border:0;border-radius:10px;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s,filter .15s}
+.ibx-btn:hover:not(:disabled){transform:translateY(-1px)}
+.ibx-btn:active:not(:disabled){transform:translateY(0);filter:brightness(.96)}
+.ibx-btn:disabled{opacity:.5;cursor:default}
+.ibx-primary{color:#fff;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 50%),linear-gradient(120deg,var(--ibx-blue) 0%,var(--ibx-teal) 100%);
+  box-shadow:0 2px 8px rgba(34,115,196,.35), inset 0 1px 0 rgba(255,255,255,.3)}
+.ibx-primary:hover:not(:disabled){box-shadow:0 5px 14px rgba(34,115,196,.45), inset 0 1px 0 rgba(255,255,255,.3)}
+.ibx-send{color:#fff;background:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,0) 50%),linear-gradient(120deg,#c05a2e,#b8432e);
+  box-shadow:0 2px 8px rgba(184,67,46,.35), inset 0 1px 0 rgba(255,255,255,.3)}
+.ibx-ghost{background:#fff;border:1px solid var(--ibx-line);color:#3a4450}
+.ibx-ghost:hover:not(:disabled){border-color:var(--ibx-blue);color:var(--ibx-blue);box-shadow:0 3px 10px rgba(34,115,196,.12)}
+.ibx-hero .ibx-ghost{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.45);color:#fff}
+.ibx-hero .ibx-ghost:hover:not(:disabled){background:rgba(255,255,255,.24);color:#fff;border-color:#fff}
+.ibx-tab{border-radius:18px;font-size:12px;padding:5px 13px;cursor:pointer;border:1px solid var(--ibx-line);background:#fff;color:#3a4450;font-weight:600;transition:all .15s}
+.ibx-tab:hover{border-color:var(--ibx-blue);color:var(--ibx-blue)}
+.ibx-tab.on{color:#fff;border-color:transparent;font-weight:700;
+  background:linear-gradient(180deg,rgba(255,255,255,.25),rgba(255,255,255,0) 55%),linear-gradient(120deg,var(--ibx-blue),var(--ibx-teal));
+  box-shadow:0 2px 7px rgba(34,115,196,.35)}
+.ibx-list{border:1px solid var(--ibx-line);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 4px 18px -10px rgba(29,79,143,.18)}
+.ibx-row{position:relative;padding:11px 14px 11px 18px;border-bottom:1px solid #eef2f6;cursor:pointer;background:#fff;transition:background .12s}
+.ibx-row:hover{background:var(--ibx-sky)}
+.ibx-row.unread{background:#fbfdff}
+.ibx-row.unread::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--ibx-blue),var(--ibx-teal))}
+.ibx-row.sel{background:#e7f3f0}
+.ibx-card{box-shadow:0 3px 14px -8px rgba(29,79,143,.16)}
+.ibx-pg{width:30px;height:30px;border-radius:9px;border:1px solid var(--ibx-line);background:#fff;font-size:15px;cursor:pointer;transition:all .15s}
+.ibx-pg:hover:not(:disabled){border-color:var(--ibx-blue);color:var(--ibx-blue)}
+.ibx-pg:disabled{opacity:.35;cursor:default}
+.ibx-avatar{width:36px;height:36px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:14px;flex-shrink:0;user-select:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 1px 3px rgba(29,79,143,.25)}
+.ibx-av0{background:linear-gradient(135deg,#2273c4,#0f8a7a)}
+.ibx-av1{background:linear-gradient(135deg,#1d4f8f,#2273c4)}
+.ibx-av2{background:linear-gradient(135deg,#0f8a7a,#16a08c)}
+.ibx-av3{background:linear-gradient(135deg,#4a5fc1,#2273c4)}
+.ibx-detail{position:relative;overflow:hidden}
+.ibx-detail::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,#1d4f8f,#2273c4 45%,#0f8a7a)}
+@keyframes ibxSweep{from{transform:translateX(-260%) rotate(8deg)}to{transform:translateX(0) rotate(8deg)}}
+.ibx-hero::after{animation:ibxSweep 1.3s ease-out 1}
+@media (prefers-reduced-motion: reduce){.ibx-btn,.ibx-tab,.ibx-row,.ibx-pg{transition:none}.ibx-btn:hover:not(:disabled){transform:none}.ibx-hero::after{animation:none}}
+:root[data-theme="night"] .ibx-ghost{background:var(--bg2,#1c2330);border-color:var(--line,#2a3344);color:var(--ink)}
+:root[data-theme="night"] .ibx-list{background:var(--bg2);border-color:var(--line);box-shadow:none}
+:root[data-theme="night"] .ibx-row{background:var(--bg2);border-bottom-color:var(--line)}
+:root[data-theme="night"] .ibx-row:hover{background:var(--bg3,#222b3a)}
+:root[data-theme="night"] .ibx-row.unread{background:var(--bg2)}
+:root[data-theme="night"] .ibx-row.sel{background:var(--bg3,#222b3a)}
+:root[data-theme="night"] .ibx-tab{background:var(--bg2);border-color:var(--line);color:var(--ink)}
+:root[data-theme="night"] .ibx-pg{background:var(--bg2);border-color:var(--line);color:var(--ink)}
 .sidebar.collapsed .nav-label{display:none}
 .sidebar.collapsed .nav-section-toggle{display:none}
 .sidebar.collapsed .nav-section{margin-top:8px}
@@ -427,10 +492,10 @@ svg{display:block}
 .nav-label span:last-child{color:var(--ink5);font-weight:500;font-family:var(--mono);text-transform:none;letter-spacing:0}
 .nav-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;color:var(--ink2);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;position:relative}
 .nav-item:hover{background:var(--bg2);color:var(--ink)}
-.nav-item.active{background:var(--indigo-50);color:var(--indigo-700);font-weight:600}
-.nav-item.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:2.5px;background:var(--indigo);border-radius:0 2px 2px 0}
+.nav-item.active{background:linear-gradient(90deg,rgba(34,115,196,.10),rgba(15,138,122,.08));color:#2273c4;font-weight:700}
+.nav-item.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:2.5px;background:linear-gradient(180deg,#2273c4,#0f8a7a);border-radius:0 2px 2px 0}
 .nav-item .ic{color:var(--ink3)}
-.nav-item.active .ic{color:var(--indigo)}
+.nav-item.active .ic{color:#2273c4}
 .nav-item .n-badge{margin-left:auto;font-size:10.5px;padding:1px 6px;border-radius:99px;background:var(--bg3);color:var(--ink3);font-weight:600;font-family:var(--mono)}
 .nav-item.active .n-badge{background:var(--indigo);color:var(--white)}
 .nav-item .n-dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--coral)}
@@ -863,7 +928,8 @@ svg{display:block}
 /* ========== Hero / 表紙 ========== */
 .jb-cover {
   padding: 28px 0 48px;
-  border-bottom: 3px solid var(--jb-blue);
+  border-bottom: 3px solid transparent;
+  border-image: linear-gradient(90deg, #1d4f8f, #2273c4 45%, #0f8a7a) 1;  /* (P6z) ibxデザイン言語の展開 */
   margin-bottom: 56px;
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1226,6 +1292,8 @@ svg{display:block}
 
 /* (Phase 16.J7) jb-stat 内の詳細ボタン位置調整 */
 .jb-stat { position: relative; }
+.jb-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,#1d4f8f,#2273c4 45%,#0f8a7a);opacity:.9}  /* (P7a) ibx言語の展開 */
 .jb-stat .jb-card-link {
   position: absolute;
   top: 18px;
@@ -1760,7 +1828,7 @@ svg{display:block}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-12 P6u</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-13 P7c</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -2483,6 +2551,26 @@ svg{display:block}
   }
   window.addEventListener('hashchange', __syncInboxSub__);
   document.addEventListener('DOMContentLoaded', __syncInboxSub__);
+
+  // (P7a) 件数バッジの常時最新化: 問い合わせペジ以外に滞在中も60秒間隔で軽量取得。
+  //   - 超軽量API (admin.listInquiriesLite: 3フィルドのみ) を使用
+  //   - タブ非表示中はスキップ / #inbox 滞在中は PageInbox 自身が更新するためスキップ
+  //   - Code.gs 未デプロイ等で失敗しても静かに諦める (画面影響なし)
+  (function(){
+    var POLL_MS = 60000;  // 必要に応じて調整可
+    var busy = false;
+    function pollBadges(){
+      if (document.visibilityState === 'hidden') return;
+      if ((window.location.hash || '').indexOf('#inbox') === 0) return;
+      if (busy || typeof window.fetchData !== 'function' || typeof window.__updateInboxBadges__ !== 'function') return;
+      busy = true;
+      window.fetchData('admin.listInquiriesLite', {}).then(function(rows){
+        if (Array.isArray(rows)) window.__updateInboxBadges__(rows);
+      }).catch(function(){}).then(function(){ busy = false; });
+    }
+    setInterval(pollBadges, POLL_MS);
+    window.addEventListener('load', function(){ setTimeout(pollBadges, 4000); });
+  })();
 </script>
 
 <!-- ============================================================
@@ -32416,7 +32504,7 @@ window.PageNewsFront = PageNewsFront;
 //   一覧 (薄い射影・状態フィルタ) + 詳細 (スレッド都度取得) + 今すぐ同期 + セットアップ状態バナ
 //   照合・Claude判定・返信生成は I2/I3/I5 で追加。ブロック間共有は window.InboxAPI に集約。
 // ============================================================================
-const {useState, useEffect, useMemo, useCallback} = React;
+const {useState, useEffect, useRef, useMemo, useCallback} = React;
 const {Spinner, ErrorBanner} = window;
 
 const INBOX_STATES = ['未対応','AI下書き済み','担当者確認待ち','修正中','Gmail下書き保存済み','返信済み','他担当者へ依頼中','保留','返信不要','要責任者確認','FAQ化候補','返信雛形化候補','再確認予定','対応完了'];
@@ -32435,6 +32523,32 @@ const INBOX_VIEWS = {
   all:      {label:'すべてのメール', test:r=>!r.spam},
   spam:     {label:'迷惑メール',     test:r=>r.spam===true},
 };
+// (P6x) 状態→ビューの対応: 状態変更後に「その状態の一覧」へ自動遷移するためのマップ
+const INBOX_STATE_TO_VIEW = {
+  '未対応':'todo', 'AI下書き済み':'ai', 'Gmail下書き保存済み':'drafts', '返信済み':'sent',
+  '担当者確認待ち':'waiting', '要責任者確認':'attention', '対応完了':'done',
+};
+function inboxViewForState(state){ return INBOX_STATE_TO_VIEW[state] || 'all'; }
+
+// (P7a) 件数バッジ書込の共通化: PageInbox の effect とグローバルポーラの両方から呼ぶ
+window.INBOX_VIEWS = INBOX_VIEWS;
+window.__updateInboxBadges__ = function(rows){
+  try{
+    const sub = document.getElementById('inbox-sub');
+    if(!sub || !Array.isArray(rows)) return;
+    const SHOW = ['inbox','todo','ai','drafts','scheduled','waiting','attention','spam'];
+    sub.querySelectorAll('a[data-iview]').forEach(a=>{
+      const k = a.getAttribute('data-iview');
+      const n = (INBOX_VIEWS[k]&&SHOW.indexOf(k)>=0)?rows.filter(INBOX_VIEWS[k].test).length:0;
+      let badge = a.querySelector('.nav-sub-badge');
+      if(n>0){
+        if(!badge){ badge = document.createElement('span'); badge.className='nav-sub-badge'; a.appendChild(badge); }
+        badge.textContent = n>99?'99+':String(n);
+      } else if(badge){ badge.remove(); }
+    });
+  }catch(e){}
+};
+
 // アカウント表示名 (Gmail風タブ用)
 function inboxAccountLabel(a){
   const s = String(a||'').toLowerCase();
@@ -32461,9 +32575,15 @@ function inboxFmtDt(iso){
 }
 
 function StateBadge({state}){
+  // (P7b) 白文字ベタ塗り → 淡背景 + 色ドット + 濃文字のソフトチップ (Gmailラベルの慣れた記号)
   const c = STATE_COLORS[state] || '#8a939e';
-  return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,fontSize:11,fontWeight:700,color:'#fff',background:c,whiteSpace:'nowrap'}}>{state||'未対応'}</span>;
+  return <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 9px',borderRadius:10,fontSize:11,fontWeight:700,color:c,background:c+'1f',whiteSpace:'nowrap'}}>
+    <span style={{width:6,height:6,borderRadius:'50%',background:c,flexShrink:0}}></span>{state||'未対応'}</span>;
 }
+
+// (P7b) 送信者アバター: イニシャル + 差出人ごとに安定して同じ青系グラデになるハッシュ
+function inboxInitial(r){ const s=String((r&&(r.fromName||r.fromEmail))||'?').trim(); return s?s.charAt(0).toUpperCase():'?'; }
+function inboxAvClass(r){ const s=String((r&&(r.fromEmail||r.fromName))||''); let h=0; for(let i=0;i<s.length;i++) h=(h+s.charCodeAt(i))%4; return 'ibx-av'+h; }
 
 // セットアップ状態バナ (StatusDataQualityBanner と同型の常設点検)
 function InboxSetupBanner({status}){
@@ -32491,24 +32611,47 @@ function InboxSetupBanner({status}){
 }
 
 // スレッド表示 (本文はシート非保存 → 詳細READで都度取得した結果を表示)
+// (P6v) スレッド表示: 最新が一番上。最新2通以外は折りたたみ (クリックで展開・Gmail風)
 function InboxThread({thread}){
-  if(!thread) return null;
+  const [expanded, setExpanded] = useState({});
+  useEffect(()=>{ setExpanded({}); },[thread]);
+  if(!thread) return <div style={{fontSize:12,color:'var(--ink3)',padding:'10px 0'}}>スレッドを読み込み中…</div>;
   if(!thread.ok) return <div style={{fontSize:12,color:'var(--ink3)',padding:'10px 0'}}>スレッドを取得できませんでした{thread.error?`: ${thread.error}`:''}</div>;
+  const msgs = [...thread.messages].reverse();  // 最新順
   return (
     <div>
-      {thread.totalMessages > thread.messages.length &&
-        <div style={{fontSize:11,color:'var(--ink3)',marginBottom:8}}>全 {thread.totalMessages} 通のうち直近 {thread.messages.length} 通を表示</div>}
-      {thread.messages.map((m,i)=>(
-        <div key={i} style={{border:'1px solid #e3e6ea',borderRadius:10,padding:'10px 12px',marginBottom:10,background:i===thread.messages.length-1?'#f7fbfa':'#fff'}}>
-          <div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:6}}>
-            <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.from}</div>
-            <div style={{fontSize:11,color:'var(--ink3)',whiteSpace:'nowrap'}}>{inboxFmtDt(m.date)}</div>
+      <div style={{fontSize:11,color:'var(--ink3)',marginBottom:8}}>
+        新しい順に表示
+        {thread.totalMessages > thread.messages.length && ` / 全 ${thread.totalMessages} 通のうち直近 ${thread.messages.length} 通`}
+      </div>
+      {msgs.map((m,i)=>{
+        const isOpen = i<2 || expanded[i]===true;
+        if(!isOpen){
+          return (
+            <div key={i} onClick={()=>setExpanded(prev=>({...prev,[i]:true}))}
+              title="クリックで展開"
+              style={{border:'1px solid #eef1f4',borderRadius:10,padding:'7px 12px',marginBottom:8,background:'#fafbfc',cursor:'pointer',display:'flex',gap:10,alignItems:'baseline'}}>
+              <span style={{fontSize:11,fontWeight:700,whiteSpace:'nowrap',color:'var(--ink3)'}}>{m.from}</span>
+              <span style={{fontSize:11,color:'var(--ink3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{String(m.body||'').slice(0,60)}</span>
+              <span style={{fontSize:10,color:'var(--ink3)',whiteSpace:'nowrap'}}>{inboxFmtDt(m.date)}</span>
+            </div>
+          );
+        }
+        return (
+          <div key={i} style={{border:'1px solid #e3e6ea',borderRadius:10,padding:'10px 12px',marginBottom:10,background:i===0?'#f7fbfa':'#fff'}}>
+            <div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {i===0&&<span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:8,marginRight:6,background:'var(--teal,#0f8a7a)',color:'#fff'}}>最新</span>}
+                {m.from}
+              </div>
+              <div style={{fontSize:11,color:'var(--ink3)',whiteSpace:'nowrap'}}>{inboxFmtDt(m.date)}</div>
+            </div>
+            <div style={{fontSize:12,whiteSpace:'pre-wrap',lineHeight:1.7,maxHeight:280,overflow:'auto'}}>{m.body}</div>
+            {m.attachments && m.attachments.length>0 &&
+              <div style={{fontSize:11,color:'var(--ink3)',marginTop:6}}>添付: {m.attachments.join(' / ')}</div>}
           </div>
-          <div style={{fontSize:12,whiteSpace:'pre-wrap',lineHeight:1.7,maxHeight:280,overflow:'auto'}}>{m.body}</div>
-          {m.attachments && m.attachments.length>0 &&
-            <div style={{fontSize:11,color:'var(--ink3)',marginTop:6}}>添付: {m.attachments.join(' / ')}</div>}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -32520,7 +32663,7 @@ function InboxContext({ctx, loading}){
   const p = ctx.participant;
   const typeLabel = {event_view:'閲覧', event_save:'保存', apply_start:'申込開始'};
   return (
-    <div style={{border:'1px solid #e3e6ea',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#fbfcfd'}}>
+    <div className="ibx-card" style={{border:'1px solid #e3e6ea',borderRadius:12,padding:'10px 12px',marginBottom:12,background:'#fbfcfd'}}>
       <div style={{fontSize:12,fontWeight:800,marginBottom:6,color:'var(--ink2,#3a4450)'}}>相手の文脈</div>
       {p ? (
         <div style={{fontSize:12,lineHeight:1.8}}>
@@ -32652,7 +32795,7 @@ function InboxJudgement({inq}){
   if(inq['FAQ候補']===true) flags.push(['FAQ候補','#2b8fd9']);
   if(inq['雛形候補']===true) flags.push(['雛形候補','#2b8fd9']);
   return (
-    <div style={{border:'1px solid #d9e8e4',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#f4faf8'}}>
+    <div className="ibx-card" style={{border:'1px solid #d9e8e4',borderRadius:12,padding:'10px 12px',marginBottom:12,background:'#f4faf8'}}>
       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:6}}>
         <span style={{fontSize:12,fontWeight:800}}>AI判定</span>
         {inq['種別']&&<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:9,background:'var(--teal,#0f8a7a)',color:'#fff'}}>{inq['種別']}</span>}
@@ -32720,7 +32863,26 @@ function InboxDraft({inq, inquiryId, toEmail, onSaved, accounts}){
       window.invalidateCache('admin.listInquiries');
       window.invalidateCache('admin.getInquiryDetail');
       if(onSaved) onSaved(kind==='send'?'返信済み':'Gmail下書き保存済み');
-    }catch(e){ setSavedMsg(`${kind==='send'?'送信':'保存'}に失敗: ${e.message||e}`); }
+    }catch(e){
+      const msg = String(e.message||e);
+      if(kind==='send'&&msg.indexOf('DUPLICATE_SEND')>=0){
+        if(window.confirm('同じ内容を直前に送信済みです。本当にもう一度送信しますか？')){
+          try{
+            const p2 = {inquiryId, body, force:true};
+            if(fromSel) p2.from = fromSel;
+            const r2 = await window.postData('admin.sendInquiryReply', p2);
+            setSavedMsg(r2.fromFallback?'送信しました（差出人エイリアスが使えず既定名義になりました）':'送信しました（状態: 返信済み）');
+            window.invalidateCache('admin.listInquiries');
+            window.invalidateCache('admin.getInquiryDetail');
+            if(onSaved) onSaved('返信済み');
+          }catch(e2){ setSavedMsg(`送信に失敗: ${e2.message||e2}`); }
+        } else {
+          setSavedMsg('送信を中止しました（同一内容の再送防止）');
+        }
+      } else {
+        setSavedMsg(`${kind==='send'?'送信':'保存'}に失敗: ${msg}`);
+      }
+    }
     finally{ setBusy(''); }
   };
 
@@ -32784,17 +32946,17 @@ function InboxDraft({inq, inquiryId, toEmail, onSaved, accounts}){
         </label>
       )}
       <button onClick={()=>doAction('save')} disabled={!!busy||!String(currentBody||'').trim()}
-        style={{padding:'6px 16px',borderRadius:9,border:0,background:'#4a5fc1',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(busy||!String(currentBody||'').trim())?.5:1}}>
+        className="ibx-btn ibx-primary" style={{padding:'7px 16px',fontSize:12}}>
         {busy==='save'?'保存中…':'Gmail下書きに保存'}
       </button>
       <button onClick={()=>doAction('send')} disabled={!!busy||!String(currentBody||'').trim()}
         title="確認のうえ、この文面をスレッド返信として今すぐ送信します（Gmailを開く必要なし）"
-        style={{padding:'6px 16px',borderRadius:9,border:0,background:'#c0573a',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(busy||!String(currentBody||'').trim())?.5:1}}>
+        className="ibx-btn ibx-send" style={{padding:'7px 16px',fontSize:12}}>
         {busy==='send'?'送信中…':'このまま送信'}
       </button>
       <button onClick={()=>setSchedOpen(v=>!v)} disabled={!!busy||!String(currentBody||'').trim()}
         title="この文面を指定日時に自動送信する予約をします（実行までは取消可能）"
-        style={{padding:'6px 14px',borderRadius:9,border:'1px solid #d8b35e',background:schedOpen?'#fdf6e7':'#fff',color:'#8a6210',fontWeight:700,fontSize:12,cursor:'pointer',opacity:(busy||!String(currentBody||'').trim())?.5:1}}>
+        className="ibx-btn" style={{padding:'7px 14px',border:'1px solid #d8b35e',background:schedOpen?'#fdf6e7':'#fff',color:'#8a6210',fontSize:12}}>
         予約送信…
       </button>
       {inq['Gmail下書きURL']&&
@@ -32807,7 +32969,9 @@ function InboxDraft({inq, inquiryId, toEmail, onSaved, accounts}){
           <input type="datetime-local" value={schedAt} onChange={e=>setSchedAt(e.target.value)}
             style={{fontSize:12,padding:'4px 8px',borderRadius:7,border:'1px solid #d8b35e'}}/>
           <button onClick={doSchedule} disabled={!!busy}
-            style={{padding:'5px 14px',borderRadius:8,border:0,background:'#b88a2e',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer'}}>
+            className="ibx-btn" style={{padding:'6px 15px',fontSize:12,color:'#fff',
+              background:'linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 50%),linear-gradient(120deg,#c79a3a,#b8862e)',
+              boxShadow:'0 2px 7px rgba(184,134,46,.35), inset 0 1px 0 rgba(255,255,255,.3)'}}>
             {busy==='sched'?'予約中…':'この日時で予約'}
           </button>
           <span style={{fontSize:10,color:'var(--ink3)'}}>実行は同期トリガ（5分間隔なら最大5分の前後）</span>
@@ -32820,7 +32984,7 @@ function InboxDraft({inq, inquiryId, toEmail, onSaved, accounts}){
   if(!draft||!texts){
     if(!inquiryId) return null;
     return (
-      <div style={{border:'1px solid #d9e0ee',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#f6f8fd'}}>
+      <div className="ibx-card" style={{border:'1px solid #d9e0ee',borderRadius:12,padding:'10px 12px',marginBottom:12,background:'#f6f8fd'}}>
         {!manualOpen ? (
           <button onClick={()=>setManualOpen(true)}
             style={{padding:'5px 12px',borderRadius:8,border:'1px solid #cdd5e8',background:'#fff',color:'#3a4450',fontSize:12,fontWeight:700,cursor:'pointer'}}>
@@ -32844,7 +33008,7 @@ function InboxDraft({inq, inquiryId, toEmail, onSaved, accounts}){
   const TABS = [['recommended','推奨'],['short','短め'],['polite','丁寧'],['english','英語'],['easyJapanese','やさしい日本語']]
     .filter(([k])=>k==='recommended'||String(draft[k]||'').trim());
   return (
-    <div style={{border:'1px solid #d9e0ee',borderRadius:10,padding:'10px 12px',marginBottom:12,background:'#f6f8fd'}}>
+    <div className="ibx-card" style={{border:'1px solid #d9e0ee',borderRadius:12,padding:'10px 12px',marginBottom:12,background:'#f6f8fd'}}>
       <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
         <span style={{fontSize:12,fontWeight:800}}>AI返信案</span>
         {TABS.map(([k,label])=>(
@@ -32913,11 +33077,24 @@ function PageInbox(){
   const [judgeResult, setJudgeResult] = useState(null);
   const [copyMsg, setCopyMsg] = useState('');
 
+  // (P6w) 体感速度: 前回の一覧をキャッシュから即描画し、裏で最新化する
+  useEffect(()=>{
+    try{
+      const c = JSON.parse(localStorage.getItem('inbox_list_cache_v1')||'null');
+      if(c&&Array.isArray(c.rows)&&c.rows.length>0&&Date.now()-c.t<10*60*1000){
+        setList(c.rows);
+        setLoading(false);
+      }
+    }catch(e){}
+  },[]);
+
   const loadList = useCallback(async ()=>{
     try{
       setError('');
       const rows = await window.fetchData('admin.listInquiries', {});
-      setList(Array.isArray(rows)?rows:[]);
+      const arr = Array.isArray(rows)?rows:[];
+      setList(arr);
+      try{ localStorage.setItem('inbox_list_cache_v1', JSON.stringify({t:Date.now(), rows:arr})); }catch(e){}
     }catch(e){ setError(`一覧の取得に失敗しました: ${e.message||e}`); }
     finally{ setLoading(false); }
   },[]);
@@ -32988,8 +33165,8 @@ function PageInbox(){
       // 詳細を開いている場合は再取得して判定結果を反映
       if(selectedId){
         try{
-          const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: selectedId});
-          setDetail(d);
+          const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: selectedId, part:'row'});
+          setDetail(prev=>({inquiry:d.inquiry, thread:prev?prev.thread:null}));
         }catch(e){}
       }
     }catch(e){ alert(`取り込みに失敗しました: ${e.message||e}\nJSON全体が壊れている可能性があります。Claudeの出力をそのまま貼り付けてください。`); }
@@ -33025,6 +33202,26 @@ function PageInbox(){
   useEffect(()=>{ setPage(0); },[view, account]);
   const pageRows = useMemo(()=>filtered.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE),[filtered,page]);
 
+  // (P6z→P7a) サブメニュ件数バッジ: 書込処理は共通関数 (__updateInboxBadges__) に集約
+  useEffect(()=>{ if(window.__updateInboxBadges__) window.__updateInboxBadges__(list); },[list]);
+
+  // (P7b) 詳細表示中にサイドメニュのセクション (または親の「問い合わせ」) を押したら、
+  //   詳細を閉じてそのセクションの一覧を表示する。
+  //   同じセクションの再クリックは hash が変わらず hashchange が発火しないため、クリック委譲で拾う。
+  useEffect(()=>{
+    const onNavClick = (e)=>{
+      const a = e.target && e.target.closest ? e.target.closest('#inbox-sub a[data-iview], .nav-item[data-nav="inbox"]') : null;
+      if(a){ setSelectedId(null); setDetail(null); setCtx(null); }
+    };
+    document.addEventListener('click', onNavClick);
+    return ()=>document.removeEventListener('click', onNavClick);
+  },[]);
+  // (P7b) ⌘K検索や直リンク等でビューが切り替わったときも詳細を閉じて一覧表示
+  const __prevViewRef = useRef(view);
+  useEffect(()=>{
+    if(__prevViewRef.current!==view){ __prevViewRef.current=view; setSelectedId(null); setDetail(null); setCtx(null); }
+  },[view]);
+
   // アカウントタブ用の件数 (現在ビュー内・要対応感を出すため受信トレイ基準ではなくビュー基準)
   const accountCounts = useMemo(()=>{
     const c = {__all:0};
@@ -33044,21 +33241,31 @@ function PageInbox(){
     setDetailLoading(true);
     setCtxLoading(true);
     setStateDraft(row.state);
+    // (P6w) 体感速度: 軽い行データ (判定・返信案含む) を先に描画。
+    //   重いGmailスレッドと相手文脈は並行取得して、届き次第その場に流し込む
+    const id = row.inquiryId;
     try{
-      // 詳細 (スレッド) と相手文脈を並列取得 (I2)
-      const [d, c] = await Promise.all([
-        window.fetchData('admin.getInquiryDetail', {inquiryId: row.inquiryId}),
-        window.fetchData('admin.getInquiryContext', {inquiryId: row.inquiryId}).catch(()=>null),
-      ]);
-      setDetail(d);
-      setCtx(c);
+      const threadP = window.fetchData('admin.getInquiryDetail', {inquiryId: id, part:'thread'})
+        .catch(e=>({thread:{ok:false,messages:[],error:String(e.message||e)}}));
+      const ctxP = window.fetchData('admin.getInquiryContext', {inquiryId: id}).catch(()=>null);
+
+      const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: id, part:'row'});
+      setDetail({inquiry:d.inquiry, thread:null});
+      setDetailLoading(false);
+
       if(row.unread){
-        window.postData('admin.markInquiryRead', {inquiryId: row.inquiryId}).catch(()=>{});
+        window.postData('admin.markInquiryRead', {inquiryId: id}).catch(()=>{});
         window.invalidateCache('admin.listInquiries');
-        setList(prev=>prev.map(r=>r.inquiryId===row.inquiryId?{...r,unread:false}:r));
+        setList(prev=>prev.map(r=>r.inquiryId===id?{...r,unread:false}:r));
       }
-    }catch(e){ setDetail({inquiry:null, thread:{ok:false,messages:[],error:String(e.message||e)}}); }
-    finally{ setDetailLoading(false); setCtxLoading(false); }
+      threadP.then(t=>{
+        setDetail(prev=>prev&&prev.inquiry?{...prev, thread:(t&&t.thread)||{ok:false,messages:[],error:''}}:prev);
+      });
+      ctxP.then(c=>{ setCtx(c); setCtxLoading(false); });
+    }catch(e){
+      setDetail({inquiry:null, thread:{ok:false,messages:[],error:String(e.message||e)}});
+      setDetailLoading(false); setCtxLoading(false);
+    }
   },[]);
 
   const runSync = useCallback(async ()=>{
@@ -33081,27 +33288,30 @@ function PageInbox(){
       window.invalidateCache('admin.listInquiries');
       window.invalidateCache('admin.getInquiryDetail');
       setList(prev=>prev.map(r=>r.inquiryId===selectedId?{...r,state:stateDraft}:r));
-      setDetail(prev=>prev && prev.inquiry ? {...prev, inquiry:{...prev.inquiry, '対応状態':stateDraft}} : prev);
+      // (P6x) 状態変更後は詳細を閉じ、変更先の状態の一覧ビューへ自動遷移
+      //   (例: 受信トレイで開いたメールを「未対応」へ変更 → 未対応の一覧が表示される)
+      setSelectedId(null); setDetail(null); setCtx(null);
+      window.location.hash = `inbox?view=${inboxViewForState(stateDraft)}${account?`&account=${encodeURIComponent(account)}`:''}`;
     }catch(e){ alert(`状態変更に失敗しました: ${e.message||e}`); }
     finally{ setStateSaving(false); }
-  },[selectedId,stateDraft]);
+  },[selectedId,stateDraft,account]);
 
   const selRow = useMemo(()=>list.find(r=>r.inquiryId===selectedId)||null,[list,selectedId]);
 
   return (
     <div style={{padding:'18px 22px',maxWidth:1500}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:12}}>
+      <div className="ibx-hero" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
         <div>
-          <h1 style={{fontSize:20,margin:0}}>問い合わせ</h1>
-          <div style={{fontSize:12,color:'var(--ink3)',marginTop:2}}>対象箱: {setup?setup.mailbox:'…'} / ラベル hub/inbox 限定取り込み</div>
+          <h1 style={{fontSize:20,margin:0,letterSpacing:'.02em'}}>問い合わせ</h1>
+          <div className="sub" style={{fontSize:12,marginTop:3}}>対象箱: {setup?setup.mailbox:'…'} / hub/inbox ラベル限定取り込み</div>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          {syncMsg && <span style={{fontSize:12,color:'var(--ink3)'}}>{syncMsg}</span>}
-          <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--ink2,#3a4450)'}}
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          {syncMsg && <span style={{fontSize:12,color:'rgba(255,255,255,.88)'}}>{syncMsg}</span>}
+          <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#fff',fontWeight:600}}
             title="ブリッジ (判定・返信案生成) が使うモデル。変更は次回ブリッジ実行から反映。Fable 5 は6月22日以降クレジット消費に注意">
             AIモデル
             <select value={bridgeModel} onChange={e=>changeModel(e.target.value)} disabled={modelSaving}
-              style={{fontSize:12,padding:'5px 8px',borderRadius:8,border:'1px solid #d8dde2',opacity:modelSaving?.6:1}}>
+              style={{fontSize:12,padding:'5px 8px',borderRadius:8,opacity:modelSaving?.6:1,color:'#1d2733'}}>
               <option value="">既定 (PC側設定)</option>
               <option value="claude-fable-5">Fable 5</option>
               <option value="opus">Opus</option>
@@ -33113,11 +33323,11 @@ function PageInbox(){
               if(pending.length===0){ alert('未判定の問い合わせはありません'); return; }
               startJudge(pending);
             }}
-            style={{padding:'8px 14px',borderRadius:10,border:'1px solid var(--teal,#0f8a7a)',background:'#fff',color:'var(--teal,#0f8a7a)',fontWeight:700,fontSize:13,cursor:'pointer'}}>
+            className="ibx-btn ibx-ghost" style={{padding:'8px 14px',fontSize:13}}>
             未判定をまとめて手動判定
           </button>
           <button onClick={runSync} disabled={syncing}
-            style={{padding:'8px 16px',borderRadius:10,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontWeight:700,fontSize:13,cursor:syncing?'wait':'pointer',opacity:syncing?.6:1}}>
+            className="ibx-btn ibx-primary" style={{padding:'8px 18px',fontSize:13,cursor:syncing?'wait':'pointer'}}>
             {syncing?'同期中…':'今すぐ同期'}
           </button>
         </div>
@@ -33146,9 +33356,7 @@ function PageInbox(){
             const n = a===''?(accountCounts.__all||0):(accountCounts[a]||0);
             return (
               <button key={a||'__all'} onClick={()=>setAccount(a)} title={a||'全アカウント'}
-                style={{padding:'5px 12px',borderRadius:18,fontSize:12,fontWeight:active?700:500,cursor:'pointer',
-                  border:`1px solid ${active?'var(--teal,#0f8a7a)':'#d8dde2'}`,
-                  background:active?'var(--teal,#0f8a7a)':'#fff', color:active?'#fff':'var(--ink2,#3a4450)'}}>
+                className={`ibx-tab${active?' on':''}`}>
                 {label} {n>0&&<span style={{opacity:.8}}>({n})</span>}
               </button>
             );
@@ -33170,19 +33378,24 @@ function PageInbox(){
               {filtered.length===0?'0件':`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE,filtered.length)} / ${filtered.length}件`}
             </span>
             <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
-              style={{width:30,height:30,borderRadius:8,border:'1px solid #d8dde2',background:'#fff',fontSize:15,cursor:'pointer',opacity:page===0?.35:1}}>‹</button>
+              className="ibx-pg">‹</button>
             <button disabled={(page+1)*PAGE_SIZE>=filtered.length} onClick={()=>setPage(p=>p+1)}
-              style={{width:30,height:30,borderRadius:8,border:'1px solid #d8dde2',background:'#fff',fontSize:15,cursor:'pointer',opacity:(page+1)*PAGE_SIZE>=filtered.length?.35:1}}>›</button>
+              className="ibx-pg">›</button>
           </div>
-          <div style={{border:'1px solid #e3e6ea',borderRadius:12,overflow:'hidden',background:'#fff'}}>
+          <div className="ibx-list">
             {filtered.length===0 ? (
-              <div style={{padding:30,textAlign:'center',fontSize:13,color:'var(--ink3)'}}>
-                該当する問い合わせはありません。テストメールに hub/inbox ラベルを付け「今すぐ同期」を実行してください。
+              <div style={{padding:'48px 20px',textAlign:'center'}}>
+                <div style={{width:54,height:54,borderRadius:'50%',margin:'0 auto 12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,
+                  background:'linear-gradient(135deg,rgba(34,115,196,.12),rgba(15,138,122,.14))'}}>📭</div>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--ink2,#3a4450)'}}>このビューに問い合わせはありません</div>
+                <div style={{fontSize:11,color:'var(--ink4,#8a939e)',marginTop:5,lineHeight:1.7}}>新着はテストメールに hub/inbox ラベルを付け「今すぐ同期」で取り込めます</div>
               </div>
             ) : pageRows.map(r=>(
               <div key={r.inquiryId} onClick={()=>openDetail(r)}
-                style={{padding:'10px 14px',borderBottom:'1px solid #eef1f4',cursor:'pointer',
-                  background:r.inquiryId===selectedId?'#eef8f6':(r.unread?'#fffdf5':'#fff')}}>
+                className={`ibx-row${r.unread?' unread':''}${r.inquiryId===selectedId?' sel':''}`}>
+                <div style={{display:'flex',gap:11,alignItems:'flex-start'}}>
+                <div className={`ibx-avatar ${inboxAvClass(r)}`} style={{marginTop:2}}>{inboxInitial(r)}</div>
+                <div style={{flex:1,minWidth:0}}>
                 <div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:3}}>
                   <div style={{fontSize:13,fontWeight:r.unread?800:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {r.unread&&<span style={{color:'#e85d4a',marginRight:4}}>●</span>}
@@ -33203,6 +33416,8 @@ function PageInbox(){
                   {r.hasAttachments&&<span style={{fontSize:11,color:'var(--ink3)'}}>添付あり</span>}
                   <span style={{fontSize:11,color:'var(--ink3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{r.excerpt}</span>
                 </div>
+                </div>
+                </div>
               </div>
             ))}
           </div>
@@ -33211,9 +33426,9 @@ function PageInbox(){
 
           {/* (P6u) 詳細ペジ (選択中のみ・全幅) */}
           {selectedId && (
-          <div style={{border:'1px solid #e3e6ea',borderRadius:12,background:'#fff',padding:'14px 16px'}}>
+          <div className="ibx-card ibx-detail" style={{border:'1px solid var(--ibx-line,#dfe6ee)',borderRadius:14,background:'#fff',padding:'17px 16px 14px'}}>
             <button onClick={()=>{setSelectedId(null);setDetail(null);setCtx(null);}}
-              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',marginBottom:10,borderRadius:9,border:'1px solid #d8dde2',background:'#fff',color:'var(--ink2,#3a4450)',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+              className="ibx-btn ibx-ghost" style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',marginBottom:10,fontSize:12}}>
               ← 一覧に戻る
             </button>
             {detailLoading ? (
@@ -33221,9 +33436,16 @@ function PageInbox(){
             ) : (
               <div>
                 <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'flex-start',marginBottom:8}}>
-                  <div>
-                    <div style={{fontSize:15,fontWeight:800,lineHeight:1.4}}>{selRow?selRow.subject||'(件名なし)':''}</div>
-                    <div style={{fontSize:12,color:'var(--ink3)',marginTop:2}}>{selRow?`${selRow.fromName} <${selRow.fromEmail}>`:''} / {selectedId}</div>
+                  <div style={{display:'flex',gap:12,minWidth:0}}>
+                    {selRow&&<div className={`ibx-avatar ${inboxAvClass(selRow)}`} style={{width:42,height:42,fontSize:17,marginTop:2}}>{inboxInitial(selRow)}</div>}
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:16,fontWeight:800,lineHeight:1.4,letterSpacing:'.01em'}}>{selRow?selRow.subject||'(件名なし)':''}</div>
+                      <div style={{fontSize:12,color:'var(--ink3)',marginTop:3,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        <span>{selRow?`${selRow.fromName} <${selRow.fromEmail}>`:''}</span>
+                        <span style={{color:'var(--ink4,#a3acb8)'}}>{selectedId}</span>
+                        {selRow&&<StateBadge state={selRow.state}/>}
+                      </div>
+                    </div>
                   </div>
                   {selRow&&selRow.gmailUrl&&
                     <a href={selRow.gmailUrl} target="_blank" rel="noopener noreferrer"
@@ -33244,7 +33466,7 @@ function PageInbox(){
                   {selRow&&selRow.state==='要責任者確認'&&
                     <span style={{fontSize:11,color:'#c0392b'}}>解除は 代表/副代表/オーナー/管理者 のみ</span>}
                   <button onClick={requestJudge} title="判定 (種別・要約・イベント推定) と返信案を1回のAI実行でまとめて生成します"
-                    style={{padding:'4px 12px',borderRadius:8,border:0,background:'var(--teal,#0f8a7a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                    className="ibx-btn ibx-primary" style={{padding:'5px 13px',fontSize:12}}>
                     {detail&&detail.inquiry&&detail.inquiry['Claude要約']?'AI処理を再依頼（判定+返信案）':'AI処理を依頼（判定+返信案）'}
                   </button>
                   <button onClick={async ()=>{
@@ -33254,14 +33476,16 @@ function PageInbox(){
                         window.invalidateCache('admin.listInquiries');
                         window.invalidateCache('admin.getInquiryDetail');
                         setList(prev=>prev.map(r=>r.inquiryId===selectedId?{...r,state:'対応完了'}:r));
-                        setStateDraft('対応完了');
+                        // (P6x) 完了一覧へ自動遷移 (状態セレクタの「変更」と同じ規則)
+                        setSelectedId(null); setDetail(null); setCtx(null);
+                        window.location.hash = `inbox?view=done${account?`&account=${encodeURIComponent(account)}`:''}`;
                       }catch(e){ alert(`変更に失敗: ${e.message||e}`); }
                     }} title="返信が要らない案件をワンクリックで完了にします（履歴に記録され、後から検索可能）"
-                    style={{padding:'4px 10px',borderRadius:8,border:'1px solid #d8dde2',background:'#fff',color:'#8a939e',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                    className="ibx-btn ibx-ghost" style={{padding:'5px 11px',fontSize:11}}>
                     不要で完了
                   </button>
                   <button onClick={()=>startJudge([selectedId])} title="claude.ai にコピペして手動で判定する（ブリッジ停止時の予備経路）"
-                    style={{padding:'4px 10px',borderRadius:8,border:'1px solid #d8dde2',background:'#fff',color:'var(--ink3)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                    className="ibx-btn ibx-ghost" style={{padding:'5px 11px',fontSize:11}}>
                     手動（コピペ）
                   </button>
                   {reqMsg&&<span style={{fontSize:11,color:'var(--teal,#0f8a7a)',fontWeight:700}}>{reqMsg}</span>}
@@ -33273,8 +33497,8 @@ function PageInbox(){
                   accounts={(setup&&setup.accounts)||[]}
                   onSaved={async (newState)=>{
                     try{
-                      const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: selectedId});
-                      setDetail(d);
+                      const d = await window.fetchData('admin.getInquiryDetail', {inquiryId: selectedId, part:'row'});
+                      setDetail(prev=>({inquiry:d.inquiry, thread:prev?prev.thread:null}));
                       const sched = (d&&d.inquiry&&d.inquiry['返信予定日'])||'';
                       if(newState) setStateDraft(newState);
                       setList(prev=>prev.map(r=>r.inquiryId===selectedId
