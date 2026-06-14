@@ -1900,6 +1900,7 @@ svg{display:block}
       <a href="#manager-staff" class="nav-item" data-nav="manager-staff" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>運営管理</a>
       <a href="#member-admin" class="nav-item" data-nav="member-admin"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>メンバー管理</a>
       <a href="#recruit" class="nav-item" data-nav="recruit" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 11 2 2 4-4"/></svg>募集管理</a>
+      <a href="#member-requests" class="nav-item" data-nav="member-requests" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg>登録申請</a>
       <a href="#approvals" class="nav-item" data-nav="approvals" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>承認</a>
       <a href="#org" class="nav-item" data-nav="org"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>団体紹介</a>
       <a href="#ads" class="nav-item" data-nav="ads"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>広告</a>
@@ -2634,6 +2635,17 @@ svg{display:block}
   (function(){
     function update(){
       var a = document.querySelector('a[data-nav="recruit"]'); if(!a) return;
+      a.style.display = (window.hasRole && window.hasRole('マネージャー')) ? '' : 'none';
+    }
+    setInterval(update, 60000);
+    window.addEventListener('load', function(){ setTimeout(update, 1500); setTimeout(update, 5000); });
+    document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') update(); });
+  })();
+
+  // (登録申請) 登録申請ナビ: マネージャー以上のみ表示
+  (function(){
+    function update(){
+      var a = document.querySelector('a[data-nav="member-requests"]'); if(!a) return;
       a.style.display = (window.hasRole && window.hasRole('マネージャー')) ? '' : 'none';
     }
     setInterval(update, 60000);
@@ -20001,6 +20013,124 @@ function PageRecruitDetail() {
 }
 window.PageRecruitDetail = PageRecruitDetail;
 
+function mrrStatusBadge(s) { return s === 'approved' ? 'green' : (s === 'rejected' ? 'coral' : 'amber'); }
+function mrrStatusLabel(s) { return s === 'approved' ? '承認済み' : (s === 'rejected' ? '却下' : '承認待ち'); }
+
+function MemberRequestCard({ req, depts, onChanged }) {
+  const [deptId, setDeptId] = useState(req.desired_dept_id || '');
+  const [role, setRole] = useState('メンバー');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pending = req.status === 'pending';
+
+  async function approve() {
+    if (!deptId) { if (window.toast) window.toast.error('所属部署を選んでください'); return; }
+    setBusy(true);
+    try {
+      const res = await window.postData('approveMemberRegistrationRequest', { requestId: req.id, deptId: deptId, role: role });
+      if (res && res.ok) { if (window.toast) window.toast.success('承認しました（' + res.memberCode + '）'); onChanged && onChanged(); }
+      else if (window.toast) window.toast.error((res && res.error) || '承認に失敗しました');
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+  async function reject() {
+    setBusy(true);
+    try {
+      const res = await window.postData('rejectMemberRegistrationRequest', { requestId: req.id, reason: reason });
+      if (res && res.ok) { if (window.toast) window.toast.success('却下しました'); onChanged && onChanged(); }
+      else if (window.toast) window.toast.error((res && res.error) || '却下に失敗しました');
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 12 }}><div className="card-body">
+      <div className="row between" style={{ alignItems: 'flex-start', marginBottom: 8 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{req.name} {req.name_kana && <span style={{ fontSize: 12, color: 'var(--ink4)', fontWeight: 400 }}>（{req.name_kana}）</span>}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 2 }}>{req.email}</div>
+        </div>
+        <span className={'badge badge-' + mrrStatusBadge(req.status)}>{mrrStatusLabel(req.status)}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontSize: 12, color: 'var(--ink3)', marginBottom: 10 }}>
+        <div>希望部署: {req.desiredDeptName || '未定'}</div>
+        <div>学年: {req.grade || '—'}</div>
+        <div>学校/所属: {req.school || '—'}</div>
+        <div>在住: {[req.residence_prefecture, req.residence_country].filter(Boolean).join(' / ') || '—'}</div>
+        <div>リモート: {req.remote_available || '—'}</div>
+        <div>申請日: {req.created_at ? String(req.created_at).replace('T', ' ').slice(0, 16) : '—'}</div>
+      </div>
+      {req.message && <div style={{ fontSize: 12, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: 10, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{req.message}</div>}
+      {req.status === 'approved' && req.member_id && <div style={{ fontSize: 12, color: 'var(--ink4)' }}>登録済み構成員ID: <span className="mono">{req.member_id}</span></div>}
+      {req.status === 'rejected' && req.reject_reason && <div style={{ fontSize: 12, color: 'var(--ink4)' }}>却下理由: {req.reject_reason}</div>}
+
+      {pending && (
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 10, marginBottom: 10 }}>
+            <div>
+              <label className="field-label">所属部署</label>
+              <div className="select-wrap"><select className="input select" value={deptId} onChange={function (e) { setDeptId(e.target.value); }}>
+                <option value="">選択してください</option>
+                {(depts || []).map(function (d) { return <option key={d.id} value={d.id}>{d.name}</option>; })}
+              </select></div>
+            </div>
+            <div>
+              <label className="field-label">初期役職</label>
+              <div className="select-wrap"><select className="input select" value={role} onChange={function (e) { setRole(e.target.value); }}>
+                <option value="メンバー">メンバー</option>
+                <option value="アシマネ">アシマネ</option>
+              </select></div>
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <button className="btn btn-primary btn-sm" onClick={approve} disabled={busy}>承認して登録</button>
+            <input className="input" style={{ flex: 1, fontSize: 12 }} placeholder="却下理由（任意）" value={reason} onChange={function (e) { setReason(e.target.value); }} />
+            <button className="btn btn-ghost btn-sm" onClick={reject} disabled={busy}>却下</button>
+          </div>
+        </div>
+      )}
+    </div></div>
+  );
+}
+
+function PageMemberRequests() {
+  const [reqs, setReqs] = useState([]);
+  const [depts, setDepts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('pending');
+
+  function load() {
+    setLoading(true);
+    window.fetchData('listMemberRegistrationRequests', { status: statusFilter }).then(function (d) { setReqs(Array.isArray(d) ? d : []); }).catch(function () {}).then(function () { setLoading(false); });
+    window.fetchData('listRecruitDepartments').then(function (d) { setDepts(Array.isArray(d) ? d : []); }).catch(function () {});
+  }
+  useEffect(function () { load(); }, [statusFilter]);
+
+  return (
+    <div>
+      <div className="row between" style={{ alignItems: 'center', marginBottom: 16 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>メンバー登録申請</h1>
+        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <div className="select-wrap" style={{ width: 150 }}>
+            <select className="input select" value={statusFilter} onChange={function (e) { setStatusFilter(e.target.value); }}>
+              <option value="pending">承認待ち</option>
+              <option value="approved">承認済み</option>
+              <option value="rejected">却下</option>
+              <option value="all">すべて</option>
+            </select>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 14 }}>公開フォーム（…#member-register）からの登録申請です。承認すると構成員として登録されます。役職はメンバーまたはアシマネに限定されます。</div>
+      {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中…</div>}
+      {!loading && reqs.length === 0 && <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24, color: 'var(--ink4)' }}>該当する申請はありません。</div></div>}
+      {!loading && reqs.map(function (r) { return <MemberRequestCard key={r.id} req={r} depts={depts} onChanged={load} />; })}
+    </div>
+  );
+}
+window.PageMemberRequests = PageMemberRequests;
+
 function PageDepartments(){
   const [members, setMembers] = useState([]);
   const [departments, setDepartments] = useState([]);   // 動的取得
@@ -35743,6 +35873,7 @@ const PAGES = {
   'manager-staff': () => renderPage('PageManagerStaff'),
   approvals: () => renderPage('PageApprovals'),
   recruit: () => renderPage('PageRecruit'),
+  'member-requests': () => renderPage('PageMemberRequests'),
   'recruit-detail': () => renderPage('PageRecruitDetail'),
   org:            () => renderPage('PageOrg'),
   ads:            () => renderPage('PageAds'),
@@ -35774,7 +35905,7 @@ const PAGES = {
 function parseRecruitPublicRoute() {
   const h = (location.hash || '').replace(/^#/, '');
   const path = h.split('?')[0];
-  if (['recruit-apply', 'recruit-second', 'recruit-addinfo', 'guardian-consent'].indexOf(path) < 0) return null;
+  if (['recruit-apply', 'recruit-second', 'recruit-addinfo', 'guardian-consent', 'member-register'].indexOf(path) < 0) return null;
   const qs = h.split('?')[1] || '';
   const params = {};
   qs.split('&').forEach(function (p) { const kv = p.split('='); if (kv[0]) params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || ''); });
@@ -36137,11 +36268,84 @@ function PublicGuardianConsent({ route }) {
   );
 }
 
+function PublicMemberRegister() {
+  const [depts, setDepts] = useStateApp([]);
+  const [loading, setLoading] = useStateApp(true);
+  const [form, setForm] = useStateApp({ name: '', name_kana: '', email: '', deptId: '', grade: '', school: '', residencePref: '', residenceCountry: '日本', remote: false, message: '' });
+  const [submitting, setSubmitting] = useStateApp(false);
+  const [error, setError] = useStateApp('');
+  const [done, setDone] = useStateApp(false);
+
+  useEffectApp(() => {
+    window.fetchData('listRecruitDepartments').then(function (d) { setDepts(Array.isArray(d) ? d : []); }).catch(function () {}).then(function () { setLoading(false); });
+  }, []);
+
+  function upd(k, v) { setForm(function (f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
+
+  async function submit() {
+    setError('');
+    if (!form.name.trim()) { setError('氏名を入力してください'); return; }
+    if (!form.email.trim()) { setError('メールを入力してください'); return; }
+    setSubmitting(true);
+    try {
+      const res = await window.postData('submitMemberSelfRegistration', form);
+      if (res && res.ok) setDone(true);
+      else setError((res && res.error) || '送信に失敗しました');
+    } catch (e) { setError(e && e.message ? e.message : String(e)); }
+    finally { setSubmitting(false); }
+  }
+
+  if (done) {
+    return (
+      <PublicRecruitShell title="申請を受け付けました">
+        <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28 }}>
+          <div style={{ fontSize: 14, lineHeight: 1.8 }}>登録申請を受け付けました。担当者の確認後、ご連絡します。承認されると、メールまたは表示IDでログインし、初回パスワードを設定できます。</div>
+        </div></div>
+      </PublicRecruitShell>
+    );
+  }
+
+  return (
+    <PublicRecruitShell title="メンバー登録フォーム" subtitle="必要事項をご記入ください。担当者の承認後に登録が完了します。">
+      <div className="card"><div className="card-body" style={{ padding: 24 }}>
+        {loading && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中…</div>}
+        {!loading && (
+          <>
+            {error && <div className="error-banner" style={{ marginBottom: 14 }}><Icon n="warn" s={14} cls="error-banner-icon" /><div>{error}</div></div>}
+            <div style={{ marginBottom: 12 }}><label className="field-label">氏名 <span className="field-req">*</span></label><input className="input" value={form.name} onChange={function (e) { upd('name', e.target.value); }} /></div>
+            <div style={{ marginBottom: 12 }}><label className="field-label">ふりがな</label><input className="input" value={form.name_kana} onChange={function (e) { upd('name_kana', e.target.value); }} /></div>
+            <div style={{ marginBottom: 12 }}><label className="field-label">メール <span className="field-req">*</span></label><input className="input" type="email" value={form.email} onChange={function (e) { upd('email', e.target.value); }} placeholder="you@example.com" /></div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="field-label">希望部署</label>
+              <div className="select-wrap"><select className="input select" value={form.deptId} onChange={function (e) { upd('deptId', e.target.value); }}>
+                <option value="">未定（おまかせ）</option>
+                {depts.map(function (d) { return <option key={d.id} value={d.id}>{d.name}</option>; })}
+              </select></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div><label className="field-label">学年</label><input className="input" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }} /></div>
+              <div><label className="field-label">学校名または所属機関</label><input className="input" value={form.school} onChange={function (e) { upd('school', e.target.value); }} /></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div><label className="field-label">在住都道府県</label><input className="input" value={form.residencePref} onChange={function (e) { upd('residencePref', e.target.value); }} /></div>
+              <div><label className="field-label">在住国</label><input className="input" value={form.residenceCountry} onChange={function (e) { upd('residenceCountry', e.target.value); }} /></div>
+            </div>
+            <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 12, cursor: 'pointer' }}><input type="checkbox" checked={form.remote} onChange={function (e) { upd('remote', e.target.checked); }} /><span style={{ fontSize: 13 }}>フルリモート参加が可能</span></label>
+            <div style={{ marginBottom: 16 }}><label className="field-label">ひとこと（自己紹介・参加動機など）</label><textarea className="input" rows={3} value={form.message} onChange={function (e) { upd('message', e.target.value); }} /></div>
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }} onClick={submit} disabled={submitting}>{submitting ? '送信中…' : '登録を申請する'}</button>
+          </>
+        )}
+      </div></div>
+    </PublicRecruitShell>
+  );
+}
+
 function PublicRecruitRouter({ route }) {
   if (route.form === 'recruit-apply') return <PublicRecruitApply />;
   if (route.form === 'recruit-second') return <PublicRecruitSecond route={route} />;
   if (route.form === 'recruit-addinfo') return <PublicRecruitAddInfo route={route} />;
   if (route.form === 'guardian-consent') return <PublicGuardianConsent route={route} />;
+  if (route.form === 'member-register') return <PublicMemberRegister />;
   return (
     <PublicRecruitShell title="準備中">
       <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24, color: 'var(--ink4)' }}>この画面は近日公開予定です。</div></div>
