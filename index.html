@@ -19437,16 +19437,155 @@ function recruitBadgeColor(s) {
   return 'teal';
 }
 
+function RecruitMailTemplatesModal({ onClose }) {
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selKey, setSelKey] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const bodyRef = useRef(null);
+  const canEdit = !!(window.hasRole && (window.hasRole('代表') || window.hasRole('人事')));
+
+  function applySel(list, key) {
+    const t = (list || []).find(function (x) { return x.key === key; });
+    if (!t) return;
+    setSelKey(key); setSubject(t.subject || ''); setBody(t.body || ''); setDirty(false);
+  }
+
+  function load() {
+    setLoading(true);
+    window.fetchData('listRecruitMailTemplates').then(function (res) {
+      const list = (res && res.templates) || [];
+      setItems(list);
+      if (list.length) applySel(list, selKey || list[0].key);
+    }).catch(function () { setItems([]); }).then(function () { setLoading(false); });
+  }
+  useEffect(function () { load(); }, []);
+
+  const cur = (items || []).find(function (x) { return x.key === selKey; });
+
+  function trySelect(key) {
+    if (key === selKey) return;
+    if (dirty && !window.confirm('保存していない編集があります。破棄して切り替えますか？')) return;
+    applySel(items, key);
+  }
+
+  async function refreshList(keepKey) {
+    const fresh = await window.fetchData('listRecruitMailTemplates');
+    const list = (fresh && fresh.templates) || [];
+    setItems(list);
+    return list;
+  }
+
+  async function save() {
+    if (!canEdit) return;
+    if (!subject.trim()) { if (window.toast) window.toast.error('件名を入力してください'); return; }
+    if (!body.trim()) { if (window.toast) window.toast.error('本文を入力してください'); return; }
+    setBusy(true);
+    try {
+      const res = await window.postData('updateRecruitMailTemplate', { key: selKey, subject: subject, body: body });
+      if (res && res.ok) { if (window.toast) window.toast.success('定型文を保存しました'); await refreshList(); setDirty(false); }
+      else if (window.toast) window.toast.error((res && res.error) || '保存に失敗しました');
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function resetToDefault() {
+    if (!canEdit) return;
+    if (!window.confirm('この定型文を既定の文面に戻しますか？編集内容は失われます。')) return;
+    setBusy(true);
+    try {
+      const res = await window.postData('resetRecruitMailTemplate', { key: selKey });
+      if (res && res.ok) { if (window.toast) window.toast.success('既定の文面に戻しました'); const list = await refreshList(); applySel(list, selKey); }
+      else if (window.toast) window.toast.error((res && res.error) || '失敗しました');
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  function insertVar(v) {
+    const token = '{{' + v + '}}';
+    const ta = bodyRef.current;
+    if (ta && typeof ta.selectionStart === 'number') {
+      const s = ta.selectionStart, e = ta.selectionEnd;
+      const nb = body.slice(0, s) + token + body.slice(e);
+      setBody(nb); setDirty(true);
+      setTimeout(function () { try { ta.focus(); ta.selectionStart = ta.selectionEnd = s + token.length; } catch (err) {} }, 0);
+    } else { setBody(body + token); setDirty(true); }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={onClose}>
+      <div className="card" style={{ width: 940, maxWidth: '96%', height: '88vh', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }} onClick={function (e) { e.stopPropagation(); }}>
+        <div className="card-head">
+          <div className="card-title"><Icon n="mail" s={16} /> メール定型文</div>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose} disabled={busy}><Icon n="x" s={14} /></button>
+        </div>
+        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+          <div style={{ width: 232, borderRight: '1px solid var(--line)', overflow: 'auto', padding: 8, flexShrink: 0 }}>
+            {loading && <div style={{ padding: 12, color: 'var(--ink4)', fontSize: 12 }}>読み込み中…</div>}
+            {!loading && (items || []).map(function (t) {
+              const on = t.key === selKey;
+              return (
+                <div key={t.key} onClick={function () { trySelect(t.key); }}
+                  style={{ padding: '9px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2, background: on ? 'var(--indigo-50)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 500 }}>{t.label}</span>
+                  {t.overridden && <span className="badge badge-indigo" style={{ fontSize: 9 }}>編集済</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 16 }}>
+            {!cur && !loading && <div style={{ color: 'var(--ink4)' }}>定型文を選択してください。</div>}
+            {cur && (
+              <div>
+                {!canEdit && <div className="error-banner" style={{ marginBottom: 12 }}><Icon n="lock" s={14} cls="error-banner-icon" /><div>閲覧のみです。編集は代表・人事のみ可能です。</div></div>}
+                <div style={{ marginBottom: 12 }}>
+                  <label className="field-label">件名</label>
+                  <input className="input" value={subject} onChange={function (e) { setSubject(e.target.value); setDirty(true); }} disabled={!canEdit} />
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label className="field-label">本文</label>
+                  <textarea ref={bodyRef} className="input" style={{ height: 300, padding: 12, resize: 'vertical', fontSize: 13, lineHeight: 1.7, fontFamily: 'inherit' }} value={body} onChange={function (e) { setBody(e.target.value); setDirty(true); }} disabled={!canEdit} />
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 6 }}>差し込み変数（クリックで本文に挿入。送信時に実際の値へ置換されます）</div>
+                  <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    {(cur.vars || []).map(function (v) {
+                      return <button key={v} className="btn btn-ghost btn-sm" onClick={function () { insertVar(v); }} disabled={!canEdit} style={{ fontSize: 11, fontFamily: 'monospace' }}>{'{{' + v + '}}'}</button>;
+                    })}
+                    {(!cur.vars || cur.vars.length === 0) && <span style={{ fontSize: 11, color: 'var(--ink4)' }}>この定型文に差し込み変数はありません。</span>}
+                  </div>
+                </div>
+                <div className="row between" style={{ alignItems: 'center' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={resetToDefault} disabled={!canEdit || busy || !cur.overridden} title={cur.overridden ? '既定の文面に戻します' : '既に既定のままです'}>既定に戻す</button>
+                  <button className="btn btn-primary" onClick={save} disabled={!canEdit || busy || !dirty}>{busy ? '保存中…' : '保存する'}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.RecruitMailTemplatesModal = RecruitMailTemplatesModal;
+
 function PageRecruit() {
   const [dash, setDash] = useState(null);
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [remBusy, setRemBusy] = useState(false);
+  const [autoMail, setAutoMail] = useState(true);
+  const [autoMailBusy, setAutoMailBusy] = useState(false);
+  const [mailTplOpen, setMailTplOpen] = useState(false);
 
   function load() {
     setLoading(true);
     window.fetchData('getRecruitDashboard').then(setDash).catch(function () {});
+    window.fetchData('getRecruitmentSettings').then(function (st) { if (st) setAutoMail(String(st.auto_mail_enabled) !== 'false'); }).catch(function () {});
     window.fetchData('listRecruitApplications', statusFilter ? { status: statusFilter } : {})
       .then(function (d) { setApps(Array.isArray(d) ? d : []); }).catch(function () {}).then(function () { setLoading(false); });
   }
@@ -19460,6 +19599,17 @@ function PageRecruit() {
       else if (window.toast) window.toast.error((res && res.error) || '送信に失敗しました');
     } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
     finally { setRemBusy(false); }
+  }
+
+  async function toggleAutoMail() {
+    const next = !autoMail;
+    setAutoMailBusy(true);
+    try {
+      const res = await window.postData('updateRecruitmentSettings', { auto_mail_enabled: next ? 'true' : 'false' });
+      if (res && res.ok) { setAutoMail(next); if (window.toast) window.toast.success('ステータス変更時の自動メールを' + (next ? '有効' : '無効') + 'にしました'); }
+      else if (window.toast) window.toast.error((res && res.error) || '設定の更新に失敗しました');
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setAutoMailBusy(false); }
   }
 
   const cards = [
@@ -19477,6 +19627,8 @@ function PageRecruit() {
       <div className="row between" style={{ alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>募集管理</h1>
         <div className="row" style={{ gap: 6 }}>
+          <button className={'chip' + (autoMail ? ' on' : '')} onClick={toggleAutoMail} disabled={autoMailBusy} title="ステータス変更時に対応メールを自動送信します" style={{ cursor: 'pointer' }}>自動メール {autoMail ? 'ON' : 'OFF'}</button>
+          <button className="btn btn-ghost btn-sm" onClick={function () { setMailTplOpen(true); }}><Icon n="mail" s={14} /> メール定型文</button>
           <button className="btn btn-ghost btn-sm" onClick={sendReminders} disabled={remBusy}>{remBusy ? '送信中…' : '面談前リマインド送信'}</button>
           <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
         </div>
@@ -19525,6 +19677,7 @@ function PageRecruit() {
           )}
         </div>
       </div>
+      {mailTplOpen && <RecruitMailTemplatesModal onClose={function () { setMailTplOpen(false); }} />}
     </div>
   );
 }
@@ -35932,7 +36085,7 @@ function PublicRecruitApply() {
   const [depts, setDepts] = useStateApp([]);
   const [loading, setLoading] = useStateApp(true);
   const [form, setForm] = useStateApp({ name: '', name_kana: '', email: '', affiliation: '', grade: '', school_name: '', residence_prefecture: '', referrer_name: '', pre_interview_questions: '', desired_department_reason: '' });
-  const [times, setTimes] = useStateApp(['']);
+  const [times, setTimes] = useStateApp([{ mode: 'single', start: '', end: '' }]);
   const [deptIds, setDeptIds] = useStateApp([]);
   const [expanded, setExpanded] = useStateApp({});
   const [submitting, setSubmitting] = useStateApp(false);
@@ -35944,9 +36097,23 @@ function PublicRecruitApply() {
   }, []);
 
   function upd(k, v) { setForm(function (f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
-  function setTime(i, v) { setTimes(function (ts) { return ts.map(function (t, idx) { return idx === i ? v : t; }); }); }
-  function addTime() { setTimes(function (ts) { return ts.concat(''); }); }
+  function setTime(i, patch) { setTimes(function (ts) { return ts.map(function (t, idx) { return idx === i ? Object.assign({}, t, patch) : t; }); }); }
+  function addTime(mode) { setTimes(function (ts) { return ts.concat({ mode: mode || 'single', start: '', end: '' }); }); }
   function removeTime(i) { setTimes(function (ts) { return ts.length > 1 ? ts.filter(function (_, idx) { return idx !== i; }) : ts; }); }
+  function fmtDtLocal(v) { if (!v) return ''; var parts = String(v).split('T'); var d = (parts[0] || '').split('-'); if (d.length < 3) return v; return parseInt(d[1], 10) + '/' + parseInt(d[2], 10) + (parts[1] ? ' ' + parts[1] : ''); }
+  function fmtTimeEntry(e) {
+    if (!e || typeof e !== 'object') return String(e || '').trim();
+    if (e.mode === 'range') {
+      if (!e.start && !e.end) return '';
+      if (e.start && e.end) {
+        var ds = (e.start.split('T')[0] || ''), de = (e.end.split('T')[0] || '');
+        if (ds === de) return fmtDtLocal(e.start) + ' 〜 ' + (e.end.split('T')[1] || '');
+        return fmtDtLocal(e.start) + ' 〜 ' + fmtDtLocal(e.end);
+      }
+      return (fmtDtLocal(e.start) || fmtDtLocal(e.end)) + (e.start && !e.end ? ' 〜' : '');
+    }
+    return fmtDtLocal(e.start);
+  }
   function toggleDept(id) { setDeptIds(function (ids) { return ids.indexOf(id) >= 0 ? ids.filter(function (x) { return x !== id; }) : ids.concat(id); }); }
   function toggleExp(id) { setExpanded(function (e) { const n = Object.assign({}, e); n[id] = !n[id]; return n; }); }
 
@@ -35954,7 +36121,7 @@ function PublicRecruitApply() {
     setError('');
     if (!form.name.trim()) { setError('お名前を入力してください'); return; }
     if (!form.email.trim()) { setError('Gmailアドレスを入力してください'); return; }
-    const t = times.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    const t = times.map(fmtTimeEntry).filter(Boolean);
     setSubmitting(true);
     try {
       const res = await window.postData('createRecruitApplication', Object.assign({}, form, { first_interview_candidate_times: t, desired_department_ids: deptIds }));
@@ -36014,16 +36181,32 @@ function PublicRecruitApply() {
 
             <div style={{ marginBottom: 12 }}>
               <label className="field-label">一次面談の候補日時（任意）</label>
-              <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 6 }}>複数入力できます。日時は代表が候補の中から決定します。</div>
-              {times.map(function (t, i) {
+              <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 6 }}>単一の日時、または期間（開始〜終了）で複数入力できます。日時は代表が候補の中から決定します。</div>
+              {times.map(function (e, i) {
                 return (
-                  <div key={i} className="row" style={{ gap: 8, marginBottom: 6, alignItems: 'center' }}>
-                    <input className="input" type="datetime-local" value={t} onChange={function (e) { setTime(i, e.target.value); }} style={{ flex: 1 }} />
-                    {times.length > 1 && <button className="btn btn-ghost btn-sm" onClick={function () { removeTime(i); }}><Icon n="x" s={13} /></button>}
+                  <div key={i} style={{ marginBottom: 8, border: '1px solid var(--line)', borderRadius: 8, padding: 10 }}>
+                    <div className="row" style={{ gap: 6, marginBottom: 8, alignItems: 'center' }}>
+                      <button type="button" className={'chip' + (e.mode === 'single' ? ' on' : '')} onClick={function () { setTime(i, { mode: 'single' }); }}>単一</button>
+                      <button type="button" className={'chip' + (e.mode === 'range' ? ' on' : '')} onClick={function () { setTime(i, { mode: 'range' }); }}>期間</button>
+                      <div style={{ flex: 1 }} />
+                      {times.length > 1 && <button className="btn btn-ghost btn-sm" onClick={function () { removeTime(i); }}><Icon n="x" s={13} /></button>}
+                    </div>
+                    {e.mode === 'range' ? (
+                      <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input className="input" type="datetime-local" value={e.start} onChange={function (ev) { setTime(i, { start: ev.target.value }); }} style={{ flex: 1, minWidth: 150 }} />
+                        <span style={{ color: 'var(--ink4)' }}>〜</span>
+                        <input className="input" type="datetime-local" value={e.end} onChange={function (ev) { setTime(i, { end: ev.target.value }); }} style={{ flex: 1, minWidth: 150 }} />
+                      </div>
+                    ) : (
+                      <input className="input" type="datetime-local" value={e.start} onChange={function (ev) { setTime(i, { start: ev.target.value }); }} style={{ width: '100%' }} />
+                    )}
                   </div>
                 );
               })}
-              <button className="btn btn-ghost btn-sm" onClick={addTime}><Icon n="plus" s={13} /> 候補日時を追加</button>
+              <div className="row" style={{ gap: 6 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={function () { addTime('single'); }}><Icon n="plus" s={13} /> 日時を追加</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={function () { addTime('range'); }}><Icon n="plus" s={13} /> 期間を追加</button>
+              </div>
             </div>
 
             <div style={{ marginBottom: 12 }}>
@@ -36064,10 +36247,10 @@ function PublicRecruitSecond({ route }) {
   const [ctx, setCtx] = useStateApp(null);
   const [loading, setLoading] = useStateApp(true);
   const [form, setForm] = useStateApp({ name: '', name_kana: '', email: '', life_goal: '', env_usage: '', supplement: '' });
-  const [times, setTimes] = useStateApp(['']);
   const [submitting, setSubmitting] = useStateApp(false);
   const [error, setError] = useStateApp('');
-  const [done, setDone] = useStateApp(false);
+  const [phase, setPhase] = useStateApp('form');
+  const BOOKING_URL = 'https://timerex.net/s/ryukipon217_c55b/58e52502/';
 
   useEffectApp(() => {
     window.fetchData('getRecruitPublicForm', { appId: route.appId, rt: route.rt, form: 'second' }).then(function (d) {
@@ -36077,16 +36260,15 @@ function PublicRecruitSecond({ route }) {
   }, []);
 
   function upd(k, v) { setForm(function (f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
-  function setTime(i, v) { setTimes(function (ts) { return ts.map(function (t, idx) { return idx === i ? v : t; }); }); }
 
   async function submit() {
     setError('');
-    const t = times.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
-    if (t.length < 1) { setError('二次面談の候補日時を1つ以上入力してください'); return; }
+    if (!form.name.trim()) { setError('お名前を入力してください'); return; }
+    if (!form.email.trim()) { setError('Gmailアドレスを入力してください'); return; }
     setSubmitting(true);
     try {
-      const res = await window.postData('submitSecondInterviewInput', { appId: route.appId, rt: route.rt, name: form.name, name_kana: form.name_kana, email: form.email, life_goal: form.life_goal, env_usage: form.env_usage, supplement: form.supplement, second_interview_candidate_times: t });
-      if (res && res.ok) setDone(true);
+      const res = await window.postData('submitSecondInterviewInput', { appId: route.appId, rt: route.rt, name: form.name, name_kana: form.name_kana, email: form.email, life_goal: form.life_goal, env_usage: form.env_usage, supplement: form.supplement });
+      if (res && res.ok) setPhase('book');
       else setError((res && res.error) || '送信に失敗しました');
     } catch (e) { setError(e && e.message ? e.message : String(e)); }
     finally { setSubmitting(false); }
@@ -36096,10 +36278,26 @@ function PublicRecruitSecond({ route }) {
   if (!ctx || !ctx.ok) return <PublicRecruitShell title="二次面談 事前入力"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24, color: 'var(--coral)' }}>{(ctx && ctx.error) || 'リンクが無効です'}</div></div></PublicRecruitShell>;
   if (ctx.submitted) return <PublicRecruitShell title="二次面談 事前入力"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24 }}>すでに提出済みです。ありがとうございます。</div></div></PublicRecruitShell>;
   if (!ctx.allowed) return <PublicRecruitShell title="二次面談 事前入力"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24, color: 'var(--ink4)' }}>現在この入力は受け付けていません。</div></div></PublicRecruitShell>;
-  if (done) return <PublicRecruitShell title="ありがとうございます"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28 }}>二次面談の事前入力を受け付けました。日時は代表が候補の中から決定し、追ってご連絡します。</div></div></PublicRecruitShell>;
+  if (phase === 'book') return (
+    <PublicRecruitShell title="二次面談の予約" subtitle="続いて、代表との二次面談の日時を予約してください。">
+      <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28 }}>
+        <div style={{ fontSize: 14, lineHeight: 1.8, marginBottom: 20 }}>ご回答ありがとうございます。下のボタンから予約フォームを開き、ご希望の日時を選んでください。</div>
+        <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ display: 'inline-flex', justifyContent: 'center', padding: '12px 24px', textDecoration: 'none' }} onClick={function () { setPhase('done'); }}>二次面談を予約する</a>
+      </div></div>
+    </PublicRecruitShell>
+  );
+  if (phase === 'done') return (
+    <PublicRecruitShell title="予約完了">
+      <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10, color: 'var(--ink)' }}>予約完了！</div>
+        <div style={{ fontSize: 14, lineHeight: 1.8 }}>記入いただいたメールアドレス{form.email ? '（' + form.email + '）' : ''}をご確認ください。予約内容の確認をお送りします。</div>
+        <div style={{ fontSize: 12, color: 'var(--ink4)', marginTop: 18 }}>予約フォームが開かなかった場合は <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">こちら</a> から予約してください。</div>
+      </div></div>
+    </PublicRecruitShell>
+  );
 
   return (
-    <PublicRecruitShell title="二次面談 事前入力" subtitle="二次面談に向けて、以下をご記入ください。">
+    <PublicRecruitShell title="二次面談 事前入力" subtitle="二次面談に向けて以下にご回答ください。回答後、日時の予約に進みます。">
       <div className="card"><div className="card-body" style={{ padding: 24 }}>
         {error && <div className="error-banner" style={{ marginBottom: 14 }}><Icon n="warn" s={14} cls="error-banner-icon" /><div>{error}</div></div>}
         <div style={{ marginBottom: 12 }}><label className="field-label">氏名</label><input className="input" value={form.name} onChange={function (e) { upd('name', e.target.value); }} /></div>
@@ -36107,21 +36305,9 @@ function PublicRecruitSecond({ route }) {
         <div style={{ marginBottom: 12 }}><label className="field-label">Gmail宛先</label><input className="input" type="email" value={form.email} onChange={function (e) { upd('email', e.target.value); }} /></div>
         <div style={{ marginBottom: 12 }}><label className="field-label">自分の人生のゴール</label><textarea className="input" rows={4} value={form.life_goal} onChange={function (e) { upd('life_goal', e.target.value); }} /></div>
         <div style={{ marginBottom: 12 }}><label className="field-label">connec+aという環境を、人生のゴールのためにどう活用したいか</label><textarea className="input" rows={4} value={form.env_usage} onChange={function (e) { upd('env_usage', e.target.value); }} /></div>
-        <div style={{ marginBottom: 12 }}>
-          <label className="field-label">二次面談の候補日時 <span className="field-req">*</span></label>
-          <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 6 }}>複数入力できます。日時は代表が決定します。</div>
-          {times.map(function (t, i) {
-            return (
-              <div key={i} className="row" style={{ gap: 8, marginBottom: 6, alignItems: 'center' }}>
-                <input className="input" type="datetime-local" value={t} onChange={function (e) { setTime(i, e.target.value); }} style={{ flex: 1 }} />
-                {times.length > 1 && <button className="btn btn-ghost btn-sm" onClick={function () { setTimes(function (ts) { return ts.filter(function (_, idx) { return idx !== i; }); }); }}><Icon n="x" s={13} /></button>}
-              </div>
-            );
-          })}
-          <button className="btn btn-ghost btn-sm" onClick={function () { setTimes(function (ts) { return ts.concat(''); }); }}><Icon n="plus" s={13} /> 候補日時を追加</button>
-        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 12, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: 10 }}>回答を送信後、代表との二次面談の予約フォームに進みます。日時はそこで予約してください。</div>
         <div style={{ marginBottom: 16 }}><label className="field-label">補足事項（任意）</label><textarea className="input" rows={2} value={form.supplement} onChange={function (e) { upd('supplement', e.target.value); }} /></div>
-        <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }} onClick={submit} disabled={submitting}>{submitting ? '送信中…' : '送信する'}</button>
+        <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }} onClick={submit} disabled={submitting}>{submitting ? '送信中…' : '回答を送信して予約に進む'}</button>
       </div></div>
     </PublicRecruitShell>
   );
