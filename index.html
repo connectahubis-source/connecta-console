@@ -1896,6 +1896,10 @@ svg{display:block}
       <a href="#paypay" class="nav-item" data-nav="paypay"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a3 3 0 0 1 0 6H9V8zm0 6v4"/></svg>PayPay 決済管理</a>
       <a href="#coupons" class="nav-item" data-nav="coupons"><svg class="ic" viewBox="0 0 24 24"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>クーポン管理</a>
       <a href="#departments" class="nav-item" data-nav="departments"><svg class="ic" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>部署 / チーム</a>
+      <a href="#mypage" class="nav-item" data-nav="mypage"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>マイページ</a>
+      <a href="#manager-staff" class="nav-item" data-nav="manager-staff" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>運営管理</a>
+      <a href="#member-admin" class="nav-item" data-nav="member-admin"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>メンバー管理</a>
+      <a href="#approvals" class="nav-item" data-nav="approvals" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>承認</a>
       <a href="#org" class="nav-item" data-nav="org"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>団体紹介</a>
       <a href="#ads" class="nav-item" data-nav="ads"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>広告</a>
     </div>
@@ -2036,6 +2040,20 @@ svg{display:block}
         localStorage.removeItem('connecta.memberId');
       }
     } catch (e) {}
+  };
+
+  // (PhaseA) 認証トークン (キー: 'connecta.token')
+  window.getStoredToken = function() { try { return localStorage.getItem('connecta.token') || ''; } catch (e) { return ''; } };
+  window.setStoredToken = function(token) { try { if (token) localStorage.setItem('connecta.token', token); else localStorage.removeItem('connecta.token'); } catch (e) {} };
+
+  // (PhaseB) 認証切れ検知 → 資格情報を破棄して再ログインへ
+  window.__authRedirecting = false;
+  window.__handleUnauthorized__ = function() {
+    if (window.__authRedirecting) return;
+    window.__authRedirecting = true;
+    try { window.setStoredToken(''); window.setStoredMemberId(''); window.currentUser = null; } catch (e) {}
+    try { if (window.toast) window.toast.error('セッションが切れました。再ログインしてください。'); } catch (e) {}
+    setTimeout(function() { try { location.reload(); } catch (e) {} }, 700);
   };
 
   // ============================================================================
@@ -2433,7 +2451,7 @@ svg{display:block}
       window.CONFIG.GAS_API_URL +
       '?action=' + encodeURIComponent(action) +
       '&memberId=' + encodeURIComponent(memberId) +
-      '&params=' + encodeURIComponent(JSON.stringify(params));
+      '&params=' + encodeURIComponent(JSON.stringify(Object.assign({}, params, { token: window.getStoredToken() })));
 
     const promise = (async () => {
       try {
@@ -2444,6 +2462,7 @@ svg{display:block}
         if (json.user !== undefined) {
           window.currentUser = json.user;
         }
+        if (json && json.unauthorized) { try { window.__handleUnauthorized__ && window.__handleUnauthorized__(); } catch (e) {} }
         if (!json.ok) {
           throw new Error(_humanizeError(json.error));
         }
@@ -2479,7 +2498,7 @@ svg{display:block}
     const res = await fetch(window.CONFIG.GAS_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, payload, memberId }),
+      body: JSON.stringify({ action, payload, memberId, token: window.getStoredToken() }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
@@ -2488,6 +2507,7 @@ svg{display:block}
       window.currentUser = json.user;
     }
 
+    if (json && json.unauthorized) { try { window.__handleUnauthorized__ && window.__handleUnauthorized__(); } catch (e) {} }
     if (!json.ok) {
       throw new Error(_humanizeError(json.error));
     }
@@ -2570,6 +2590,41 @@ svg{display:block}
     }
     setInterval(pollBadges, POLL_MS);
     window.addEventListener('load', function(){ setTimeout(pollBadges, 4000); });
+  })();
+
+  // (Step1D) 承認ナビ: 代表のみ表示 + 承認待ち件数バッジ
+  (function(){
+    function navEl(){ return document.querySelector('a[data-nav="approvals"]'); }
+    function setBadge(a, n){
+      var b = a.querySelector('.n-badge');
+      if (n > 0) { if(!b){ b=document.createElement('span'); b.className='n-badge'; a.appendChild(b); } b.textContent = n>99?'99+':String(n); }
+      else if (b) { b.remove(); }
+    }
+    function update(){
+      var a = navEl(); if(!a) return;
+      var isChair = !!(window.hasRole && window.hasRole('代表'));
+      if(!isChair){ a.style.display='none'; return; }
+      a.style.display='';
+      if (typeof window.fetchData !== 'function' || document.visibilityState === 'hidden') return;
+      window.fetchData('listMembershipChangeRequests', { status:'pending' }).then(function(rows){
+        setBadge(a, Array.isArray(rows)?rows.length:0);
+      }).catch(function(){});
+    }
+    window.__refreshApprovalsBadge__ = update;
+    setInterval(update, 60000);
+    window.addEventListener('load', function(){ setTimeout(update, 1500); setTimeout(update, 5000); });
+    document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') update(); });
+  })();
+
+  // (Phase2-3) 運営管理ナビ: マネージャー以上のみ表示
+  (function(){
+    function update(){
+      var a = document.querySelector('a[data-nav="manager-staff"]'); if(!a) return;
+      a.style.display = (window.hasRole && window.hasRole('マネージャー')) ? '' : 'none';
+    }
+    setInterval(update, 60000);
+    window.addEventListener('load', function(){ setTimeout(update, 1500); setTimeout(update, 5000); });
+    document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') update(); });
   })();
 </script>
 
@@ -17862,6 +17917,1487 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
     </div>
   );
 }
+
+// ============ メンバー管理: 構成員一覧 (Step1C 前半) ============
+// 構成員 新規登録モーダル (Step1C)
+function MemberRegisterModal({ depts, onClose, onCreated }) {
+  const [name, setName] = useState('');
+  const [kana, setKana] = useState('');
+  const [email, setEmail] = useState('');
+  const [deptId, setDeptId] = useState('');
+  const [role, setRole] = useState('メンバー');
+  const [title, setTitle] = useState('');
+  const [grade, setGrade] = useState('');
+  const [school, setSchool] = useState('');
+  const [residencePref, setResidencePref] = useState('');
+  const [residenceCountry, setResidenceCountry] = useState('');
+  const [remote, setRemote] = useState(false);
+  const [joinedAt, setJoinedAt] = useState('');
+  const [joinMonth, setJoinMonth] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const ROLES = ['代表', '副代表', 'マネージャー', 'アシマネ', 'メンバー'];
+
+  async function submit() {
+    setErr('');
+    if (!name.trim()) { setErr('氏名は必須です'); return; }
+    if (!email.trim()) { setErr('メールは必須です'); return; }
+    if (!deptId) { setErr('主所属の部署を選択してください'); return; }
+    if (!role) { setErr('ロールを選択してください'); return; }
+    setBusy(true);
+    try {
+      const res = await window.postData('registerMember', {
+        name: name.trim(), kana: kana.trim(), email: email.trim(),
+        deptId: deptId, role: role, title: title.trim(), grade: grade.trim(), school: school.trim(),
+        residencePref: residencePref.trim(), residenceCountry: residenceCountry.trim(),
+        remote: remote, joinedAt: joinedAt || undefined, joinMonth: joinMonth.trim(),
+      });
+      if (res && res.ok) {
+        onCreated && onCreated(res);
+      } else {
+        const msg = (res && res.error) || '登録に失敗しました';
+        setErr(msg);
+        if (window.toast) window.toast.error(msg);
+        setBusy(false);
+      }
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      setErr(msg);
+      if (window.toast) window.toast.error(msg);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={onClose}>
+      <div className="card" style={{ width: 560, maxWidth: '94%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div className="card-head">
+          <div className="card-title"><Icon n="user" s={16} /> 構成員を新規登録</div>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><Icon n="x" s={16} /></button>
+        </div>
+        <div className="card-body">
+          {err && <div className="error-banner"><Icon n="warn" s={14} cls="error-banner-icon" /><div>{err}</div></div>}
+
+          <div style={{ marginBottom: 10 }}>
+            <label className="field-label">氏名 <span className="field-req">*</span></label>
+            <input className="input input-lg" value={name} onChange={e => setName(e.target.value)} placeholder="例: 山田 太郎" />
+          </div>
+          <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label className="field-label">カナ</label>
+              <input className="input" value={kana} onChange={e => setKana(e.target.value)} placeholder="ヤマダ タロウ" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="field-label">メール <span className="field-req">*</span></label>
+              <input className="input" value={email} onChange={e => setEmail(e.target.value)} placeholder="taro@example.com" />
+            </div>
+          </div>
+          <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label className="field-label">主所属の部署 <span className="field-req">*</span></label>
+              <div className="select-wrap">
+                <select className="input select" value={deptId} onChange={e => setDeptId(e.target.value)}>
+                  <option value="">選択してください</option>
+                  {(depts || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="field-label">ロール <span className="field-req">*</span></label>
+              <div className="select-wrap">
+                <select className="input select" value={role} onChange={e => setRole(e.target.value)}>
+                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <label className="field-label">役職（任意）</label>
+            <input className="input" value={title} onChange={e => setTitle(e.target.value)} placeholder="未入力ならロールと同じ" list="member-title-presets" />
+            <datalist id="member-title-presets">
+              <option value="代表" /><option value="副代表" /><option value="マネージャー" /><option value="アシマネ" /><option value="メンバー" />
+              <option value="リーダー" /><option value="サブリーダー" /><option value="班長" /><option value="担当" />
+            </datalist>
+          </div>
+          <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}><label className="field-label">学年</label><input className="input" value={grade} onChange={e => setGrade(e.target.value)} placeholder="例: B3" /></div>
+            <div style={{ flex: 1 }}><label className="field-label">学校</label><input className="input" value={school} onChange={e => setSchool(e.target.value)} placeholder="例: ○○大学" /></div>
+          </div>
+          <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}><label className="field-label">在住都道府県</label><input className="input" value={residencePref} onChange={e => setResidencePref(e.target.value)} placeholder="例: 東京都" /></div>
+            <div style={{ flex: 1 }}><label className="field-label">在住国</label><input className="input" value={residenceCountry} onChange={e => setResidenceCountry(e.target.value)} placeholder="例: 日本" /></div>
+          </div>
+          <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}><label className="field-label">入会日</label><input className="input" type="date" value={joinedAt} onChange={e => setJoinedAt(e.target.value)} /></div>
+            <div style={{ flex: 1 }}><label className="field-label">入会時期</label><input className="input" value={joinMonth} onChange={e => setJoinMonth(e.target.value)} placeholder="例: 2026-05" /></div>
+          </div>
+          <label className="row" style={{ gap: 8, alignItems: 'center', marginTop: 4, cursor: 'pointer' }}>
+            <input type="checkbox" checked={remote} onChange={e => setRemote(e.target.checked)} />
+            <span style={{ fontSize: 13 }}>フルリモート</span>
+          </label>
+        </div>
+        <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>キャンセル</button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? '登録中...' : '登録する'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function PageMembersAdmin() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("active"); // active / left / all
+  const [deptFilter, setDeptFilter] = useState("all");
+  const [depts, setDepts] = useState([]);
+  const [showReg, setShowReg] = useState(false);
+  function exportCSV() {
+    const header = ['表示ID', '氏名', 'カナ', 'メール', '部署', '役職', '状態'];
+    const esc = v => { const t = (v == null ? '' : String(v)); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const lines = [header.join(',')];
+    filtered.forEach(m => {
+      lines.push([m.memberCode, m.name, m.nameKana, m.email, m.primary ? m.primary.deptName : '', m.primary ? m.primary.role : '', m.status].map(esc).join(','));
+    });
+    const csv = '\ufeff' + lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'members_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (window.toast) window.toast.success('CSVを書き出しました（' + filtered.length + '件）');
+  }
+
+  async function fetchAll() {
+    setLoading(true); setError(null);
+    try {
+      const data = await window.fetchData('listMembersDetail');
+      setRows(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError(e && e.message ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { window.fetchData('listDepartments').then(ds => setDepts(Array.isArray(ds) ? ds : [])).catch(() => {}); }, []);
+
+  const deptOptions = useMemo(() => {
+    const s = new Set();
+    rows.forEach(m => {
+      if (m.primary && m.primary.deptName) s.add(m.primary.deptName);
+      (m.concurrent || []).forEach(c => { if (c.deptName) s.add(c.deptName); });
+    });
+    return Array.from(s).sort();
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter(m => {
+      if (statusFilter === "active" && !m.isActive) return false;
+      if (statusFilter === "left" && m.isActive) return false;
+      if (deptFilter !== "all") {
+        const depts = [m.primary && m.primary.deptName]
+          .concat((m.concurrent || []).map(c => c.deptName)).filter(Boolean);
+        if (depts.indexOf(deptFilter) < 0) return false;
+      }
+      if (q) {
+        const hay = [m.name, m.email, m.memberCode, m.nameKana].filter(Boolean).join(' ').toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+  }, [rows, query, statusFilter, deptFilter]);
+
+  const activeCount = rows.filter(m => m.isActive).length;
+  const leftCount = rows.filter(m => !m.isActive).length;
+
+  function fmtDate(s) {
+    if (!s) return '—';
+    try {
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return String(s);
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    } catch (e) { return String(s); }
+  }
+  function statusBadgeColor(m) {
+    if (m.isActive && m.status === '在籍中') return 'badge-green';
+    if (!m.isActive) return 'badge-amber';
+    return 'badge-indigo';
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>メンバー管理</h1>
+        <p style={{ fontSize: 13, color: 'var(--ink3)', margin: '4px 0 0' }}>
+          構成員の一覧です。詳細・新規登録・変更申請は順次追加します。
+        </p>
+      </div>
+
+      <div className="jb-stat-grid">
+        <MiniStat label="在籍中" value={loading ? '…' : String(activeCount)} sub="" icon="users" color="indigo" />
+        <MiniStat label="退会済み" value={loading ? '…' : String(leftCount)} sub="" icon="user" color="amber" />
+        <MiniStat label="表示中" value={String(filtered.length)} sub="" icon="list" color="violet" />
+      </div>
+
+      <div className="card mt16">
+        <div className="card-head">
+          <div className="card-title"><Icon n="users" s={16} /> 構成員一覧</div>
+          <div className="row" style={{ gap: 6 }}>
+            {window.hasRole && window.hasRole('代表') && <button className="btn btn-sm" onClick={exportCSV}><Icon n="download" s={14} /> CSVエクスポート</button>}
+            <button className="btn btn-primary btn-sm" onClick={() => setShowReg(true)}><Icon n="plus" s={14} /> 新規登録</button>
+            <button className="btn btn-ghost btn-sm" onClick={fetchAll} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
+          </div>
+        </div>
+
+        <div className="row" style={{ padding: '10px 14px', gap: 8, borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
+          <div className="search-bar" style={{ flex: 1, maxWidth: 280 }}>
+            <Icon n="search" s={14} />
+            <input className="input" placeholder="氏名・メール・CN..." value={query} onChange={e => setQuery(e.target.value)} />
+          </div>
+          <div className="select-wrap" style={{ minWidth: 140 }}>
+            <select className="input select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="active">在籍中</option>
+              <option value="left">退会済み</option>
+              <option value="all">全て</option>
+            </select>
+          </div>
+          <div className="select-wrap" style={{ minWidth: 160 }}>
+            <select className="input select" value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
+              <option value="all">全部署</option>
+              {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {error && (
+          <div style={{ padding: 16, color: 'var(--coral)', fontSize: 13 }}>
+            読み込みエラー: {error}{' '}
+            <button className="btn btn-sm" onClick={fetchAll}>再試行</button>
+          </div>
+        )}
+        {loading && rows.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>
+        )}
+        {!loading && !error && filtered.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>該当する構成員がいません。</div>
+        )}
+
+        {filtered.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th style={{ width: 32 }}></th>
+                  <th>構成員ID</th><th>氏名</th><th>部署</th><th>役職</th>
+                  <th>学年</th><th>在住</th><th>メール</th><th>状態</th><th>最終更新</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(m => {
+                  const concurrentN = (m.concurrent || []).length;
+                  const residence = [m.residencePref, m.residenceCountry].filter(Boolean).join(' / ');
+                  return (
+                    <tr key={m.id} style={{ opacity: m.isActive ? 1 : 0.5, cursor: 'pointer' }} onClick={() => { window.location.hash = 'member-detail?id=' + encodeURIComponent(m.id); }}>
+                      <td><div className={`avatar sm ${m.accent || 'indigo'}`}>{m.initial || (m.name || '').slice(0, 1)}</div></td>
+                      <td className="mono" style={{ fontSize: 12 }}>{m.memberCode || '—'}</td>
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{m.name}</div>
+                        {m.nameKana && <div style={{ fontSize: 11, color: 'var(--ink4)' }}>{m.nameKana}</div>}
+                      </td>
+                      <td style={{ fontSize: 12 }}>
+                        {m.primary ? m.primary.deptName : <span style={{ color: 'var(--ink4)' }}>未設定</span>}
+                        {concurrentN > 0 && <span className="chip" style={{ marginLeft: 6, fontSize: 10 }}>他{concurrentN}</span>}
+                      </td>
+                      <td style={{ fontSize: 12, fontWeight: 500 }}>{m.primary ? m.primary.role : (m.highestRole || '—')}</td>
+                      <td style={{ fontSize: 12 }}>{m.grade || '—'}</td>
+                      <td style={{ fontSize: 12 }}>{residence || '—'}</td>
+                      <td style={{ fontSize: 11, color: 'var(--ink4)' }}>{m.email || '—'}</td>
+                      <td><span className={clsx("badge", statusBadgeColor(m))}><span className="badge-dot"></span>{m.status}</span></td>
+                      <td className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{fmtDate(m.updatedAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {showReg && <MemberRegisterModal depts={depts} onClose={() => setShowReg(false)} onCreated={(res) => { setShowReg(false); if (window.toast) window.toast.success('登録しました' + (res && res.memberCode ? ' (' + res.memberCode + ')' : '')); if (res && res.memberId) { window.location.hash = 'member-detail?id=' + encodeURIComponent(res.memberId); } else { fetchAll(); } }} />}
+    </div>
+  );
+}
+
+
+window.PageMembersAdmin = PageMembersAdmin;
+
+// ============ メンバー管理: 構成員詳細 (Step1C 後半) ============
+// 構成員 変更申請モーダル (Step1D)
+function MemberChangeRequestModal({ member, depts, onClose, onSubmitted }) {
+  const [type, setType] = useState('department_add');
+  const [beforeDept, setBeforeDept] = useState('');
+  const [afterDept, setAfterDept] = useState('');
+  const [afterRole, setAfterRole] = useState('メンバー');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const ROLES = ['代表', '副代表', 'マネージャー', 'アシマネ', 'メンバー'];
+  const TYPES = [
+    ['department_add', '部署追加'], ['department_change', '部署変更'],
+    ['role_change', '役職変更'], ['department_leave', '部署退部'], ['full_withdrawal', '完全退会'],
+  ];
+  const affs = (member && member.affiliations) || [];
+  const currentIds = {};
+  affs.forEach(a => { currentIds[a.deptId] = true; });
+  const addOptions = (depts || []).filter(d => !currentIds[d.id]);
+  const leaveOptions = affs.filter(a => !a.isPrimary);
+
+  function changeType(v) { setType(v); setBeforeDept(''); setAfterDept(''); setAfterRole('メンバー'); setErr(''); }
+
+  async function submit() {
+    setErr('');
+    if (type === 'department_add' && !afterDept) { setErr('追加する部署を選択してください'); return; }
+    if (type === 'department_change' && (!beforeDept || !afterDept)) { setErr('変更前と変更後の部署を選択してください'); return; }
+    if (type === 'role_change' && (!beforeDept || !afterRole)) { setErr('対象部署と変更後の役職を選択してください'); return; }
+    if (type === 'department_leave' && !beforeDept) { setErr('退部する部署を選択してください'); return; }
+
+    const applicant = (window.currentUser && window.currentUser.member && window.currentUser.member.id)
+      || (window.getStoredMemberId && window.getStoredMemberId()) || '';
+    setBusy(true);
+    try {
+      const res = await window.postData('submitMembershipChangeRequest', {
+        type: type, memberId: member.id,
+        beforeDept: beforeDept, afterDept: afterDept,
+        afterRole: (type === 'department_add' || type === 'role_change' || type === 'department_change') ? afterRole : '',
+        reason: reason.trim(), applicant: applicant,
+      });
+      if (res && res.ok) {
+        if (window.toast) window.toast.success('変更申請を送信しました (' + res.requestId + ')');
+        onSubmitted && onSubmitted(res);
+      } else {
+        const msg = (res && res.error) || '申請に失敗しました';
+        setErr(msg); if (window.toast) window.toast.error(msg); setBusy(false);
+      }
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      setErr(msg); if (window.toast) window.toast.error(msg); setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={onClose}>
+      <div className="card" style={{ width: 520, maxWidth: '94%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div className="card-head">
+          <div className="card-title"><Icon n="edit" s={16} /> 変更申請 — {member && member.name}</div>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><Icon n="x" s={16} /></button>
+        </div>
+        <div className="card-body">
+          {err && <div className="error-banner"><Icon n="warn" s={14} cls="error-banner-icon" /><div>{err}</div></div>}
+
+          <div style={{ marginBottom: 10 }}>
+            <label className="field-label">変更種別 <span className="field-req">*</span></label>
+            <div className="select-wrap">
+              <select className="input select" value={type} onChange={e => changeType(e.target.value)}>
+                {TYPES.map(t => <option key={t[0]} value={t[0]}>{t[1]}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {type === 'department_add' && (
+            <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label className="field-label">追加する部署 <span className="field-req">*</span></label>
+                <div className="select-wrap">
+                  <select className="input select" value={afterDept} onChange={e => setAfterDept(e.target.value)}>
+                    <option value="">選択してください</option>
+                    {addOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="field-label">役職</label>
+                <div className="select-wrap">
+                  <select className="input select" value={afterRole} onChange={e => setAfterRole(e.target.value)}>
+                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {type === 'department_change' && (
+            <div>
+              <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="field-label">変更前の部署 <span className="field-req">*</span></label>
+                  <div className="select-wrap">
+                    <select className="input select" value={beforeDept} onChange={e => setBeforeDept(e.target.value)}>
+                      <option value="">選択してください</option>
+                      {affs.map(a => <option key={a.deptId} value={a.deptId}>{a.deptName}{a.isPrimary ? '（主所属）' : ''}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="field-label">変更後の部署 <span className="field-req">*</span></label>
+                  <div className="select-wrap">
+                    <select className="input select" value={afterDept} onChange={e => setAfterDept(e.target.value)}>
+                      <option value="">選択してください</option>
+                      {(depts || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">変更後の役職（任意・未指定なら現状維持）</label>
+                <div className="select-wrap">
+                  <select className="input select" value={afterRole} onChange={e => setAfterRole(e.target.value)}>
+                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {type === 'role_change' && (
+            <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label className="field-label">対象の部署 <span className="field-req">*</span></label>
+                <div className="select-wrap">
+                  <select className="input select" value={beforeDept} onChange={e => setBeforeDept(e.target.value)}>
+                    <option value="">選択してください</option>
+                    {affs.map(a => <option key={a.deptId} value={a.deptId}>{a.deptName}（現: {a.role}）</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="field-label">変更後の役職 <span className="field-req">*</span></label>
+                <div className="select-wrap">
+                  <select className="input select" value={afterRole} onChange={e => setAfterRole(e.target.value)}>
+                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {type === 'department_leave' && (
+            <div style={{ marginBottom: 10 }}>
+              <label className="field-label">退部する部署 <span className="field-req">*</span></label>
+              <div className="select-wrap">
+                <select className="input select" value={beforeDept} onChange={e => setBeforeDept(e.target.value)}>
+                  <option value="">選択してください</option>
+                  {leaveOptions.map(a => <option key={a.deptId} value={a.deptId}>{a.deptName}</option>)}
+                </select>
+              </div>
+              {leaveOptions.length === 0 && <p style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 6 }}>退部できる兼任部署がありません（主所属は退部できません。部署変更か完全退会を使用）。</p>}
+            </div>
+          )}
+
+          {type === 'full_withdrawal' && (
+            <p style={{ fontSize: 12.5, color: 'var(--ink3)', marginBottom: 10 }}>完全退会の申請です。承認されると退会扱いとなり、すべての所属が終了します。</p>
+          )}
+
+          <div style={{ marginBottom: 4 }}>
+            <label className="field-label">理由</label>
+            <textarea className="input" rows={2} value={reason} onChange={e => setReason(e.target.value)} placeholder="変更の理由（任意）" />
+          </div>
+        </div>
+        <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>キャンセル</button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? '送信中...' : '申請する'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function PageMemberDetail() {
+  const [id, setId] = useState(() => {
+    try {
+      const h = window.location.hash || '';
+      const q = h.indexOf('?');
+      if (q < 0) return '';
+      return new URLSearchParams(h.substring(q + 1)).get('id') || '';
+    } catch (e) { return ''; }
+  });
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [tab, setTab] = useState('basic'); // basic / affiliation
+  const [depts, setDepts] = useState([]);
+  const [showReq, setShowReq] = useState(false);
+  const [histories, setHistories] = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histLoaded, setHistLoaded] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [oneonones, setOneonones] = useState([]);
+  const [ooLoading, setOoLoading] = useState(false);
+  const [ooLoaded, setOoLoaded] = useState(false);
+  const [ooAllowed, setOoAllowed] = useState(false);
+  const [ooForm, setOoForm] = useState(null);
+  const [ooBusy, setOoBusy] = useState(false);
+  const [ooErr, setOoErr] = useState('');
+  async function doReset() {
+    if (!member) return;
+    setResetBusy(true);
+    try {
+      const res = await window.postData('resetMemberPassword', { memberId: member.id, by: (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '' });
+      if (res && res.ok) { if (window.toast) window.toast.success('パスワードをリセットしました'); setConfirmReset(false); }
+      else { if (window.toast) window.toast.error((res && res.error) || 'リセットに失敗しました'); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setResetBusy(false); }
+  }
+  async function saveOo() {
+    setOoErr('');
+    if (!ooForm.date) { setOoErr('面談日を入力してください'); return; }
+    setOoBusy(true);
+    try {
+      const base = { type: ooForm.type, date: ooForm.date, memo: ooForm.memo, minutesUrl: ooForm.minutesUrl, nextAction: ooForm.nextAction, nextDate: ooForm.nextDate };
+      const res = ooForm.logId
+        ? await window.postData('updateOneOnOne', Object.assign({ logId: ooForm.logId }, base))
+        : await window.postData('createOneOnOne', Object.assign({ memberId: member.id }, base));
+      if (res && res.ok) { if (window.toast) window.toast.success(ooForm.logId ? '1on1記録を更新しました' : '1on1記録を追加しました'); setOoForm(null); setOoLoaded(false); }
+      else { setOoErr((res && res.error) || '保存に失敗しました'); }
+    } catch (err) { setOoErr(err && err.message ? err.message : String(err)); }
+    finally { setOoBusy(false); }
+  }
+  async function deleteOo(logId) {
+    if (!window.confirm('この1on1記録を削除しますか？')) return;
+    try {
+      const res = await window.postData('deleteOneOnOne', { logId: logId });
+      if (res && res.ok) { if (window.toast) window.toast.success('削除しました'); setOoLoaded(false); }
+      else { if (window.toast) window.toast.error((res && res.error) || '削除に失敗しました'); }
+    } catch (err) { if (window.toast) window.toast.error(err && err.message ? err.message : String(err)); }
+  }
+
+  useEffect(() => {
+    const onHash = () => {
+      try {
+        const h = window.location.hash || '';
+        const q = h.indexOf('?');
+        const qs = q >= 0 ? new URLSearchParams(h.substring(q + 1)) : new URLSearchParams();
+        const nid = qs.get('id') || '';
+        setId(prev => (nid !== prev ? nid : prev));
+      } catch (e) {}
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  async function load() {
+    setLoading(true); setError(null);
+    try {
+      const data = await window.fetchData('listMembersDetail');
+      setRows(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError(e && e.message ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+  useEffect(() => { window.fetchData('listDepartments').then(ds => setDepts(Array.isArray(ds) ? ds : [])).catch(() => {}); }, []);
+  useEffect(() => { setHistLoaded(false); setHistories([]); setOoLoaded(false); setOneonones([]); setOoAllowed(false); }, [id]);
+  useEffect(() => {
+    if (tab !== 'history' || !member || histLoaded) return;
+    setHistLoading(true);
+    window.fetchData('listMemberHistories', { memberId: member.id })
+      .then(d => { setHistories(Array.isArray(d) ? d : []); setHistLoaded(true); })
+      .catch(() => {}).then(() => setHistLoading(false));
+  }, [tab, member, histLoaded]);
+  useEffect(() => {
+    if (tab !== 'oneonone' || !member || ooLoaded) return;
+    setOoLoading(true);
+    window.fetchData('listOneOnOnes', { memberId: member.id })
+      .then(d => { setOoAllowed(!!(d && d.allowed)); setOneonones((d && Array.isArray(d.logs)) ? d.logs : []); setOoLoaded(true); })
+      .catch(() => { setOoAllowed(false); setOneonones([]); setOoLoaded(true); }).then(() => setOoLoading(false));
+  }, [tab, member, ooLoaded]);
+
+  const member = useMemo(() => rows.find(m => m.id === id) || null, [rows, id]);
+
+  function fmtDate(s) {
+    if (!s) return '—';
+    try {
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return String(s);
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    } catch (e) { return String(s); }
+  }
+  function goBack() { window.location.hash = 'member-admin'; }
+  function infoRow(label, value) {
+    return (
+      <div className="row between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
+        <span style={{ fontSize: 12, color: 'var(--ink4)' }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 500, textAlign: 'right' }}>{value}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>← 一覧へ戻る</button>
+
+      {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>}
+      {error && (
+        <div style={{ padding: 16, color: 'var(--coral)', fontSize: 13 }}>
+          読み込みエラー: {error}{' '}<button className="btn btn-sm" onClick={load}>再試行</button>
+        </div>
+      )}
+      {!loading && !error && !member && (
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>
+          構成員が見つかりません（ID: {id || '未指定'}）。
+          <div style={{ marginTop: 10 }}><button className="btn btn-sm" onClick={goBack}>一覧へ戻る</button></div>
+        </div>
+      )}
+
+      {!loading && !error && member && (
+        <div>
+          <div className="card">
+            <div className="card-body row" style={{ gap: 14, alignItems: 'center' }}>
+              <div className={`avatar lg ${member.accent || 'indigo'}`}>{member.initial || (member.name || '').slice(0, 1)}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>
+                  {member.name}
+                  {member.nameKana && <span style={{ fontSize: 12, color: 'var(--ink4)', marginLeft: 8 }}>{member.nameKana}</span>}
+                </div>
+                <div className="row" style={{ gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="mono" style={{ fontSize: 12, color: 'var(--ink4)' }}>{member.memberCode || '—'}</span>
+                  <span className={clsx("badge", member.isActive ? "badge-green" : "badge-amber")}><span className="badge-dot"></span>{member.status}</span>
+                  <span className="badge badge-indigo">{member.highestRole}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="row between" style={{ margin: '14px 0', alignItems: 'center' }}>
+            <div className="row" style={{ gap: 6 }}>
+              <span className={clsx("chip", tab === 'basic' && "on")} onClick={() => setTab('basic')}>基本情報</span>
+              <span className={clsx("chip", tab === 'affiliation' && "on")} onClick={() => setTab('affiliation')}>現所属</span>
+              <span className={clsx("chip", tab === 'history' && "on")} onClick={() => setTab('history')}>履歴</span>
+              <span className={clsx("chip", tab === 'oneonone' && "on")} onClick={() => setTab('oneonone')}>1on1</span>
+            </div>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm" onClick={() => setShowReq(true)}><Icon n="edit" s={14} /> 変更申請</button>
+              {window.hasRole && window.hasRole('代表') && <button className="btn btn-ghost btn-sm" onClick={() => setConfirmReset(true)}><Icon n="lock" s={14} /> パスワードリセット</button>}
+            </div>
+          </div>
+
+          {tab === 'basic' && (
+            <div className="card"><div className="card-body">
+              {infoRow('構成員ID', member.memberCode || '—')}
+              {infoRow('氏名', member.name || '—')}
+              {infoRow('カナ', member.nameKana || '—')}
+              {infoRow('メール', member.email || '—')}
+              {infoRow('学年', member.grade || '—')}
+              {infoRow('学校', member.school || '—')}
+              {infoRow('在住', [member.residencePref, member.residenceCountry].filter(Boolean).join(' / ') || '—')}
+              {infoRow('フルリモート', member.remote ? 'はい' : 'いいえ')}
+              {infoRow('入会日', fmtDate(member.joinDate))}
+              {infoRow('入会時期', member.joinMonth || '—')}
+              {infoRow('状態', member.status)}
+              {!member.isActive && infoRow('退会日', fmtDate(member.leftAt))}
+              {infoRow('最高ロール', member.highestRole)}
+              {infoRow('最終更新', fmtDate(member.updatedAt))}
+            </div></div>
+          )}
+
+          {tab === 'affiliation' && (
+            <div>
+              <div className="card">
+                <div className="card-head"><div className="card-title"><Icon n="star" s={15} /> 主所属（主担当）</div></div>
+                <div className="card-body">
+                  {member.primary ? (
+                    <div className="row between" style={{ alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{member.primary.deptName}</div>
+                        <div style={{ fontSize: 11, color: 'var(--ink4)' }}>開始: {fmtDate(member.primary.startDate)}</div>
+                      </div>
+                      <span className="badge badge-indigo">{member.primary.role}</span>
+                    </div>
+                  ) : <div style={{ color: 'var(--ink4)', fontSize: 13 }}>主所属が設定されていません。</div>}
+                </div>
+              </div>
+
+              <div className="card mt16">
+                <div className="card-head">
+                  <div className="card-title">
+                    <Icon n="layers" s={15} /> 兼任
+                    {member.concurrent.length > 0 && <span style={{ color: 'var(--ink4)', fontWeight: 400 }}>（{member.concurrent.length}）</span>}
+                  </div>
+                </div>
+                <div className="card-body">
+                  {member.concurrent.length > 0 ? member.concurrent.map((c, i) => (
+                    <div key={c.roleId || i} className="row between" style={{ padding: '8px 0', alignItems: 'center', borderBottom: i < member.concurrent.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                      <div>
+                        <div style={{ fontWeight: 500 }}>{c.deptName}</div>
+                        <div style={{ fontSize: 11, color: 'var(--ink4)' }}>開始: {fmtDate(c.startDate)}</div>
+                      </div>
+                      <span className="badge">{c.role}</span>
+                    </div>
+                  )) : <div style={{ color: 'var(--ink4)', fontSize: 13 }}>兼任はありません。</div>}
+                </div>
+              </div>
+
+              <p style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 10 }}>退部済みの所属は「履歴」タブで確認できます。ここには在籍中の所属のみ表示しています。</p>
+            </div>
+          )}
+          {tab === 'history' && (
+            <div className="card"><div className="card-body">
+              {histLoading && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>}
+              {!histLoading && histories.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>変更履歴はありません。</div>}
+              {!histLoading && histories.map((h, i) => (
+                <div key={h.histId || i} style={{ padding: '10px 0', borderBottom: i < histories.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                  <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span className="badge badge-indigo">{h.typeLabel}</span>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{fmtDate(h.changedAt)}</span>
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 13 }}>{h.before ? (h.before + ' → ' + h.after) : h.after}</div>
+                  {h.reason && <div style={{ marginTop: 2, fontSize: 12, color: 'var(--ink3)' }}>理由: {h.reason}</div>}
+                  <div style={{ marginTop: 2, fontSize: 11, color: 'var(--ink4)' }}>実行: {h.actor} ／ 承認: {h.approver}</div>
+                </div>
+              ))}
+            </div></div>
+          )}
+          {tab === 'oneonone' && (
+            <div className="card"><div className="card-body">
+              <div className="row between" style={{ alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: 'var(--ink3)' }}>面談記録（本人・担当マネージャー・代表のみ閲覧）</div>
+                {window.hasRole && window.hasRole('マネージャー') && <button className="btn btn-primary btn-sm" onClick={() => { setOoErr(''); setOoForm({ type: 'manager_1on1', date: '', memo: '', minutesUrl: '', nextAction: '', nextDate: '' }); }}><Icon n="plus" s={14} /> 1on1記録を追加</button>}
+              </div>
+              {ooLoading && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>}
+              {!ooLoading && !ooAllowed && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>この記録を閲覧する権限がありません。</div>}
+              {!ooLoading && ooAllowed && oneonones.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>記録はありません。</div>}
+              {!ooLoading && ooAllowed && oneonones.map(o => (
+                <div key={o.logId} className="card" style={{ marginBottom: 10 }}>
+                  <div className="card-body">
+                    <div className="row between" style={{ alignItems: 'center' }}>
+                      <div className="row" style={{ gap: 8, alignItems: 'center' }}><span className="badge badge-indigo">{o.typeLabel}</span><span className="mono" style={{ fontSize: 12 }}>{o.date || '日付未設定'}</span></div>
+                      {window.hasRole && window.hasRole('マネージャー') && (
+                        <div className="row" style={{ gap: 6 }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setOoErr(''); setOoForm({ logId: o.logId, type: o.type || 'manager_1on1', date: o.date || '', memo: o.memo || '', minutesUrl: o.minutesUrl || '', nextAction: o.nextAction || '', nextDate: o.nextDate || '' }); }}><Icon n="edit" s={13} /></button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => deleteOo(o.logId)}><Icon n="x" s={13} /></button>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 6 }}>面談担当: {o.interviewer}</div>
+                    {o.memo && <div style={{ fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap' }}>{o.memo}</div>}
+                    {o.minutesUrl && <div style={{ marginTop: 6 }}><a href={o.minutesUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--indigo)' }}>議事録を開く</a></div>}
+                    {o.nextAction && <div style={{ fontSize: 12, marginTop: 6 }}>次回アクション: {o.nextAction}</div>}
+                    {o.nextDate && <div style={{ fontSize: 12, marginTop: 2 }}>次回予定: {o.nextDate}</div>}
+                    <div style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 6 }}>記録者: {o.creator}</div>
+                  </div>
+                </div>
+              ))}
+            </div></div>
+          )}
+        </div>
+      )}
+      {ooForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setOoForm(null)}>
+          <div className="card" style={{ width: 520, maxWidth: '94%', maxHeight: '90vh', overflowY: 'auto' }} onClick={ev => ev.stopPropagation()}>
+            <div className="card-head"><div className="card-title">{ooForm.logId ? '1on1記録の編集' : '1on1記録の追加'}</div></div>
+            <div className="card-body">
+              {ooErr && <div className="error-banner"><Icon n="warn" s={14} cls="error-banner-icon" /><div>{ooErr}</div></div>}
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">面談種別</label>
+                <div className="select-wrap"><select className="input select" value={ooForm.type} onChange={ev => setOoForm(Object.assign({}, ooForm, { type: ev.target.value }))}>
+                  <option value="manager_1on1">マネージャー1on1</option>
+                  <option value="hr_interview">人事面談</option>
+                  <option value="career_interview">キャリア面談</option>
+                  <option value="onboarding">オンボーディング</option>
+                  <option value="offboarding">オフボーディング</option>
+                  <option value="other">その他</option>
+                </select></div>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">面談日 <span className="field-req">*</span></label>
+                <input className="input" type="date" value={ooForm.date} onChange={ev => setOoForm(Object.assign({}, ooForm, { date: ev.target.value }))} />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">面談メモ</label>
+                <textarea className="input" rows={4} value={ooForm.memo} onChange={ev => setOoForm(Object.assign({}, ooForm, { memo: ev.target.value }))} />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">議事録URL</label>
+                <input className="input" value={ooForm.minutesUrl} onChange={ev => setOoForm(Object.assign({}, ooForm, { minutesUrl: ev.target.value }))} placeholder="https://..." />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">次回アクション</label>
+                <input className="input" value={ooForm.nextAction} onChange={ev => setOoForm(Object.assign({}, ooForm, { nextAction: ev.target.value }))} />
+              </div>
+              <div>
+                <label className="field-label">次回面談予定</label>
+                <input className="input" type="date" value={ooForm.nextDate} onChange={ev => setOoForm(Object.assign({}, ooForm, { nextDate: ev.target.value }))} />
+              </div>
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setOoForm(null)} disabled={ooBusy}>キャンセル</button>
+              <button className="btn btn-primary" onClick={saveOo} disabled={ooBusy}>{ooForm.logId ? '更新' : '追加'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmReset && member && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setConfirmReset(false)}>
+          <div className="card" style={{ width: 440, maxWidth: '94%' }} onClick={ev => ev.stopPropagation()}>
+            <div className="card-head"><div className="card-title"><Icon n="lock" s={16} /> パスワードのリセット</div></div>
+            <div className="card-body">
+              <div style={{ fontSize: 13 }}>{member.name} さんのパスワードをリセットします。</div>
+              <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 8 }}>次回ログイン時に本人が新しいパスワードを設定します。現在ログイン中の全端末はログアウトされます。</div>
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmReset(false)} disabled={resetBusy}>やめる</button>
+              <button className="btn btn-primary" onClick={doReset} disabled={resetBusy}>リセットする</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showReq && member && <MemberChangeRequestModal member={member} depts={depts} onClose={() => setShowReq(false)} onSubmitted={() => setShowReq(false)} />}
+    </div>
+  );
+}
+
+window.PageMemberDetail = PageMemberDetail;
+
+// ============ メンバー管理: 承認画面 (Step1D) ============
+function PageApprovals() {
+  const isChair = !!(window.hasRole && window.hasRole('代表'));
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [busyId, setBusyId] = useState('');
+  const [rejecting, setRejecting] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [typeFilter, setTypeFilter] = useState('all');
+
+  async function load() {
+    setLoading(true); setError(null);
+    try {
+      const d = await window.fetchData('listMembershipChangeRequests', { status: statusFilter });
+      setRows(Array.isArray(d) ? d : []);
+      if (window.__refreshApprovalsBadge__) window.__refreshApprovalsBadge__();
+    } catch (e) { setError(e && e.message ? e.message : String(e)); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { if (isChair) load(); else setLoading(false); }, [statusFilter]);
+
+  function myId() {
+    return (window.currentUser && window.currentUser.member && window.currentUser.member.id)
+      || (window.getStoredMemberId && window.getStoredMemberId()) || '';
+  }
+  function fmtDate(s) {
+    if (!s) return '—';
+    try { const d = new Date(s); if (isNaN(d.getTime())) return String(s); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+    catch (e) { return String(s); }
+  }
+  function contentOf(r) {
+    if (r.type === 'department_add') return '＋ ' + r.afterDeptName + ' / ' + (r.afterRole || 'メンバー') + '（兼任追加）';
+    if (r.type === 'department_change') return r.beforeDeptName + ' → ' + r.afterDeptName + (r.afterRole ? ' / ' + r.afterRole : '');
+    if (r.type === 'role_change') return r.beforeDeptName + ': 役職を ' + r.afterRole + ' へ';
+    if (r.type === 'department_leave') return r.beforeDeptName + ' を退部';
+    if (r.type === 'full_withdrawal') return '完全退会';
+    return r.typeLabel;
+  }
+
+  async function approve(r) {
+    setBusyId(r.requestId);
+    try {
+      const res = await window.postData('approveMembershipChangeRequest', { requestId: r.requestId, approverId: myId() });
+      if (res && res.ok) { if (window.toast) window.toast.success('承認しました'); if (window.__refreshApprovalsBadge__) window.__refreshApprovalsBadge__(); load(); }
+      else { if (window.toast) window.toast.error((res && res.error) || '承認に失敗しました'); setBusyId(''); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyId(''); }
+  }
+  async function doReject() {
+    const r = rejecting; if (!r) return;
+    setBusyId(r.requestId);
+    try {
+      const res = await window.postData('rejectMembershipChangeRequest', { requestId: r.requestId, rejecterId: myId(), reason: rejectReason.trim() });
+      if (res && res.ok) { if (window.toast) window.toast.success('却下しました'); if (window.__refreshApprovalsBadge__) window.__refreshApprovalsBadge__(); setRejecting(null); setRejectReason(''); load(); }
+      else { if (window.toast) window.toast.error((res && res.error) || '却下に失敗しました'); setBusyId(''); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyId(''); }
+  }
+
+  if (!isChair) {
+    return (
+      <div>
+        <div style={{ marginBottom: 14 }}><h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>承認</h1></div>
+        <div className="card"><div className="card-body" style={{ textAlign: 'center', color: 'var(--ink4)', padding: 28 }}>
+          <Icon n="lock" s={28} /><div style={{ marginTop: 8 }}>この画面は代表のみ利用できます。</div>
+        </div></div>
+      </div>
+    );
+  }
+
+  const STATUS = [['pending', '承認待ち'], ['approved', '承認済み'], ['rejected', '却下'], ['all', 'すべて']];
+  const TYPE_OPTS = [['all', '全種別'], ['department_add', '部署追加'], ['department_change', '部署変更'], ['role_change', '役職変更'], ['department_leave', '部署退部'], ['full_withdrawal', '完全退会']];
+  const shown = rows.filter(r => typeFilter === 'all' || r.type === typeFilter);
+
+  return (
+    <div>
+      <div className="row between" style={{ marginBottom: 12, alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>承認</h1>
+          <p style={{ fontSize: 13, color: 'var(--ink3)', margin: '4px 0 0' }}>変更申請の一覧です。承認待ちを処理できます。</p>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
+      </div>
+
+      <div className="row between" style={{ marginBottom: 12, alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {STATUS.map(f => (
+            <span key={f[0]} className={clsx('chip', statusFilter === f[0] && 'on')} onClick={() => setStatusFilter(f[0])}>{f[1]}</span>
+          ))}
+        </div>
+        <div className="select-wrap" style={{ minWidth: 150 }}>
+          <select className="input select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            {TYPE_OPTS.map(t => <option key={t[0]} value={t[0]}>{t[1]}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>}
+      {error && <div style={{ padding: 16, color: 'var(--coral)' }}>読み込みエラー: {error} <button className="btn btn-sm" onClick={load}>再試行</button></div>}
+      {!loading && !error && shown.length === 0 && (
+        <div className="card"><div className="card-body" style={{ textAlign: 'center', color: 'var(--ink4)', padding: 28 }}>該当する申請はありません。</div></div>
+      )}
+
+      {!loading && !error && shown.map(r => (
+        <div className="card mb12" key={r.requestId}>
+          <div className="card-body">
+            <div className="row between" style={{ alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="badge badge-indigo">{r.typeLabel}</span>
+                  <span style={{ fontWeight: 700 }}>{r.memberName}</span>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{r.memberCode}</span>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 13 }}>{contentOf(r)}</div>
+                {r.reason && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>理由: {r.reason}</div>}
+                <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ink4)' }}>申請者: {r.applicant || '—'} ／ {fmtDate(r.createdAt)} ／ {r.requestId}</div>
+                {r.status === 'rejected' && r.rejectReason && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--coral)' }}>却下理由: {r.rejectReason}</div>}
+              </div>
+              <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+                {r.status === 'pending' ? (
+                  <>
+                    <button className="btn btn-primary btn-sm" onClick={() => approve(r)} disabled={busyId === r.requestId}><Icon n="check" s={14} /> 承認</button>
+                    <button className="btn btn-sm" onClick={() => { setRejecting(r); setRejectReason(''); }} disabled={busyId === r.requestId}><Icon n="x" s={14} /> 却下</button>
+                  </>
+                ) : (
+                  <span className={clsx('badge', r.status === 'approved' ? 'badge-green' : 'badge-amber')}>{r.status === 'approved' ? '承認済み' : '却下'}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {rejecting && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setRejecting(null)}>
+          <div className="card" style={{ width: 440, maxWidth: '94%' }} onClick={e => e.stopPropagation()}>
+            <div className="card-head"><div className="card-title"><Icon n="x" s={16} /> 申請を却下</div></div>
+            <div className="card-body">
+              <div style={{ fontSize: 13, marginBottom: 8 }}>{rejecting.memberName}（{rejecting.typeLabel}）を却下します。</div>
+              <label className="field-label">却下理由 <span className="field-req">*</span></label>
+              <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="却下の理由（任意）" />
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setRejecting(null)} disabled={busyId === (rejecting && rejecting.requestId)}>キャンセル</button>
+              <button className="btn btn-primary" onClick={doReject} disabled={busyId === (rejecting && rejecting.requestId) || !rejectReason.trim()}>却下する</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+window.PageApprovals = PageApprovals;
+
+// ============ マイページ (Phase2-2) ============
+function PageMyPage() {
+  const me = (window.currentUser && window.currentUser.member) || null;
+  const myId = (me && me.id) || (window.getStoredMemberId && window.getStoredMemberId()) || '';
+  const [events, setEvents] = useState([]);
+  const [myStaff, setMyStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [busyEvent, setBusyEvent] = useState('');
+  const [confirmAbsent, setConfirmAbsent] = useState(null);
+  const [showPwChange, setShowPwChange] = useState(false);
+  const [curPw, setCurPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [newPw2, setNewPw2] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwErr, setPwErr] = useState('');
+  const [signupEvent, setSignupEvent] = useState(null);
+  const [eventDays, setEventDays] = useState([]);
+  const [sAll, setSAll] = useState(true);
+  const [sDays, setSDays] = useState([]);
+  const [sLoadingDays, setSLoadingDays] = useState(false);
+
+  async function load() {
+    if (!myId) { setLoading(false); return; }
+    setLoading(true); setError(null);
+    try {
+      const [ev, mine] = await Promise.all([
+        window.fetchData('listEvents').catch(() => []),
+        window.fetchData('listMyEventStaff', { memberId: myId }).catch(() => []),
+      ]);
+      setEvents(Array.isArray(ev) ? ev : []);
+      setMyStaff(Array.isArray(mine) ? mine : []);
+    } catch (e) { setError(e && e.message ? e.message : String(e)); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  const STATUS_LABEL = { committed: '参加表明', attended: '出席', absent: '欠席', withdrawn: '取消' };
+  const STATUS_BADGE = { committed: 'badge-indigo', attended: 'badge-green', absent: 'badge-coral', withdrawn: 'badge-amber' };
+
+  const staffMap = {};
+  myStaff.forEach(s => { staffMap[s.eventId] = s.status; });
+
+  const today = new Date(); const p = n => String(n).padStart(2, '0');
+  const todayStr = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+  const EXCL = ['終了', '中止', '実施済', 'アーカイブ', '下書き'];
+  const openEvents = events.filter(e => e.date && e.date >= todayStr && EXCL.indexOf(e.status) < 0);
+  const joinable = openEvents.filter(e => { const st = staffMap[e.id]; return !st || st === 'withdrawn' || st === 'absent'; });
+
+  function openSignup(ev) {
+    setSignupEvent(ev); setSAll(true); setSDays([]); setSLoadingDays(true); setEventDays([]);
+    window.fetchData('listEventSessions', { eventId: ev.id })
+      .then(sessions => {
+        const dates = (Array.isArray(sessions) ? sessions : []).map(x => x.date).filter(Boolean);
+        const distinct = dates.filter((d, i) => dates.indexOf(d) === i);
+        setEventDays(distinct.length ? distinct : (ev.date ? [ev.date] : []));
+      })
+      .catch(() => setEventDays(ev.date ? [ev.date] : []))
+      .then(() => setSLoadingDays(false));
+  }
+  function toggleDay(d) { setSDays(prev => prev.indexOf(d) >= 0 ? prev.filter(x => x !== d) : prev.concat([d])); }
+  async function submitSignup() {
+    const ev = signupEvent; if (!ev) return;
+    if (!sAll && sDays.length === 0) { if (window.toast) window.toast.error('参加する日を選択してください'); return; }
+    setBusyEvent(ev.id);
+    try {
+      const res = await window.postData('signupEventStaff', { memberId: myId, eventId: ev.id, days: sAll ? [] : sDays });
+      if (res && res.ok) { if (window.toast) window.toast.success('運営参加を表明しました'); setSignupEvent(null); load(); }
+      else { if (window.toast) window.toast.error((res && res.error) || '表明に失敗しました'); setBusyEvent(''); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyEvent(''); }
+  }
+  async function doAbsent() {
+    const s = confirmAbsent; if (!s) return;
+    setBusyEvent(s.eventId);
+    try {
+      const res = await window.postData('markEventStaffAbsent', { memberId: myId, eventId: s.eventId });
+      if (res && res.ok) {
+        if (window.toast) window.toast.success(res.status === 'absent' ? '欠席として記録しました' : '参加を取り消しました');
+        setConfirmAbsent(null); load();
+      } else { if (window.toast) window.toast.error((res && res.error) || '欠席処理に失敗しました'); setBusyEvent(''); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyEvent(''); }
+  }
+
+  async function changePassword() {
+    setPwErr('');
+    if (newPw.length < 10) { setPwErr('パスワードは10文字以上にしてください'); return; }
+    var cls = 0;
+    if (/[a-z]/.test(newPw)) cls++; if (/[A-Z]/.test(newPw)) cls++; if (/[0-9]/.test(newPw)) cls++; if (/[^a-zA-Z0-9]/.test(newPw)) cls++;
+    if (cls < 2) { setPwErr('英大文字・英小文字・数字・記号のうち2種類以上を含めてください'); return; }
+    if (newPw !== newPw2) { setPwErr('新しいパスワードが一致しません'); return; }
+    setPwBusy(true);
+    try {
+      const res = await window.postData('setPassword', { memberId: myId, currentPassword: curPw, newPassword: newPw });
+      if (res && res.ok) {
+        if (res.token) window.setStoredToken(res.token);
+        if (window.toast) window.toast.success('パスワードを変更しました');
+        setShowPwChange(false); setCurPw(''); setNewPw(''); setNewPw2('');
+      } else { setPwErr((res && res.error) || 'パスワード変更に失敗しました'); }
+    } catch (err) { setPwErr(err && err.message ? err.message : String(err)); }
+    finally { setPwBusy(false); }
+  }
+  if (!myId) {
+    return (
+      <div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px' }}>マイページ</h1>
+        <div className="card"><div className="card-body" style={{ textAlign: 'center', color: 'var(--ink4)', padding: 28 }}>
+          <Icon n="user" s={28} /><div style={{ marginTop: 8 }}>サインインすると、自分の運営参加を管理できます。</div>
+        </div></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="row between" style={{ marginBottom: 14, alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>マイページ</h1>
+          <p style={{ fontSize: 13, color: 'var(--ink3)', margin: '4px 0 0' }}>{me && me.name ? me.name + ' さん' : myId}</p>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <a className="btn btn-ghost btn-sm" href={'#member-detail?id=' + encodeURIComponent(myId)}><Icon n="user" s={14} /> 自分の詳細</a>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setPwErr(''); setCurPw(''); setNewPw(''); setNewPw2(''); setShowPwChange(true); }}><Icon n="lock" s={14} /> パスワード変更</button>
+          <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
+        </div>
+      </div>
+
+      {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>}
+      {error && <div style={{ padding: 16, color: 'var(--coral)' }}>読み込みエラー: {error} <button className="btn btn-sm" onClick={load}>再試行</button></div>}
+
+      {!loading && !error && (
+        <div>
+          <div className="card mb16">
+            <div className="card-head"><div className="card-title"><Icon n="star" s={16} /> 運営に携われるイベント</div></div>
+            <div className="card-body">
+              {joinable.length === 0 && <div style={{ color: 'var(--ink4)', padding: 8 }}>今後の対象イベントはありません。</div>}
+              {joinable.map(ev => (
+                <div key={ev.id} className="row between" style={{ alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--line)', gap: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>{ev.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink4)' }}>{ev.date}{ev.status ? ' ／ ' + ev.status : ''}</div>
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={() => openSignup(ev)} disabled={busyEvent === ev.id}><Icon n="plus" s={14} /> 運営に携わる</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-head"><div className="card-title"><Icon n="list" s={16} /> 自分の運営参加</div></div>
+            <div className="card-body">
+              {myStaff.length === 0 && <div style={{ color: 'var(--ink4)', padding: 8 }}>まだ運営参加の記録はありません。</div>}
+              {myStaff.map(s => (
+                <div key={s.actId} className="row between" style={{ alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--line)', gap: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600 }}>{s.title}</span>
+                      <span className={clsx('badge', STATUS_BADGE[s.status] || 'badge-indigo')}>{STATUS_LABEL[s.status] || s.status}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--ink4)' }}>{s.date}{s.role ? ' ／ ' + s.role : ''} ／ {s.days && s.days !== 'all' ? '対象日 ' + s.days.split(',').join(' / ') : '全日'}</div>
+                  </div>
+                  {s.status === 'committed' && (
+                    <button className="btn btn-sm" onClick={() => setConfirmAbsent(s)} disabled={busyEvent === s.eventId}><Icon n="x" s={14} /> 欠席</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {signupEvent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setSignupEvent(null)}>
+          <div className="card" style={{ width: 460, maxWidth: '94%' }} onClick={e => e.stopPropagation()}>
+            <div className="card-head"><div className="card-title"><Icon n="plus" s={16} /> 運営に携わる — {signupEvent.title}</div></div>
+            <div className="card-body">
+              {sLoadingDays && <div style={{ padding: 12, textAlign: 'center', color: 'var(--ink4)' }}>日程を取得中...</div>}
+              {!sLoadingDays && eventDays.length <= 1 && (
+                <div style={{ fontSize: 13 }}>このイベントは{eventDays.length === 1 ? ' ' + eventDays[0] + ' の' : ''}1日開催です。運営として参加しますか。</div>
+              )}
+              {!sLoadingDays && eventDays.length > 1 && (
+                <div>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}>複数日開催です。参加できる日を選択してください。</div>
+                  <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={sAll} onChange={e => { setSAll(e.target.checked); if (e.target.checked) setSDays([]); }} />
+                    <span style={{ fontWeight: 600 }}>全日参加</span>
+                  </label>
+                  {!sAll && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 4 }}>
+                      {eventDays.map(d => (
+                        <label key={d} className="row" style={{ gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={sDays.indexOf(d) >= 0} onChange={() => toggleDay(d)} />
+                          <span>{d}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setSignupEvent(null)} disabled={busyEvent === signupEvent.id}>キャンセル</button>
+              <button className="btn btn-primary" onClick={submitSignup} disabled={busyEvent === signupEvent.id || sLoadingDays}>参加する</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showPwChange && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowPwChange(false)}>
+          <div className="card" style={{ width: 440, maxWidth: '94%' }} onClick={ev => ev.stopPropagation()}>
+            <div className="card-head"><div className="card-title"><Icon n="lock" s={16} /> パスワード変更</div></div>
+            <div className="card-body">
+              {pwErr && <div className="error-banner"><Icon n="warn" s={14} cls="error-banner-icon" /><div>{pwErr}</div></div>}
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">現在のパスワード <span className="field-req">*</span></label>
+                <input className="input" type="password" value={curPw} onChange={ev => setCurPw(ev.target.value)} autoComplete="current-password" />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label className="field-label">新しいパスワード <span className="field-req">*</span></label>
+                <input className="input" type="password" value={newPw} onChange={ev => setNewPw(ev.target.value)} placeholder="10文字以上・英数字記号から2種類以上" autoComplete="new-password" />
+              </div>
+              <div>
+                <label className="field-label">確認のため再入力 <span className="field-req">*</span></label>
+                <input className="input" type="password" value={newPw2} onChange={ev => setNewPw2(ev.target.value)} autoComplete="new-password" />
+              </div>
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setShowPwChange(false)} disabled={pwBusy}>キャンセル</button>
+              <button className="btn btn-primary" onClick={changePassword} disabled={pwBusy}>変更する</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmAbsent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setConfirmAbsent(null)}>
+          <div className="card" style={{ width: 440, maxWidth: '94%' }} onClick={e => e.stopPropagation()}>
+            <div className="card-head"><div className="card-title"><Icon n="warn" s={16} /> 欠席の確認</div></div>
+            <div className="card-body">
+              <div style={{ fontSize: 13 }}>「{confirmAbsent.title}」の運営参加を欠席にします。</div>
+              <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 8 }}>イベント当日以降の欠席は人事評価に影響します（前日までの取消は対象外）。よろしいですか。</div>
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmAbsent(null)} disabled={busyEvent === confirmAbsent.eventId}>やめる</button>
+              <button className="btn btn-primary" onClick={doAbsent} disabled={busyEvent === confirmAbsent.eventId}>欠席にする</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+window.PageMyPage = PageMyPage;
+
+// ============ 運営管理(マネージャービュー) (Phase2-3) ============
+function PageManagerStaff() {
+  const isMgr = !!(window.hasRole && window.hasRole('マネージャー'));
+  const myId = (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '';
+  const [events, setEvents] = useState([]);
+  const [eventId, setEventId] = useState('');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [busyMember, setBusyMember] = useState('');
+  const [staffOnly, setStaffOnly] = useState(true);
+  const [staffIds, setStaffIds] = useState([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const [bulkDay, setBulkDay] = useState('');
+  const [confirmAbsentM, setConfirmAbsentM] = useState(null);
+
+  useEffect(() => {
+    if (!isMgr) return;
+    window.fetchData('listEvents').then(ev => {
+      const list = (Array.isArray(ev) ? ev : []).filter(e => e.status !== '下書き');
+      list.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      setEvents(list);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => { if (!isMgr) return; window.fetchData('listStaffEventIds').then(ids => setStaffIds(Array.isArray(ids) ? ids : [])).catch(() => {}); }, []);
+
+  async function loadStaff(eid) {
+    if (!eid) { setData(null); return; }
+    setLoading(true); setError(null);
+    try {
+      const d = await window.fetchData('listEventStaff', { eventId: eid });
+      setData(d && typeof d === 'object' ? d : null);
+    } catch (e) { setError(e && e.message ? e.message : String(e)); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { if (isMgr) loadStaff(eventId); }, [eventId]);
+
+  const STATUS_LABEL = { committed: '参加表明', attended: '出席', absent: '欠席', withdrawn: '取消' };
+  const STATUS_BADGE = { committed: 'badge-indigo', attended: 'badge-green', absent: 'badge-coral', withdrawn: 'badge-amber' };
+
+  async function bulkAttend() {
+    setBulkBusy(true);
+    try {
+      const res = await window.postData('bulkAttendEventStaff', { eventId: eventId, by: myId, day: bulkDay });
+      if (res && res.ok) { if (window.toast) window.toast.success((res.count || 0) + '名を出席にしました'); setConfirmBulk(false); loadStaff(eventId); }
+      else { if (window.toast) window.toast.error((res && res.error) || '一括出席に失敗しました'); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setBulkBusy(false); }
+  }
+  async function revert(m) {
+    setBusyMember(m.memberId);
+    try {
+      const res = await window.postData('revertEventStaffAttended', { eventId: eventId, memberId: m.memberId, by: myId });
+      if (res && res.ok) { if (window.toast) window.toast.success('出席を取り消しました'); loadStaff(eventId); }
+      else { if (window.toast) window.toast.error((res && res.error) || '取消に失敗しました'); setBusyMember(''); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyMember(''); }
+  }
+  async function act(action, m) {
+    setBusyMember(m.memberId);
+    try {
+      const payload = action === 'attended'
+        ? { eventId: eventId, memberId: m.memberId, by: myId }
+        : { eventId: eventId, memberId: m.memberId };
+      const res = await window.postData(action === 'attended' ? 'markEventStaffAttended' : 'markEventStaffAbsent', payload);
+      if (res && res.ok) { if (window.toast) window.toast.success(action === 'attended' ? '出席にしました' : '欠席にしました'); loadStaff(eventId); }
+      else { if (window.toast) window.toast.error((res && res.error) || '処理に失敗しました'); setBusyMember(''); }
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyMember(''); }
+  }
+
+  if (!isMgr) {
+    return (
+      <div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px' }}>運営管理</h1>
+        <div className="card"><div className="card-body" style={{ textAlign: 'center', color: 'var(--ink4)', padding: 28 }}>
+          <Icon n="lock" s={28} /><div style={{ marginTop: 8 }}>この画面はマネージャー以上が利用できます。</div>
+        </div></div>
+      </div>
+    );
+  }
+
+  const counts = (data && data.counts) || { committed: 0, attended: 0, absent: 0, withdrawn: 0 };
+  const byDay = (data && data.byDay) || [];
+  const members = (data && data.members) || [];
+  const shownEvents = staffOnly ? events.filter(e => staffIds.indexOf(e.id) >= 0) : events;
+  const bulkTargetCount = bulkDay ? ((byDay.find(d => d.date === bulkDay) || {}).committed || 0) : counts.committed;
+  const _selEvDate = (events.find(e => e.id === eventId) || {}).date || '';
+  const _todayStr = (() => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); })();
+  const absentIsPast = !!_selEvDate && _todayStr >= _selEvDate;
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>運営管理</h1>
+        <p style={{ fontSize: 13, color: 'var(--ink3)', margin: '4px 0 0' }}>イベント別の運営参加状況を確認し、出席・欠席を記録できます。</p>
+      </div>
+
+      <div className="card mb16">
+        <div className="card-body">
+          <div className="row between" style={{ alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+            <label className="field-label" style={{ margin: 0 }}>イベントを選択</label>
+            <label className="row" style={{ gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--ink3)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={staffOnly} onChange={e => setStaffOnly(e.target.checked)} /> 運営参加ありのみ
+            </label>
+          </div>
+          <div className="select-wrap">
+            <select className="input select" value={eventId} onChange={e => setEventId(e.target.value)}>
+              <option value="">選択してください</option>
+              {shownEvents.map(e => <option key={e.id} value={e.id}>{e.date ? e.date + '  ' : ''}{e.title}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>}
+      {error && <div style={{ padding: 16, color: 'var(--coral)' }}>読み込みエラー: {error}</div>}
+
+      {!loading && !error && eventId && data && (
+        <div>
+          <div className="jb-stat-grid mb16">
+            <MiniStat label="参加表明" value={counts.committed} />
+            <MiniStat label="出席" value={counts.attended} />
+            <MiniStat label="欠席" value={counts.absent} />
+            <MiniStat label="取消" value={counts.withdrawn} />
+          </div>
+
+          {byDay.length > 1 && (
+            <div className="card mb16">
+              <div className="card-head"><div className="card-title"><Icon n="layers" s={16} /> 日別の参加人数</div></div>
+              <div className="card-body">
+                <table className="tbl">
+                  <thead><tr><th>開催日</th><th>参加表明</th><th>出席</th><th>欠席</th></tr></thead>
+                  <tbody>
+                    {byDay.map(d => (
+                      <tr key={d.date}><td>{d.date}</td><td>{d.committed}</td><td>{d.attended}</td><td>{d.absent}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 8 }}>全日参加者は各日にカウントされます。</p>
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card-title"><Icon n="users" s={16} /> 運営参加メンバー</div>
+              {counts.committed > 0 && <button className="btn btn-sm" onClick={() => { setBulkDay(''); setConfirmBulk(true); }} disabled={bulkBusy}><Icon n="check" s={14} /> 全員を出席にする（{counts.committed}名）</button>}
+            </div>
+            <div className="card-body">
+              {members.length === 0 && <div style={{ color: 'var(--ink4)', padding: 8 }}>まだ参加表明はありません。</div>}
+              {members.map(m => (
+                <div key={m.actId} className="row between" style={{ alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--line)', gap: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600 }}>{m.memberName}</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{m.memberCode}</span>
+                      <span className={clsx('badge', STATUS_BADGE[m.status] || 'badge-indigo')}>{STATUS_LABEL[m.status] || m.status}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--ink4)', marginTop: 2 }}>{m.days && m.days !== 'all' ? '対象日 ' + String(m.days).split(',').join(' / ') : '全日'}{m.role ? ' ／ ' + m.role : ''}</div>
+                  </div>
+                  <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+                    {(m.status === 'committed' || m.status === 'absent') && <button className="btn btn-primary btn-sm" onClick={() => act('attended', m)} disabled={busyMember === m.memberId}><Icon n="check" s={14} /> 出席</button>}
+                    {m.status === 'committed' && <button className="btn btn-sm" onClick={() => setConfirmAbsentM(m)} disabled={busyMember === m.memberId}><Icon n="x" s={14} /> 欠席</button>}
+                    {m.status === 'attended' && <button className="btn btn-ghost btn-sm" onClick={() => revert(m)} disabled={busyMember === m.memberId}><Icon n="refresh" s={14} /> 出席取消</button>}
+                    {m.status === 'absent' && <button className="btn btn-ghost btn-sm" onClick={() => revert(m)} disabled={busyMember === m.memberId}><Icon n="refresh" s={14} /> 欠席取消</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmAbsentM && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setConfirmAbsentM(null)}>
+          <div className="card" style={{ width: 420, maxWidth: '94%' }} onClick={ev => ev.stopPropagation()}>
+            <div className="card-head"><div className="card-title"><Icon n="warn" s={16} /> {absentIsPast ? '欠席' : '参加取消'}の確認</div></div>
+            <div className="card-body">
+              <div style={{ fontSize: 13 }}>{confirmAbsentM.memberName} さんを{absentIsPast ? '欠席' : '取消'}にします。</div>
+              {absentIsPast
+                ? <div style={{ fontSize: 12, color: 'var(--coral)', marginTop: 8 }}>このイベントは開催日以降のため、欠席として評価に影響します。</div>
+                : <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 8 }}>開催前のため、取消扱い（評価対象外）になります。</div>}
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmAbsentM(null)} disabled={busyMember === confirmAbsentM.memberId}>やめる</button>
+              <button className="btn btn-primary" onClick={() => { const m = confirmAbsentM; setConfirmAbsentM(null); act('absent', m); }} disabled={busyMember === confirmAbsentM.memberId}>{absentIsPast ? '欠席にする' : '取消にする'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmBulk && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setConfirmBulk(false)}>
+          <div className="card" style={{ width: 420, maxWidth: '94%' }} onClick={ev => ev.stopPropagation()}>
+            <div className="card-head"><div className="card-title"><Icon n="check" s={16} /> 一括出席の確認</div></div>
+            <div className="card-body">
+              {byDay.length > 1 && (
+                <div style={{ marginBottom: 10 }}>
+                  <label className="field-label">対象日</label>
+                  <div className="select-wrap">
+                    <select className="input select" value={bulkDay} onChange={ev => setBulkDay(ev.target.value)}>
+                      <option value="">全対象日（全員）</option>
+                      {byDay.map(d => <option key={d.date} value={d.date}>{d.date}（{d.committed}名）</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div style={{ fontSize: 13 }}>{bulkTargetCount} 名を一括で出席にします。よろしいですか。</div>
+              <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 8 }}>欠席・取消の人は対象になりません。個別の出席取消で戻せます。</div>
+            </div>
+            <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmBulk(false)} disabled={bulkBusy}>やめる</button>
+              <button className="btn btn-primary" onClick={bulkAttend} disabled={bulkBusy}>出席にする</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+window.PageManagerStaff = PageManagerStaff;
 
 function PageDepartments(){
   const [members, setMembers] = useState([]);
@@ -33599,6 +35135,11 @@ const PAGES = {
   paypay:         () => renderPage('PagePayPay'),
   coupons:        () => renderPage('PageCoupons'),
   departments:    () => renderPage('PageDepartments'),
+  'member-admin': () => renderPage('PageMembersAdmin'),
+  'member-detail': () => renderPage('PageMemberDetail'),
+  mypage: () => renderPage('PageMyPage'),
+  'manager-staff': () => renderPage('PageManagerStaff'),
+  approvals: () => renderPage('PageApprovals'),
   org:            () => renderPage('PageOrg'),
   ads:            () => renderPage('PageAds'),
 
@@ -33658,8 +35199,9 @@ function AuthGate(){
     }
   }
 
-  function handleLogin(memberId, userData) {
+  function handleLogin(memberId, token, userData) {
     window.setStoredMemberId(memberId);
+    window.setStoredToken(token);
     setUser(userData);
     window.currentUser = userData;
     setState('authed');
@@ -33667,6 +35209,7 @@ function AuthGate(){
 
   function handleLogout() {
     window.setStoredMemberId('');
+    window.setStoredToken('');
     window.currentUser = null;
     setUser(null);
     setState('signin');
@@ -33699,115 +35242,96 @@ function AuthGate(){
  * サインイン画面: Members からドロップダウンで自分を選択。
  */
 function SigninGate({onLogin}){
-  const [members, setMembers] = useStateApp([]);
-  const [loading, setLoading] = useStateApp(true);
-  const [selectedId, setSelectedId] = useStateApp('');
+  const [mode, setMode] = useStateApp('login');       // login / setpw
+  const [identifier, setIdentifier] = useStateApp('');
+  const [password, setPassword] = useStateApp('');
+  const [setupMemberId, setSetupMemberId] = useStateApp('');
+  const [newPw, setNewPw] = useStateApp('');
+  const [newPw2, setNewPw2] = useStateApp('');
   const [submitting, setSubmitting] = useStateApp(false);
   const [error, setError] = useStateApp('');
 
-  useEffectApp(() => {
-    async function load() {
-      try {
-        const data = await window.fetchData('listMembers');
-        const active = (Array.isArray(data) ? data : []).filter(m => m.isActive);
-        // 部署 + 名前順でソート
-        active.sort((a, b) => {
-          const da = (a.dept || '').localeCompare(b.dept || '');
-          if (da !== 0) return da;
-          return (a.name || '').localeCompare(b.name || '');
-        });
-        setMembers(active);
-      } catch (err) {
-        setError(err.message || String(err));
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
-
-  async function handleSubmit() {
-    if (!selectedId) { setError('メンバーを選択してください'); return; }
-    setSubmitting(true);
-    setError('');
-    try {
-      // memberId を保存して whoami で確認
-      window.setStoredMemberId(selectedId);
-      const userData = await window.fetchData('whoami');
-      if (!userData || !userData.member) {
-        throw new Error('ユーザー情報の取得に失敗しました');
-      }
-      onLogin(selectedId, userData);
-    } catch (err) {
-      window.setStoredMemberId('');   // 失敗時はクリア
-      setError(err.message || String(err));
-      setSubmitting(false);
-    }
+  function finish(res){
+    const mid = res.user && res.user.member && res.user.member.id;
+    if (!mid || !res.token) { setError('ログインに失敗しました'); setSubmitting(false); return; }
+    window.setStoredMemberId(mid);
+    window.setStoredToken(res.token);
+    window.currentUser = res.user;
+    onLogin(mid, res.token, res.user);
   }
 
-  // 選択中のメンバー情報
-  const selected = members.find(m => m.id === selectedId);
+  async function handleLoginSubmit(){
+    if (!identifier.trim()) { setError('メンバーコードまたはメールを入力してください'); return; }
+    if (!password) { setError('パスワードを入力してください'); return; }
+    setSubmitting(true); setError('');
+    try {
+      const res = await window.postData('authenticate', { identifier: identifier.trim(), password: password });
+      if (res && res.ok) { finish(res); return; }
+      if (res && res.needsPasswordSet) { setSetupMemberId(res.memberId); setMode('setpw'); setError(''); setSubmitting(false); return; }
+      setError((res && res.error) || 'ログインに失敗しました'); setSubmitting(false);
+    } catch (err) { setError(err.message || String(err)); setSubmitting(false); }
+  }
+
+  async function handleSetPwSubmit(){
+    if (newPw.length < 10) { setError('パスワードは10文字以上にしてください'); return; }
+    var _cls = 0;
+    if (/[a-z]/.test(newPw)) _cls++; if (/[A-Z]/.test(newPw)) _cls++; if (/[0-9]/.test(newPw)) _cls++; if (/[^a-zA-Z0-9]/.test(newPw)) _cls++;
+    if (_cls < 2) { setError('英大文字・英小文字・数字・記号のうち2種類以上を含めてください'); return; }
+    if (newPw !== newPw2) { setError('パスワードが一致しません'); return; }
+    setSubmitting(true); setError('');
+    try {
+      const res = await window.postData('setPassword', { memberId: setupMemberId, newPassword: newPw });
+      if (res && res.ok) { finish(res); return; }
+      setError((res && res.error) || 'パスワード設定に失敗しました'); setSubmitting(false);
+    } catch (err) { setError(err.message || String(err)); setSubmitting(false); }
+  }
 
   return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',padding:20}}>
-      <div className="card" style={{width:480,maxWidth:'100%'}}>
+      <div className="card" style={{width:440,maxWidth:'100%'}}>
         <div className="card-body" style={{padding:32}}>
           <div style={{textAlign:'center',marginBottom:24}}>
             <div style={{width:64,height:64,borderRadius:14,background:'var(--indigo-50)',color:'var(--indigo)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}>
-              <Icon n="user" s={28}/>
+              <Icon n={mode==='setpw'?'lock':'user'} s={28}/>
             </div>
             <div style={{fontFamily:'var(--serif)',fontSize:24,letterSpacing:'-.02em',marginBottom:6}}>connec+a Console</div>
             <div style={{fontSize:13,color:'var(--ink3)',lineHeight:1.6}}>
-              使用するメンバーアカウントを選択してください
+              {mode==='setpw' ? '初回ログインです。パスワードを設定してください。' : 'メンバーコードまたはメールとパスワードでログイン'}
             </div>
           </div>
           {error && <div style={{padding:10,background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:6,color:'var(--red)',fontSize:12,marginBottom:14}}>{error}</div>}
-          {loading ? (
-            <div style={{padding:20,textAlign:'center'}}>
-              <Spinner/>
-              <div style={{fontSize:12,color:'var(--ink4)',marginTop:8}}>メンバー一覧を読み込み中…</div>
-            </div>
-          ) : members.length === 0 ? (
-            <div style={{padding:14,background:'var(--amber-50)',border:'1px solid var(--amber-100)',borderRadius:8,fontSize:12,color:'var(--ink3)',lineHeight:1.6}}>
-              <b>メンバーが登録されていません。</b><br/>
-              Spreadsheet の Members シートに少なくとも1人を登録してください。
-            </div>
-          ) : (
+
+          {mode === 'login' ? (
             <>
-              <div className="field">
-                <label className="field-label">メンバー <span className="field-req">*</span></label>
-                <div className="select-wrap">
-                  <select className="input input-lg select" value={selectedId} onChange={e=>setSelectedId(e.target.value)}>
-                    <option value="">選択してください</option>
-                    {members.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}{m.dept && ` (${m.dept})`}{m.role && ` - ${m.role}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="field" style={{marginBottom:12}}>
+                <label className="field-label">メンバーコード または メール <span className="field-req">*</span></label>
+                <input className="input input-lg" value={identifier} onChange={e=>setIdentifier(e.target.value)} placeholder="CN0001 または you@example.com" autoComplete="username" />
               </div>
-              {selected && (
-                <div style={{padding:12,background:'var(--bg2)',borderRadius:8,marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:36,height:36,borderRadius:10,background:`var(--${selected.accent || 'indigo'}-50)`,color:`var(--${selected.accent || 'indigo'})`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--serif)',fontSize:16,fontWeight:700}}>
-                    {selected.initial || selected.name.charAt(0)}
-                  </div>
-                  <div style={{flex:1,fontSize:12,color:'var(--ink3)'}}>
-                    <div style={{fontWeight:700,color:'var(--ink)',fontSize:13}}>{selected.name}</div>
-                    <div>{selected.dept || '—'} · {selected.role || 'メンバー'}</div>
-                  </div>
-                </div>
-              )}
-              <button
-                className="btn btn-indigo"
-                style={{width:'100%',justifyContent:'center',padding:'12px 16px',fontSize:14}}
-                onClick={handleSubmit}
-                disabled={!selectedId || submitting}>
-                {submitting ? '読み込み中…' : <><Icon n="arrRight" s={14}/> このメンバーで開始</>}
+              <div className="field" style={{marginBottom:16}}>
+                <label className="field-label">パスワード <span className="field-req">*</span></label>
+                <input className="input input-lg" type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') handleLoginSubmit(); }} autoComplete="current-password" />
+              </div>
+              <button className="btn btn-indigo" style={{width:'100%',justifyContent:'center',padding:'12px 16px',fontSize:14}} onClick={handleLoginSubmit} disabled={submitting}>
+                {submitting ? '確認中…' : <><Icon n="arrRight" s={14}/> ログイン</>}
               </button>
               <div style={{fontSize:10.5,color:'var(--ink5)',marginTop:14,lineHeight:1.6,textAlign:'center'}}>
-                ※ 選択したメンバーとして全ての操作を行います。次回以降は自動的にこのメンバーでログインします。
+                パスワード未設定の場合は、初回ログイン時に設定画面が表示されます。
               </div>
+            </>
+          ) : (
+            <>
+              <div className="field" style={{marginBottom:12}}>
+                <label className="field-label">新しいパスワード <span className="field-req">*</span></label>
+                <input className="input input-lg" type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="10文字以上・英数字記号から2種類以上" autoComplete="new-password" />
+              </div>
+              <div className="field" style={{marginBottom:16}}>
+                <label className="field-label">確認のため再入力 <span className="field-req">*</span></label>
+                <input className="input input-lg" type="password" value={newPw2} onChange={e=>setNewPw2(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') handleSetPwSubmit(); }} autoComplete="new-password" />
+              </div>
+              <button className="btn btn-indigo" style={{width:'100%',justifyContent:'center',padding:'12px 16px',fontSize:14}} onClick={handleSetPwSubmit} disabled={submitting}>
+                {submitting ? '設定中…' : <><Icon n="lock" s={14}/> パスワードを設定してログイン</>}
+              </button>
+              <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center',marginTop:8}} onClick={()=>{ setMode('login'); setError(''); setNewPw(''); setNewPw2(''); }} disabled={submitting}>戻る</button>
             </>
           )}
         </div>
