@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-15 P7g'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-15 P7h'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1842,7 +1842,7 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-15 P7g</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-15 P7h</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -36420,18 +36420,34 @@ function PageEventParticipantExport() {
     if (!reportRef.current) return;
     setPdfBusy(true);
     try {
-      await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js');
-      if (!window.html2pdf) throw new Error('PDFライブラリを読み込めませんでした');
+      // html2canvas-pro は oklch など新しいCSS色関数に対応 (通常版は未対応で失敗するため pro を使用)
+      await loadScriptOnce('https://cdn.jsdelivr.net/npm/html2canvas-pro@2.0.4/dist/html2canvas-pro.min.js');
+      await loadScriptOnce('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js');
+      if (typeof window.html2canvas !== 'function') throw new Error('PDFライブラリを読み込めませんでした');
+      var jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      if (!jsPDFCtor) throw new Error('PDFライブラリを読み込めませんでした');
+      var canvas = await window.html2canvas(reportRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+      var pdf = new jsPDFCtor({ orientation: 'p', unit: 'mm', format: 'a4' });
+      var pageW = pdf.internal.pageSize.getWidth();
+      var pageH = pdf.internal.pageSize.getHeight();
+      var margin = 8;
+      var imgW = pageW - margin * 2;
+      var imgH = canvas.height * imgW / canvas.width;
+      var usable = pageH - margin * 2;
+      var imgData = canvas.toDataURL('image/jpeg', 0.95);
+      var position = margin;
+      var heightLeft = imgH;
+      pdf.addImage(imgData, 'JPEG', margin, position, imgW, imgH);
+      heightLeft -= usable;
+      while (heightLeft > 0) {
+        position -= usable;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', margin, position, imgW, imgH);
+        heightLeft -= usable;
+      }
       var ev = events.find(function (x) { return x.id === eventId; });
       var evName = (ev && ev.title ? String(ev.title).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 30) : 'event');
-      await window.html2pdf().set({
-        margin: 8,
-        filename: evName + '_参加者属性.pdf',
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      }).from(reportRef.current).save();
+      pdf.save(evName + '_参加者属性.pdf');
     } catch (e) {
       if (window.toast) window.toast.error('PDF出力に失敗しました: ' + (e && e.message ? e.message : String(e)));
     } finally {
