@@ -90,7 +90,7 @@
       document.documentElement.setAttribute('data-theme', effective);
     } catch (e) {}
     // (反映確認) 現在のビルド識別子。 サイドバー表示と合わせて更新する。
-    try { window.__APP_BUILD = '2026-06-13 P7c'; } catch (e) {}
+    try { window.__APP_BUILD = '2026-06-15 P7g'; } catch (e) {}
     // サイドバー折り畳み状態 復元
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1784,7 +1784,7 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
 <!-- 公開フォーム表示時はメニューバー等を隠す (フラッシュ防止のため早期に判定) -->
 <script>
 (function(){
-  var PUB=['recruit-apply','recruit-availability','recruit-join','recruit-second','recruit-addinfo','guardian-consent'];
+  var PUB=['recruit-apply','recruit-availability','recruit-join','recruit-second','recruit-second-schedule','recruit-addinfo','guardian-consent'];
   function isPub(){var p=(location.hash||'').replace(/^#/,'').split('?')[0];return PUB.indexOf(p)>=0;}
   function apply(){try{document.documentElement.classList[isPub()?'add':'remove']('public-mode');}catch(e){}}
   apply();
@@ -1842,7 +1842,7 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
       <div class="org-info">
         <div class="org-name">connec+a</div>
         <div class="org-plan">PRO · 運営</div>
-        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-13 P7c</div>
+        <div class="org-plan" style="margin-top:2px;opacity:.75" title="現在表示中のビルド (反映確認用)">build 2026-06-15 P7g</div>
       </div>
       <svg class="ic ic-sm" viewBox="0 0 24 24" style="color:var(--ink4)"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
     </div>
@@ -1876,6 +1876,7 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
       <a href="#qr" class="nav-item" data-nav="qr"><svg class="ic" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg>QR照会 / 受付</a>
       <a href="#schedule" class="nav-item" data-nav="schedule"><svg class="ic" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>スケジュール</a>
       <a href="#post-event" class="nav-item" data-nav="post-event"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/><path d="M3 12h.01M3 18h.01M3 6h.01"/></svg>満足度調査・イベント後</a>
+      <a href="#event-export" class="nav-item" data-nav="event-export"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>参加者CSV出力</a>
     </div>
 
     <div class="nav-section">
@@ -17956,6 +17957,7 @@ function MemberRegisterModal({ depts, onClose, onCreated }) {
   const [role, setRole] = useState('メンバー');
   const [title, setTitle] = useState('');
   const [grade, setGrade] = useState('');
+  const [affil, setAffil] = useState('');
   const [school, setSchool] = useState('');
   const [residencePref, setResidencePref] = useState('');
   const [residenceCountry, setResidenceCountry] = useState('');
@@ -18049,11 +18051,15 @@ function MemberRegisterModal({ depts, onClose, onCreated }) {
             </datalist>
           </div>
           <div className="row" style={{ gap: 10, marginBottom: 10 }}>
-            <div style={{ flex: 1 }}><label className="field-label">学年</label><input className="input" value={grade} onChange={e => setGrade(e.target.value)} placeholder="例: B3" /></div>
+            <div style={{ flex: 1 }}><label className="field-label">区分</label><div className="select-wrap"><select className="input select" value={affil} onChange={e => { var v = e.target.value; var opts = gradeOptionsForAffil(v); setAffil(v); setGrade(opts.indexOf(grade) >= 0 ? grade : (opts.length === 1 ? opts[0] : '')); }}><option value="">選択してください</option>{AFFIL_OPTIONS.map(function (a) { return <option key={a} value={a}>{a}</option>; })}</select></div></div>
+            <div style={{ flex: 1 }} />
+          </div>
+          <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}><label className="field-label">学年</label><div className="select-wrap"><select className="input select" value={grade} onChange={e => setGrade(e.target.value)}><option value="">選択してください</option>{gradeOptionsForAffil(affil).map(function (g) { return <option key={g} value={g}>{g}</option>; })}</select></div></div>
             <div style={{ flex: 1 }}><label className="field-label">学校</label><input className="input" value={school} onChange={e => setSchool(e.target.value)} placeholder="例: ○○大学" /></div>
           </div>
           <div className="row" style={{ gap: 10, marginBottom: 10 }}>
-            <div style={{ flex: 1 }}><label className="field-label">在住都道府県</label><input className="input" value={residencePref} onChange={e => setResidencePref(e.target.value)} placeholder="例: 東京都" /></div>
+            <div style={{ flex: 1 }}><label className="field-label">在住都道府県</label><div className="select-wrap"><select className="input select" value={residencePref} onChange={e => setResidencePref(e.target.value)}><option value="">選択してください</option>{JP_PREFECTURES.map(function (p) { return <option key={p} value={p}>{p}</option>; })}</select></div></div>
             <div style={{ flex: 1 }}><label className="field-label">在住国</label><input className="input" value={residenceCountry} onChange={e => setResidenceCountry(e.target.value)} placeholder="例: 日本" /></div>
           </div>
           <div className="row" style={{ gap: 10, marginBottom: 10 }}>
@@ -18104,8 +18110,9 @@ function PageMembersAdmin() {
   async function fetchAll() {
     setLoading(true); setError(null);
     try {
-      const data = await window.fetchData('listMembersDetail');
-      setRows(Array.isArray(data) ? data : []);
+      const b = await window.fetchData('getMembersBundle');
+      setRows(Array.isArray(b && b.members) ? b.members : []);
+      if (Array.isArray(b && b.departments)) setDepts(b.departments);
     } catch (e) {
       setError(e && e.message ? e.message : String(e));
     } finally {
@@ -18113,7 +18120,6 @@ function PageMembersAdmin() {
     }
   }
   useEffect(() => { fetchAll(); }, []);
-  useEffect(() => { window.fetchData('listDepartments').then(ds => setDepts(Array.isArray(ds) ? ds : [])).catch(() => {}); }, []);
 
   const deptOptions = useMemo(() => {
     const s = new Set();
@@ -18161,28 +18167,35 @@ function PageMembersAdmin() {
   }
 
   return (
-    <div>
-      <div style={{ marginBottom: 14 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>メンバー管理</h1>
-        <p style={{ fontSize: 13, color: 'var(--ink3)', margin: '4px 0 0' }}>
-          構成員の一覧です。詳細・新規登録・変更申請は順次追加します。
-        </p>
-      </div>
+    <div className="jb-page" data-page="members">
+      <header className="jb-cover">
+        <div>
+          <p className="jb-cover-subtitle">CONNEC+A — MEMBERS</p>
+          <h1 className="jb-cover-title">メンバー <span style={{ color: 'var(--jb-blue)' }}>管理</span></h1>
+          <p style={{ fontFamily: 'var(--jb-sans)', fontSize: 13, color: 'var(--jb-ink-soft)', marginTop: 18, maxWidth: 520, lineHeight: 1.7 }}>構成員の一元管理。 在籍状況、 所属部署、 役職を一覧で確認し、 詳細の確認・新規登録・変更を行います。</p>
+        </div>
+        <div className="jb-cover-meta">
+          <div>ACTIVE</div>
+          <span className="jb-cover-meta-num">{loading ? '…' : activeCount}</span>
+          <div>MEMBERS</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            {window.hasRole && window.hasRole('代表') && <button className="jb-btn" onClick={exportCSV}>CSV</button>}
+            <button className="jb-btn jb-btn-primary" onClick={() => setShowReg(true)}>+ メンバー</button>
+          </div>
+        </div>
+      </header>
 
       <div className="jb-stat-grid">
         <MiniStat label="在籍中" value={loading ? '…' : String(activeCount)} sub="" icon="users" color="indigo" />
         <MiniStat label="退会済み" value={loading ? '…' : String(leftCount)} sub="" icon="user" color="amber" />
-        <MiniStat label="表示中" value={String(filtered.length)} sub="" icon="list" color="violet" />
+        <MiniStat label="部署数" value={String(depts.length)} sub="" icon="building" color="violet" />
+        <MiniStat label="表示中" value={String(filtered.length)} sub="" icon="list" color="coral" />
       </div>
 
       <div className="card mt16">
         <div className="card-head">
           <div className="card-title"><Icon n="users" s={16} /> 構成員一覧</div>
-          <div className="row" style={{ gap: 6 }}>
-            {window.hasRole && window.hasRole('代表') && <button className="btn btn-sm" onClick={exportCSV}><Icon n="download" s={14} /> CSVエクスポート</button>}
-            <button className="btn btn-primary btn-sm" onClick={() => setShowReg(true)}><Icon n="plus" s={14} /> 新規登録</button>
-            <button className="btn btn-ghost btn-sm" onClick={fetchAll} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
-          </div>
+          <button className="btn btn-ghost btn-sm" onClick={fetchAll} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
         </div>
 
         <div className="row" style={{ padding: '10px 14px', gap: 8, borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
@@ -19572,6 +19585,107 @@ function RecruitMailTemplatesModal({ onClose }) {
 }
 window.RecruitMailTemplatesModal = RecruitMailTemplatesModal;
 
+// (募集自動化 S7) 運営ダッシュボード: 要対応・待ち・停滞・例外を束ねて表示
+function RecruitOpsDashboard({ dash, onOpen, onResolved }) {
+  if (!dash) return <div className="card"><div className="card-body" style={{ padding: 16, color: 'var(--ink4)', fontSize: 13 }}>読み込み中…</div></div>;
+  const c = dash.counts || {};
+  const exceptions = dash.exceptions || [];
+
+  async function resolveEx(exceptionId) {
+    try {
+      const res = await window.postData('resolveRecruitException', { exceptionId: exceptionId });
+      if (res && res.ok) { if (window.toast) window.toast.success('例外を解決済みにしました'); if (onResolved) onResolved(); }
+      else if (window.toast) window.toast.error((res && res.error) || '解決に失敗しました');
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+  }
+
+  return (
+    <div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-body" style={{ padding: '13px 20px', display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
+          {[['進行中', c.active || 0, 'var(--jb-blue, var(--indigo))'], ['要対応', c.needAdmin || 0, 'var(--amber)'], ['候補者待ち', c.waitingCandidate || 0, 'var(--teal)'], ['停滞', c.stalled || 0, 'var(--coral)'], ['例外', c.exceptions || 0, 'var(--coral)']].map(function (m) {
+            return (
+              <div key={m[0]} style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                <span style={{ fontFamily: 'var(--jb-display, var(--jb-serif, inherit))', fontSize: 23, fontWeight: 800, lineHeight: 1, color: m[1] > 0 ? m[2] : 'var(--ink5)' }}>{m[1]}</span>
+                <span style={{ fontSize: 11, color: 'var(--ink4)', letterSpacing: '0.02em' }}>{m[0]}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {exceptions.length > 0 && (
+        <div className="card" style={{ marginBottom: 14, borderColor: 'var(--coral)' }}>
+          <div className="card-body" style={{ padding: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--coral)', marginBottom: 8 }}>例外（要確認） {exceptions.length}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {exceptions.map(function (e) {
+                return (
+                  <div key={e.id} className="row between" onClick={function () { if (e.appId) onOpen(e.appId); }} style={{ padding: '7px 10px', borderRadius: 8, cursor: e.appId ? 'pointer' : 'default', gap: 8, background: 'var(--bg)' }}>
+                    <div style={{ fontSize: 12, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><b>{e.title || e.exceptionType}</b>{e.name ? ' ・ ' + e.name : ''}</div>
+                    <div className="row" style={{ gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: 'var(--ink4)' }}>{e.exceptionType}</span>
+                      <button className="btn btn-ghost btn-sm" onClick={function (ev) { ev.stopPropagation(); resolveEx(e.id); }} style={{ padding: '2px 8px', fontSize: 11 }}>解決</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+var __swrMem = {};
+function swrGet(key) { return Object.prototype.hasOwnProperty.call(__swrMem, key) ? __swrMem[key] : null; }
+function swrSet(key, val) { __swrMem[key] = val; }
+function RecruitBoard({ apps, onOpen }) {
+  const cols = [
+    ['応募', 'var(--ink4)'],
+    ['一次選考', 'var(--indigo)'],
+    ['二次選考', 'var(--violet)'],
+    ['採用後', 'var(--teal)'],
+    ['登録', 'var(--amber)'],
+    ['完了', 'var(--green)']
+  ];
+  const live = (apps || []).filter(function (a) {
+    const r = String(a.resultStatus || '');
+    return r !== 'rejected' && r !== 'withdrawn' && String(a.currentPhase || '') !== '終了';
+  });
+  return (
+    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 10, alignItems: 'flex-start' }}>
+      {cols.map(function (c) {
+        const items = live.filter(function (a) { return String(a.currentPhase || '') === c[0]; });
+        return (
+          <div key={c[0]} style={{ flex: '0 0 232px', minWidth: 232, background: 'var(--jb-paper-mist, var(--bg))', borderRadius: 12, border: '1px solid var(--jb-line, var(--line))', overflow: 'hidden' }}>
+            <div style={{ borderTop: '3px solid ' + c[1], padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--jb-paper, #fff)' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink3)' }}>{c[0]}</span>
+              <span style={{ marginLeft: 'auto', background: c[1], color: '#fff', borderRadius: 999, padding: '1px 9px', fontSize: 11, fontWeight: 700, minWidth: 22, textAlign: 'center' }}>{items.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, minHeight: 56 }}>
+              {items.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink5)', textAlign: 'center', padding: '14px 0' }}>該当なし</div>}
+              {items.map(function (a) {
+                const hint = String(a.currentTask || '') || recruitNextActorHint(a);
+                return (
+                  <div key={a.id} onClick={function () { try { swrSet('recruitDetailSummary:' + a.id, a); } catch (e) {} onOpen(a.id); }} style={{ background: 'var(--jb-paper, #fff)', border: '1px solid var(--jb-line, var(--line))', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', transition: 'border-color .15s, box-shadow .15s' }}
+                    onMouseEnter={function (e) { e.currentTarget.style.borderColor = c[1]; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'; }}
+                    onMouseLeave={function (e) { e.currentTarget.style.borderColor = 'var(--jb-line, var(--line))'; e.currentTarget.style.boxShadow = 'none'; }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--ink4)', marginTop: 2 }}>{a.candidateCode}</div>
+                    {hint && <div style={{ fontSize: 11, color: 'var(--ink3)', marginTop: 7, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: c[1], flexShrink: 0 }} />{hint}</div>}
+                    {(a.desiredDepartments || []).length > 0 && <div style={{ fontSize: 10, color: 'var(--ink5)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(a.desiredDepartments || []).join('、')}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function PageRecruit() {
   const [dash, setDash] = useState(null);
   const [apps, setApps] = useState([]);
@@ -19581,15 +19695,22 @@ function PageRecruit() {
   const [autoMail, setAutoMail] = useState(true);
   const [autoMailBusy, setAutoMailBusy] = useState(false);
   const [mailTplOpen, setMailTplOpen] = useState(false);
+  const [view, setView] = useState('board');
 
-  function load() {
-    setLoading(true);
-    window.fetchData('getRecruitDashboard').then(setDash).catch(function () {});
-    window.fetchData('getRecruitmentSettings').then(function (st) { if (st) setAutoMail(String(st.auto_mail_enabled) !== 'false'); }).catch(function () {});
-    window.fetchData('listRecruitApplications', statusFilter ? { phase: statusFilter } : {})
-      .then(function (d) { setApps(Array.isArray(d) ? d : []); }).catch(function () {}).then(function () { setLoading(false); });
+  function applyConsoleBundle(b) {
+    b = b || {};
+    setDash(b.dashboard || null);
+    if (b.settings) setAutoMail(String(b.settings.auto_mail_enabled) !== 'false');
+    setApps(Array.isArray(b.applications) ? b.applications : []);
   }
-  useEffect(function () { load(); }, [statusFilter]);
+  function load() {
+    const cached = swrGet('recruitConsole');
+    if (cached) { applyConsoleBundle(cached); setLoading(false); } else { setLoading(true); }
+    window.fetchData('getRecruitConsoleBundle', {}).then(function (b) {
+      if (b) { swrSet('recruitConsole', b); applyConsoleBundle(b); }
+    }).catch(function () {}).then(function () { setLoading(false); });
+  }
+  useEffect(function () { load(); }, []);
 
   async function sendReminders() {
     setRemBusy(true);
@@ -19612,71 +19733,83 @@ function PageRecruit() {
     finally { setAutoMailBusy(false); }
   }
 
-  const cards = [
-    { k: 'newCount', label: '新規応募', icon: 'plus', color: 'indigo' },
-    { k: 'firstAdjusting', label: '一次調整中', icon: 'refresh', color: 'teal' },
-    { k: 'secondScheduled', label: '二次面談予定', icon: 'users', color: 'violet' },
-    { k: 'accepted', label: '採用', icon: 'check', color: 'green' },
-    { k: 'rejected', label: '不採用', icon: 'x', color: 'coral' },
-    { k: 'addInfoWaiting', label: '追加情報待ち', icon: 'edit', color: 'amber' },
-    { k: 'guardianWaiting', label: '保護者同意待ち', icon: 'lock', color: 'amber' },
-  ];
+  const shownApps = statusFilter ? apps.filter(function (a) { return String(a.currentPhase || '') === statusFilter; }) : apps;
 
   return (
-    <div>
-      <div className="row between" style={{ alignItems: 'center', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>募集管理</h1>
-        <div className="row" style={{ gap: 6 }}>
-          <button className={'chip' + (autoMail ? ' on' : '')} onClick={toggleAutoMail} disabled={autoMailBusy} title="ステータス変更時に対応メールを自動送信します" style={{ cursor: 'pointer' }}>自動メール {autoMail ? 'ON' : 'OFF'}</button>
-          <button className="btn btn-ghost btn-sm" onClick={function () { setMailTplOpen(true); }}><Icon n="mail" s={14} /> メール定型文</button>
-          <button className="btn btn-ghost btn-sm" onClick={sendReminders} disabled={remBusy}>{remBusy ? '送信中…' : '面談前リマインド送信'}</button>
-          <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
+    <div className="jb-page" data-page="recruit">
+      <header className="jb-cover">
+        <div>
+          <p className="jb-cover-subtitle">CONNEC+A — RECRUITMENT</p>
+          <h1 className="jb-cover-title">募集 <span style={{ color: 'var(--jb-blue)' }}>管理</span></h1>
+          <p style={{ fontFamily: 'var(--jb-sans)', fontSize: 13, color: 'var(--jb-ink-soft)', marginTop: 18, maxWidth: 520, lineHeight: 1.7 }}>{loading ? 'データを読み込んでいます…' : '進行中の候補者 ' + ((dash && dash.counts && dash.counts.active) || 0) + ' 名。段階ごとのカンバンと一覧を切り替えて管理できます。'}</p>
         </div>
+        <div className="jb-cover-meta">
+          <div>ACTIVE</div>
+          <span className="jb-cover-meta-num">{(dash && dash.counts && dash.counts.active) || 0}</span>
+          <div>CANDIDATES</div>
+        </div>
+      </header>
+
+      <div className="row" style={{ gap: 6, justifyContent: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
+        <button className={'chip' + (autoMail ? ' on' : '')} onClick={toggleAutoMail} disabled={autoMailBusy} title="ステータス変更時に対応メールを自動送信します" style={{ cursor: 'pointer' }}>自動メール {autoMail ? 'ON' : 'OFF'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={function () { setMailTplOpen(true); }}><Icon n="mail" s={14} /> メール定型文</button>
+        <button className="btn btn-ghost btn-sm" onClick={sendReminders} disabled={remBusy}>{remBusy ? '送信中…' : '面談前リマインド送信'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}><Icon n="refresh" s={14} /> 再読込</button>
       </div>
 
-      <div className="jb-stat-grid" style={{ marginBottom: 18 }}>
-        {cards.map(function (c) { return <MiniStat key={c.k} label={c.label} value={dash ? String(dash[c.k] || 0) : '…'} sub="" icon={c.icon} color={c.color} />; })}
-      </div>
+      <RecruitOpsDashboard dash={dash} onOpen={function (rid) { window.location.hash = 'recruit-detail?id=' + rid; }} onResolved={load} />
 
-      <div className="card">
-        <div className="card-head">
-          <div className="card-title"><Icon n="list" s={16} /> 候補者一覧</div>
-          <div className="select-wrap" style={{ width: 200 }}>
+      <div className="row" style={{ gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className={clsx('chip', view === 'board' && 'on')} onClick={function () { setView('board'); }}>カンバン</span>
+        <span className={clsx('chip', view === 'list' && 'on')} onClick={function () { setView('list'); }}>一覧</span>
+        <div style={{ flex: 1 }} />
+        {view === 'list' && (
+          <div className="select-wrap" style={{ width: 190 }}>
             <select className="input select" value={statusFilter} onChange={function (e) { setStatusFilter(e.target.value); }}>
               <option value="">すべての段階</option>
               {['応募','一次選考','二次選考','採用後','登録','完了','終了'].map(function (s) { return <option key={s} value={s}>{s}</option>; })}
             </select>
           </div>
-        </div>
-        <div className="card-body" style={{ padding: 0 }}>
-          {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中…</div>}
-          {!loading && apps.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>候補者がいません。</div>}
-          {!loading && apps.length > 0 && (
-            <table className="tbl">
-              <thead><tr>
-                <th>番号</th><th>氏名</th><th>学年</th><th>希望部署</th><th>状態</th><th>一次面談</th><th>一次担当</th><th>二次面談</th><th>結果</th>
-              </tr></thead>
-              <tbody>
-                {apps.map(function (a) {
-                  return (
-                    <tr key={a.id} style={{ cursor: 'pointer' }} onClick={function () { window.location.hash = 'recruit-detail?id=' + a.id; }}>
-                      <td className="mono">{a.candidateCode}</td>
-                      <td>{a.name}</td>
-                      <td>{a.grade || '—'}</td>
-                      <td style={{ fontSize: 12 }}>{(a.desiredDepartments || []).join('、') || '—'}</td>
-                      <td><span className={'badge badge-' + recruitStateColor(a)}>{recruitStateLabel(a)}</span></td>
-                      <td style={{ fontSize: 12 }}>{a.firstInterviewAt ? String(a.firstInterviewAt).replace('T', ' ') : '—'}</td>
-                      <td style={{ fontSize: 12 }}>{a.firstInterviewer || '—'}</td>
-                      <td style={{ fontSize: 12 }}>{a.secondInterviewAt ? String(a.secondInterviewAt).replace('T', ' ') : '—'}</td>
-                      <td>{a.result ? <span className={'badge badge-' + recruitBadgeColor(a.result)}>{a.result}</span> : '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+        )}
       </div>
+
+      {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中…</div>}
+
+      {!loading && view === 'board' && (
+        <RecruitBoard apps={apps} onOpen={function (rid) { window.location.hash = 'recruit-detail?id=' + rid; }} />
+      )}
+
+      {!loading && view === 'list' && (
+        <div className="card">
+          <div className="card-body" style={{ padding: 0 }}>
+            {shownApps.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink4)' }}>{statusFilter ? 'この段階の候補者はいません。' : '候補者がいません。'}</div>}
+            {shownApps.length > 0 && (
+              <table className="tbl">
+                <thead><tr>
+                  <th>番号</th><th>氏名</th><th>学年</th><th>希望部署</th><th>状態</th><th>一次面談</th><th>一次担当</th><th>二次面談</th><th>結果</th>
+                </tr></thead>
+                <tbody>
+                  {shownApps.map(function (a) {
+                    return (
+                      <tr key={a.id} style={{ cursor: 'pointer' }} onClick={function () { try { swrSet('recruitDetailSummary:' + a.id, a); } catch (e) {} window.location.hash = 'recruit-detail?id=' + a.id; }}>
+                        <td className="mono">{a.candidateCode}</td>
+                        <td>{a.name}</td>
+                        <td>{a.grade || '—'}</td>
+                        <td style={{ fontSize: 12 }}>{(a.desiredDepartments || []).join('、') || '—'}</td>
+                        <td><span className={'badge badge-' + recruitStateColor(a)}>{recruitStateLabel(a)}</span></td>
+                        <td style={{ fontSize: 12 }}>{a.firstInterviewAt ? String(a.firstInterviewAt).replace('T', ' ') : '—'}</td>
+                        <td style={{ fontSize: 12 }}>{a.firstInterviewer || '—'}</td>
+                        <td style={{ fontSize: 12 }}>{a.secondInterviewAt ? String(a.secondInterviewAt).replace('T', ' ') : '—'}</td>
+                        <td>{a.result ? <span className={'badge badge-' + recruitBadgeColor(a.result)}>{a.result}</span> : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
       {mailTplOpen && <RecruitMailTemplatesModal onClose={function () { setMailTplOpen(false); }} />}
     </div>
   );
@@ -19926,12 +20059,17 @@ function RecruitRegisterPanel({ appId, app, reg, guardian, depts, onRegistered }
 
   useEffect(function () { if (reg && reg.final_department_id) setDeptId(reg.final_department_id); }, [reg && reg.final_department_id]);
 
-  async function register() {
+  async function register(confirmDuplicate) {
     if (!deptId) { if (window.toast) window.toast.error('所属部署を選んでください'); return; }
     setBusy(true);
     try {
-      const res = await window.postData('registerAcceptedCandidate', { appId: appId, deptId: deptId, role: role });
-      if (res && res.ok) { if (window.toast) window.toast.success('構成員として登録しました（' + res.memberCode + '）'); onRegistered && onRegistered(); }
+      const res = await window.postData('registerAcceptedCandidate', { appId: appId, deptId: deptId, role: role, confirmDuplicate: !!confirmDuplicate });
+      if (res && res.duplicate && !confirmDuplicate) {
+        setBusy(false);
+        if (window.confirm((res.error || 'このメールは既に登録されています') + '\n\n既存の構成員に紐づけて登録を完了しますか？')) { return register(true); }
+        return;
+      }
+      if (res && res.ok) { if (window.toast) window.toast.success(res.linkedExisting ? '既存の構成員に紐づけて完了しました' : ('構成員として登録しました（' + (res.memberCode || res.memberId) + '）')); onRegistered && onRegistered(); }
       else if (window.toast) window.toast.error((res && res.error) || '登録に失敗しました');
     } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -19967,7 +20105,7 @@ function RecruitRegisterPanel({ appId, app, reg, guardian, depts, onRegistered }
               保護者同意が未完了です。同意が完了すると登録できます。
             </div>
           )}
-          <button className="btn btn-primary btn-sm" onClick={register} disabled={busy || !guardianOk}>{busy ? '登録中…' : '構成員として登録'}</button>
+          <button className="btn btn-primary btn-sm" onClick={function () { register(); }} disabled={busy || !guardianOk}>{busy ? '登録中…' : '構成員として登録'}</button>
         </div>
       )}
     </div>
@@ -20008,7 +20146,7 @@ function recruitNextActorHint(a) {
 }
 
 // 状態に応じた運営操作パネル
-function RecruitActionPanel({ app, appId, depts, interviewers, onChanged }) {
+function RecruitActionPanel({ app, appId, depts, interviewers, settings, onChanged }) {
   const phase = app.currentPhase || '', task = app.currentTask || '';
   const [busy, setBusy] = useState(false);
   const [dt, setDt] = useState('');
@@ -20018,15 +20156,22 @@ function RecruitActionPanel({ app, appId, depts, interviewers, onChanged }) {
   const [reason, setReason] = useState('');
   const [deptId, setDeptId] = useState('');
   const [role, setRole] = useState('メンバー');
+  const [extLink, setExtLink] = useState('');
+  const [extTouched, setExtTouched] = useState(false);
+  const bookingDefault = (settings && settings.second_interview_booking_url) || 'https://timerex.net/s/ryukipon217_c55b/58e52502/';
+  useEffect(function () { if (!extTouched) setExtLink(bookingDefault); }, [bookingDefault, extTouched]);
 
-  async function call(action, payload, okMsg) {
+  function call(action, payload, okMsg) {
+    // 楽観的更新: 即座に成功を表示し入力を消す。送信と再取得は裏で行い、失敗時は明示して最新状態へ訂正する。
+    if (window.toast) window.toast.success(okMsg || '更新しました');
+    setTranscript(''); setReason('');
     setBusy(true);
-    try {
-      const res = await window.postData(action, Object.assign({ appId: appId }, payload || {}));
-      if (res && res.ok !== false) { if (window.toast) window.toast.success(okMsg || '更新しました'); setTranscript(''); setReason(''); if (onChanged) onChanged(); }
-      else { if (window.toast) window.toast.error((res && res.error) || '操作に失敗しました'); }
-    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
-    finally { setBusy(false); }
+    window.postData(action, Object.assign({ appId: appId }, payload || {}))
+      .then(function (res) {
+        if (!res || res.ok === false) { if (window.toast) window.toast.error('反映できませんでした: ' + ((res && res.error) || '不明な理由') + '（最新の状態に更新します）'); }
+      })
+      .catch(function (e) { if (window.toast) window.toast.error((e && e.message ? e.message : String(e)) + '（最新の状態に更新します）'); })
+      .then(function () { if (onChanged) onChanged(); setBusy(false); });
   }
   function confirmInterview() {
     if (!dt) { if (window.toast) window.toast.error('日時を入力してください'); return; }
@@ -20037,7 +20182,21 @@ function RecruitActionPanel({ app, appId, depts, interviewers, onChanged }) {
     call('adminGenerateMinutes', { stage: stage, transcript: transcript }, '議事録を生成し、判断依頼を送りました');
   }
   function decide(decision, okMsg) { call('adminRecruitDecision', { decision: decision, reason: reason }, okMsg); }
-  function register() { call('registerAcceptedCandidate', { deptId: deptId, role: role }, '構成員登録が完了しました'); }
+  async function register(confirmDuplicate) {
+    setBusy(true);
+    try {
+      const res = await window.postData('registerAcceptedCandidate', { appId: appId, deptId: deptId, role: role, confirmDuplicate: !!confirmDuplicate });
+      if (res && res.duplicate && !confirmDuplicate) {
+        setBusy(false);
+        if (window.confirm((res.error || 'このメールは既に登録されています') + '\n\n既存の構成員に紐づけて登録を完了しますか？')) { return register(true); }
+        return;
+      }
+      if (res && res.ok) { if (window.toast) window.toast.success(res.linkedExisting ? '既存の構成員に紐づけて完了しました' : '構成員登録が完了しました'); if (onChanged) onChanged(); }
+      else if (window.toast) window.toast.error((res && res.error) || '登録に失敗しました');
+    } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+  function setSecondLink() { if (!extLink.trim()) { if (window.toast) window.toast.error('外部リンクを入力してください'); return; } call('adminSetSecondInterviewLink', { link: extLink }, '日程リンクを設定し、候補者へ案内を送りました'); }
 
   const wrap = { borderRadius: 10, border: '1px solid var(--line)', padding: 16, background: 'var(--surface, #fff)' };
   const info = function (text) { return <div style={{ fontSize: 13, color: 'var(--ink3)', lineHeight: 1.8 }}>{text}</div>; };
@@ -20048,7 +20207,7 @@ function RecruitActionPanel({ app, appId, depts, interviewers, onChanged }) {
   } else if (phase === '一次選考' && task === '日時選択待ち') {
     body = (
       <div>
-        <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 4 }}>候補者の希望日時</div>
+        <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 4 }}>候補者の希望時間帯</div>
         <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 8, padding: 10, marginBottom: 12 }}>{app.primaryAvailableSlots || '（未入力）'}</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
           <div><label className="field-label">確定日時</label><input className="input" type="datetime-local" value={dt} onChange={function (e) { setDt(e.target.value); }} /></div>
@@ -20083,10 +20242,22 @@ function RecruitActionPanel({ app, appId, depts, interviewers, onChanged }) {
     );
   } else if (phase === '二次選考' && task === '入力待ち') {
     body = info('候補者が二次面談の事前入力を行うのを待っています。未入力が続くと自動で追って連絡します。');
+  } else if (phase === '二次選考' && task === '日程調整待ち') {
+    body = (
+      <div>
+        <div style={{ fontSize: 13, color: 'var(--ink3)', marginBottom: 10 }}>二次面談の日程調整リンク（外部の予約・会議リンク）を貼り付けてください。設定すると候補者へ日程確認の案内を送り、面談実施待ちに進みます。</div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="field-label">二次面談の外部リンク</label>
+          <input className="input" value={extLink} onChange={function (e) { setExtTouched(true); setExtLink(e.target.value); }} placeholder="https://…" />
+          <div style={{ fontSize: 11, color: 'var(--ink4)', marginTop: 4 }}>標準の予約システムのリンクを初期表示しています。必要に応じて変更できます。{extTouched && <span> <a href="#" onClick={function (e) { e.preventDefault(); setExtTouched(false); setExtLink(bookingDefault); }} style={{ color: 'var(--teal)' }}>標準リンクに戻す</a></span>}</div>
+        </div>
+        <button className="btn btn-primary" onClick={setSecondLink} disabled={busy}>リンクを設定して案内を送る</button>
+      </div>
+    );
   } else if (phase === '二次選考' && task === '面談実施待ち') {
     body = (
       <div>
-        <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 6 }}>二次面談の日程は運営が候補者と直接調整してください（システムでは管理しません）。</div>
+        <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 6 }}>候補者には日程確認の案内を送信済みです。面談後、文字起こしを貼り付けて議事録を生成してください。</div>
         <div style={{ marginBottom: 8 }}><label className="field-label">二次面談の文字起こし</label><textarea className="input" rows={6} value={transcript} onChange={function (e) { setTranscript(e.target.value); }} placeholder="面談の文字起こしを貼り付けてください" /></div>
         <button className="btn btn-primary" onClick={function () { genMinutes('secondary'); }} disabled={busy}>議事録を生成する</button>
       </div>
@@ -20116,12 +20287,12 @@ function RecruitActionPanel({ app, appId, depts, interviewers, onChanged }) {
   } else if (phase === '登録' && task === '承認待ち') {
     body = (
       <div>
-        <div style={{ fontSize: 13, color: 'var(--ink3)', marginBottom: 10 }}>追加情報がそろいました。所属部署と初期役職を確認して本登録を承認してください。</div>
+        <div style={{ fontSize: 13, color: 'var(--ink3)', marginBottom: 10 }}>追加情報がそろいました。所属部署と初期役職を指定して本登録を承認してください。</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <div><label className="field-label">所属部署（空欄なら候補者の選択を使用）</label><div className="select-wrap"><select className="input select" value={deptId} onChange={function (e) { setDeptId(e.target.value); }}><option value="">候補者の選択を使用</option>{(depts || []).map(function (d) { return <option key={d.id} value={d.id}>{d.name}</option>; })}</select></div></div>
+          <div><label className="field-label">所属部署 <span className="field-req">*</span></label><div className="select-wrap"><select className="input select" value={deptId} onChange={function (e) { setDeptId(e.target.value); }}><option value="">選択してください</option>{(depts || []).map(function (d) { return <option key={d.id} value={d.id}>{d.name}</option>; })}</select></div></div>
           <div><label className="field-label">初期役職</label><div className="select-wrap"><select className="input select" value={role} onChange={function (e) { setRole(e.target.value); }}><option value="メンバー">メンバー</option><option value="アシマネ">アシマネ</option></select></div></div>
         </div>
-        <button className="btn btn-primary" onClick={register} disabled={busy}>本登録を承認する</button>
+        <button className="btn btn-primary" onClick={function () { register(); }} disabled={busy}>本登録を承認する</button>
       </div>
     );
   } else if (phase === '完了') {
@@ -20142,6 +20313,52 @@ function RecruitActionPanel({ app, appId, depts, interviewers, onChanged }) {
   );
 }
 
+function RecruitStatusStepper({ app }) {
+  const phases = ['応募', '一次選考', '二次選考', '採用後', '登録', '完了'];
+  const rs = String((app && app.resultStatus) || 'active');
+  const ended = rs === 'rejected' || rs === 'withdrawn' || String((app && app.currentPhase) || '') === '終了';
+  const curPhase = String((app && app.currentPhase) || '');
+  const curTask = String((app && app.currentTask) || '');
+  const curIdx = phases.indexOf(curPhase);
+  const label = function (t) { return <div style={{ fontFamily: 'var(--jb-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--ink4)', textTransform: 'uppercase', fontWeight: 600, marginBottom: t }}>選考ステータス</div>; };
+  if (ended) {
+    return (
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-body" style={{ padding: '14px 16px' }}>
+          {label(8)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="badge badge-ink"><span className="badge-dot" />{rs === 'withdrawn' ? '辞退' : '不採用'}</span>
+            <span style={{ fontSize: 13, color: 'var(--ink3)' }}>この選考は終了しています。</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-body" style={{ padding: '16px 16px 14px' }}>
+        {label(16)}
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          {phases.map(function (p, i) {
+            const done = curIdx >= 0 && i < curIdx;
+            const cur = i === curIdx;
+            return (
+              <div key={p} style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ flex: 1, height: 2, background: i > 0 ? (done || cur ? 'var(--teal)' : 'var(--line)') : 'transparent' }} />
+                  <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: done ? 'var(--teal)' : cur ? 'var(--jb-blue)' : 'var(--bg)', border: '2px solid ' + (done ? 'var(--teal)' : cur ? 'var(--jb-blue)' : 'var(--line)'), color: (done || cur) ? '#fff' : 'var(--ink5)', fontSize: 12, fontWeight: 700 }}>{done ? '✓' : (i + 1)}</div>
+                  <div style={{ flex: 1, height: 2, background: i < phases.length - 1 ? (done ? 'var(--teal)' : 'var(--line)') : 'transparent' }} />
+                </div>
+                <div style={{ fontSize: 11, marginTop: 6, fontWeight: cur ? 700 : 500, color: cur ? 'var(--jb-blue)' : done ? 'var(--ink3)' : 'var(--ink4)', whiteSpace: 'nowrap' }}>{p}</div>
+                {cur && curTask && <div style={{ fontSize: 10, marginTop: 2, color: 'var(--ink4)', whiteSpace: 'nowrap' }}>{curTask}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 function PageRecruitDetail() {
   const [data, setData] = useState(null);
   const [token, setToken] = useState('');
@@ -20157,14 +20374,21 @@ function PageRecruitDetail() {
 
   const id = (function () { const h = (location.hash || '').split('?')[1] || ''; const m = h.split('&').map(function (p) { return p.split('='); }).find(function (kv) { return kv[0] === 'id'; }); return m ? decodeURIComponent(m[1]) : ''; })();
 
+  function applyDetailBundle(b) {
+    b = b || {};
+    setData(b.application || null); setNewStatus('');
+    setToken(b.candidateToken ? b.candidateToken.token : '');
+    setGuardianToken(b.guardianToken ? b.guardianToken.token : '');
+    setInterviewers(Array.isArray(b.interviewers) ? b.interviewers : []);
+    setSettings(b.settings || null);
+    setDepts(Array.isArray(b.departments) ? b.departments : []);
+  }
   function load() {
-    setLoading(true);
-    window.fetchData('getRecruitApplication', { appId: id }).then(function (d) { setData(d); setNewStatus(''); }).catch(function () {}).then(function () { setLoading(false); });
-    window.fetchData('getRecruitCandidateToken', { appId: id }).then(function (t) { setToken(t ? t.token : ''); }).catch(function () {});
-    window.fetchData('listFirstInterviewerCandidates').then(function (d) { setInterviewers(Array.isArray(d) ? d : []); }).catch(function () {});
-    window.fetchData('getRecruitmentSettings').then(setSettings).catch(function () {});
-    window.fetchData('listRecruitDepartments').then(function (d) { setDepts(Array.isArray(d) ? d : []); }).catch(function () {});
-    window.fetchData('getGuardianConsentToken', { appId: id }).then(function (t) { setGuardianToken(t ? t.token : ''); }).catch(function () {});
+    const cached = id ? swrGet('recruitDetail:' + id) : null;
+    if (cached) { applyDetailBundle(cached); setLoading(false); } else { setLoading(true); }
+    window.fetchData('getRecruitDetailBundle', { appId: id }).then(function (b) {
+      if (b) { swrSet('recruitDetail:' + id, b); applyDetailBundle(b); }
+    }).catch(function () {}).then(function () { setLoading(false); });
   }
   useEffect(function () { load(); }, [id]);
 
@@ -20179,41 +20403,44 @@ function PageRecruitDetail() {
     finally { setBusy(false); }
   }
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中…</div>;
-  if (!data) return <div style={{ padding: 40, textAlign: 'center' }}><div style={{ color: 'var(--coral)' }}>候補者が見つかりません。</div><button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={function () { window.location.hash = 'recruit'; }}>一覧へ戻る</button></div>;
-
-  const app = data.application;
+  const summary = id ? swrGet('recruitDetailSummary:' + id) : null;
+  const app = (data && data.application) || summary;
+  const fullLoaded = !!(data && data.application);
+  if (!app) {
+    if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中…</div>;
+    return <div style={{ padding: 40, textAlign: 'center' }}><div style={{ color: 'var(--coral)' }}>候補者が見つかりません。</div><button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={function () { window.location.hash = 'recruit'; }}>一覧へ戻る</button></div>;
+  }
   const base = location.origin + location.pathname;
-  const secondUrl = base + '#recruit-second?appId=' + id + '&rt=' + token;
-  const addinfoUrl = base + '#recruit-addinfo?appId=' + id + '&rt=' + token;
-  const first = (data.interviews || []).find(function (iv) { return iv.interview_type === 'first'; });
-  const second = (data.interviews || []).find(function (iv) { return iv.interview_type === 'second'; });
-  const note = data.note || {};
-  const reg = data.registrationForm || {};
-  const guardian = data.guardian || {};
+  const first = ((data && data.interviews) || []).find(function (iv) { return iv.interview_type === 'first'; });
+  const second = ((data && data.interviews) || []).find(function (iv) { return iv.interview_type === 'second'; });
+  const note = (data && data.note) || {};
+  const reg = (data && data.registrationForm) || {};
+  const guardian = (data && data.guardian) || {};
 
   const tabs = [['basic', '基本情報'], ['dept', '希望部署'], ['first', '一次面談'], ['second', '二次面談'], ['note', '面談記録'], ['mail', 'Gmail送信履歴'], ['guardian', '保護者同意'], ['reg', '採用後登録'], ['history', '状態履歴']];
 
   return (
-    <div>
-      <button className="btn btn-ghost btn-sm" style={{ marginBottom: 12 }} onClick={function () { window.location.hash = 'recruit'; }}><Icon n="arrRight" s={13} style={{ transform: 'rotate(180deg)' }} /> 一覧へ戻る</button>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-body">
-          <div className="row between" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{app.name} <span className="mono" style={{ fontSize: 13, color: 'var(--ink4)', fontWeight: 400 }}>{app.candidate_code}</span></div>
-              <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span className={'badge badge-' + recruitStateColor(app)}>{recruitStateLabel(app)}</span>
-                <span style={{ fontSize: 12, color: 'var(--ink4)' }}>{recruitNextActorHint(app)}</span>
-                {app.member_id && <span className="mono" style={{ fontSize: 12, color: 'var(--ink4)' }}>{app.member_id}</span>}
-              </div>
-            </div>
+    <div className="jb-page" data-page="recruit-detail">
+      <header className="jb-cover">
+        <div>
+          <p className="jb-cover-subtitle">CONNEC+A — CANDIDATE</p>
+          <h1 className="jb-cover-title">{app.name}</h1>
+          <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 13, color: 'var(--jb-ink-soft)' }}>{app.candidate_code || app.candidateCode}</span>
+            <span className={'badge badge-' + recruitStateColor(app)}>{recruitStateLabel(app)}</span>
+            <span style={{ fontSize: 12, color: 'var(--ink4)' }}>{recruitNextActorHint(app)}</span>
+            {(app.member_id || app.memberId) && <span className="mono" style={{ fontSize: 12, color: 'var(--ink4)' }}>{app.member_id || app.memberId}</span>}
           </div>
         </div>
-      </div>
+        <div className="jb-cover-meta">
+          <button className="jb-btn" onClick={function () { window.location.hash = 'recruit'; }}>← 一覧へ</button>
+        </div>
+      </header>
 
-      <RecruitActionPanel app={app} appId={id} depts={depts} interviewers={interviewers} onChanged={load} />
+      <RecruitStatusStepper app={app} />
+
+      {fullLoaded ? (<>
+      <RecruitActionPanel app={app} appId={id} depts={depts} interviewers={interviewers} settings={settings} onChanged={load} />
 
       <div className="row" style={{ gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         {tabs.map(function (t) { return <span key={t[0]} className={clsx('chip', tab === t[0] && 'on')} onClick={function () { setTab(t[0]); }}>{t[1]}</span>; })}
@@ -20225,7 +20452,7 @@ function PageRecruitDetail() {
             <RecruitField label="氏名" value={app.name} />
             <RecruitField label="ふりがな" value={app.name_kana} />
             <RecruitField label="Gmail宛先" value={app.email} />
-            <RecruitField label="所属" value={app.affiliation} />
+            <RecruitField label="区分" value={app.affiliation} />
             <RecruitField label="学年" value={app.grade} />
             <RecruitField label="学校名または所属機関" value={app.school_name} />
             <RecruitField label="在住県" value={app.residence_prefecture} />
@@ -20313,6 +20540,7 @@ function PageRecruitDetail() {
           </div>
         )}
       </div></div>
+      </>) : (<div className="card"><div className="card-body" style={{ padding: 32, textAlign: 'center', color: 'var(--ink4)' }}>詳細を読み込んでいます…</div></div>)}
     </div>
   );
 }
@@ -36132,6 +36360,176 @@ function renderPage(name) {
   return EB ? <EB name={name} label={`「${name}」の表示でエラーが発生しました`}><Comp/></EB> : <Comp/>;
 }
 
+function PageEventParticipantExport() {
+  const [events, setEvents] = useState([]);
+  const [eventId, setEventId] = useState('');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const reportRef = React.useRef(null);
+
+  useEffect(function () {
+    window.fetchData('listEvents').then(function (evs) { setEvents(Array.isArray(evs) ? evs : []); }).catch(function () {});
+  }, []);
+
+  function loadParticipants(eid) {
+    if (!eid) { setData(null); setErr(''); return; }
+    setLoading(true); setErr('');
+    window.fetchData('getEventParticipantsForExport', { eventId: eid }).then(function (res) {
+      if (res && res.ok) setData(res);
+      else { setData(null); setErr((res && res.error) || '取得に失敗しました'); }
+    }).catch(function (e) { setData(null); setErr(e && e.message ? e.message : String(e)); }).then(function () { setLoading(false); });
+  }
+
+  function downloadCsv() {
+    if (!data || !data.rows || !data.rows.length) { if (window.toast) window.toast.error('参加者がいません'); return; }
+    const headers = ['UserID', '氏名', 'ふりがな', 'メール', '国籍', '年齢', '生年月日', '性別', '在留ステータス', '都道府県', 'JLPT', '日本語学校', '参加回数', '申込ステータス'];
+    const keys = ['userId', 'name', 'kana', 'email', 'nationality', 'age', 'birthDate', 'gender', 'residenceStatus', 'prefecture', 'jlpt', 'jpSchool', 'visits', 'regStatus'];
+    const esc = function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+    const lines = [headers.map(esc).join(',')];
+    data.rows.forEach(function (r) { lines.push(keys.map(function (k) { return esc(r[k]); }).join(',')); });
+    const csv = '\uFEFF' + lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const u = URL.createObjectURL(blob);
+    const ev = events.find(function (x) { return x.id === eventId; });
+    const evName = (ev && ev.title ? String(ev.title).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 30) : 'event');
+    const a = document.createElement('a'); a.href = u; a.download = evName + '_参加者.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+  }
+
+  function loadScriptOnce(srcUrl) {
+    return new Promise(function (resolve, reject) {
+      var ex = document.querySelector('script[data-dyn="' + srcUrl + '"]');
+      if (ex) {
+        if (ex.getAttribute('data-loaded') === '1') { resolve(); return; }
+        ex.addEventListener('load', function () { resolve(); });
+        ex.addEventListener('error', function () { reject(new Error('読み込みに失敗しました')); });
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = srcUrl; s.async = true; s.setAttribute('data-dyn', srcUrl);
+      s.onload = function () { s.setAttribute('data-loaded', '1'); resolve(); };
+      s.onerror = function () { reject(new Error('読み込みに失敗しました: ' + srcUrl)); };
+      document.head.appendChild(s);
+    });
+  }
+  async function exportPdf() {
+    if (!data || !data.total) { if (window.toast) window.toast.error('出力する内容がありません'); return; }
+    if (!reportRef.current) return;
+    setPdfBusy(true);
+    try {
+      await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js');
+      if (!window.html2pdf) throw new Error('PDFライブラリを読み込めませんでした');
+      var ev = events.find(function (x) { return x.id === eventId; });
+      var evName = (ev && ev.title ? String(ev.title).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 30) : 'event');
+      await window.html2pdf().set({
+        margin: 8,
+        filename: evName + '_参加者属性.pdf',
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      }).from(reportRef.current).save();
+    } catch (e) {
+      if (window.toast) window.toast.error('PDF出力に失敗しました: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
+  const VIVID = ['#2273c4', '#4f46e5', '#7c3aed', '#0f8a7a', '#d97706', '#e11d48', '#16a34a', '#0891b2'];
+
+  function Bars(props) {
+    const list = (props.items || []).filter(function (x) { return x.count > 0; });
+    const max = list.reduce(function (m, x) { return Math.max(m, x.count); }, 0) || 1;
+    return (
+      <div className="card" style={{ marginBottom: 14 }}><div className="card-body">
+        <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 12 }}>{props.title}</div>
+        {list.length === 0 ? <div style={{ fontSize: 12 }}>データがありません</div> : list.map(function (x, i) {
+          const c = VIVID[i % VIVID.length];
+          return (
+            <div key={x.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{ width: 116, fontSize: 12, fontWeight: 700, textAlign: 'right', flex: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.label}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ width: Math.max(8, Math.round(x.count / max * 100)) + '%', minWidth: 28, height: 24, background: c, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 8, color: '#fff', fontSize: 12, fontWeight: 800, boxShadow: '0 1px 3px rgba(0,0,0,0.18)' }}>{x.count}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div></div>
+    );
+  }
+
+  const charts = (data && data.charts) || {};
+  const selectedEvent = events.find(function (x) { return x.id === eventId; });
+
+  return (
+    <div className="jb-page" data-page="event-export">
+      <header className="jb-cover">
+        <div>
+          <p className="jb-cover-subtitle">CONNEC+A — EXPORT</p>
+          <h1 className="jb-cover-title">イベント参加者CSV出力</h1>
+          <p style={{ fontSize: 13, color: 'var(--ink2, #444)', marginTop: 6 }}>イベントを選ぶと、テスターを除いた参加者の一覧をCSVで書き出せます。国籍と年齢を含み、属性の内訳も表示します。</p>
+        </div>
+      </header>
+
+      <div className="card" style={{ marginBottom: 16 }}><div className="card-body">
+        <label className="field-label">イベントを選択</label>
+        <div className="select-wrap" style={{ maxWidth: 520 }}>
+          <select className="input select" value={eventId} onChange={function (e) { const v = e.target.value; setEventId(v); loadParticipants(v); }}>
+            <option value="">選択してください</option>
+            {events.map(function (ev) { return <option key={ev.id} value={ev.id}>{(ev.title || ev.id) + (ev.date ? '（' + ev.date + '）' : '')}</option>; })}
+          </select>
+        </div>
+        {err && <div className="error-banner" style={{ marginTop: 12 }}><Icon n="warn" s={14} cls="error-banner-icon" /><div>{err}</div></div>}
+      </div></div>
+
+      {loading && <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink3)' }}>読み込み中…</div>}
+
+      {data && !loading && (
+        <>
+          <div className="card" style={{ marginBottom: 16 }}><div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{(selectedEvent ? (selectedEvent.title || '') : '') + '（参加者 ' + data.total + ' 名・テスター除外）'}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={downloadCsv} disabled={!data.total}>CSV出力</button>
+              <button className="btn btn-primary" onClick={exportPdf} disabled={!data.total || pdfBusy}>{pdfBusy ? 'PDF作成中…' : 'PDF出力'}</button>
+            </div>
+          </div></div>
+
+          <div ref={reportRef} style={{ background: '#ffffff', padding: 6, borderRadius: 8 }}>
+            <div className="card" style={{ marginBottom: 14 }}><div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ background: '#2273c4', color: '#fff', borderRadius: 10, padding: '10px 16px', fontWeight: 800 }}>
+                <div style={{ fontSize: 26, lineHeight: 1 }}>{data.total}</div>
+                <div style={{ fontSize: 11, opacity: 0.95 }}>参加者（テスター除外）</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800 }}>{selectedEvent ? (selectedEvent.title || '') : ''}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink2, #444)' }}>{(selectedEvent && selectedEvent.date ? selectedEvent.date + '　' : '') + '参加者属性レポート'}</div>
+              </div>
+            </div></div>
+
+            {data.total === 0 ? (
+              <div className="card"><div className="card-body" style={{ textAlign: 'center', color: 'var(--ink3)', padding: 28 }}>対象の参加者がいません（テスターは除外しています）。</div></div>
+            ) : (
+              <>
+                <Bars title="国籍" items={charts.nationality} />
+                <Bars title="年齢層" items={charts.ageBuckets} />
+                <Bars title="在留ステータス" items={charts.residenceStatus} />
+                <Bars title="都道府県" items={charts.prefecture} />
+                <Bars title="JLPT" items={charts.jlpt} />
+                <Bars title="性別" items={charts.gender} />
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+window.PageEventParticipantExport = PageEventParticipantExport;
+
 const PAGES = {
   // ----- 概要 -----
   dashboard:              () => renderPage('PageDashboard'),
@@ -36152,6 +36550,7 @@ const PAGES = {
   // (統合) 旧「満足度調査」ページは「満足度調査・イベント後」に一本化。#satisfaction は統合ページへ。
   satisfaction:   () => renderPage('PagePostEvent'),
   "post-event":   () => renderPage('PagePostEvent'),
+  "event-export": () => renderPage('PageEventParticipantExport'),
 
   // ----- コミュニケーション (Phase 2新-B) -----
   mail:           () => renderPage('PageMail'),
@@ -36209,7 +36608,7 @@ const PAGES = {
 function parseRecruitPublicRoute() {
   const h = (location.hash || '').replace(/^#/, '');
   const path = h.split('?')[0];
-  if (['recruit-apply', 'recruit-availability', 'recruit-join', 'recruit-second', 'recruit-addinfo', 'guardian-consent'].indexOf(path) < 0) return null;
+  if (['recruit-apply', 'recruit-availability', 'recruit-join', 'recruit-second', 'recruit-second-schedule', 'recruit-addinfo', 'guardian-consent'].indexOf(path) < 0) return null;
   const qs = h.split('?')[1] || '';
   const params = {};
   qs.split('&').forEach(function (p) { const kv = p.split('='); if (kv[0]) params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || ''); });
@@ -36218,15 +36617,29 @@ function parseRecruitPublicRoute() {
 
 function PublicRecruitShell({ title, subtitle, children }) {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', padding: '32px 16px' }}>
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 22 }}>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 26, letterSpacing: '-.02em' }}>connec+a</div>
-          <div style={{ fontSize: 18, marginTop: 8, fontWeight: 700 }}>{title}</div>
-          {subtitle && <div style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 6, lineHeight: 1.7 }}>{subtitle}</div>}
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, var(--jb-paper, #fbfaf8) 0%, var(--jb-paper-mist, #f3f1ec) 100%)', padding: '0 16px 56px', position: 'relative' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg, var(--jb-blue, #1c3d8f), var(--jb-cyan, #2aa9c4))', zIndex: 20 }} />
+      <div style={{ maxWidth: 620, margin: '0 auto', paddingTop: 52 }}>
+        <div style={{ textAlign: 'center', marginBottom: 26 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <span style={{ width: 24, height: 2, background: 'var(--jb-blue, var(--indigo))', opacity: 0.6 }} />
+            <span style={{ fontFamily: 'var(--jb-serif, var(--serif))', fontSize: 19, letterSpacing: '-.01em', color: 'var(--jb-blue, var(--indigo))', fontWeight: 600 }}>connec+a</span>
+            <span style={{ width: 24, height: 2, background: 'var(--jb-blue, var(--indigo))', opacity: 0.6 }} />
+          </div>
+          <h1 style={{ fontFamily: 'var(--jb-serif, var(--serif))', fontSize: 28, letterSpacing: '-.015em', color: 'var(--jb-ink, var(--ink))', lineHeight: 1.3, margin: 0, fontWeight: 600 }}>{title}</h1>
+          {subtitle && <p style={{ fontFamily: 'var(--jb-sans, var(--sans))', fontSize: 13, color: 'var(--jb-ink-soft, var(--ink3))', marginTop: 12, lineHeight: 1.8, maxWidth: 468, marginLeft: 'auto', marginRight: 'auto' }}>{subtitle}</p>}
         </div>
         {children}
+        <div style={{ textAlign: 'center', marginTop: 30, fontSize: 10, color: 'var(--ink5)', fontFamily: 'var(--jb-mono, var(--mono))', letterSpacing: '0.14em', textTransform: 'uppercase' }}>connec+a · multicultural community</div>
       </div>
+    </div>
+  );
+}
+
+function PublicDoneMark() {
+  return (
+    <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 18px', background: 'linear-gradient(135deg, var(--jb-blue, #1c3d8f), var(--jb-cyan, #2aa9c4))', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 18px rgba(28,61,143,0.28)' }}>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
     </div>
   );
 }
@@ -36235,7 +36648,7 @@ function PublicRecruitApply() {
   const [depts, setDepts] = useStateApp([]);
   const [loading, setLoading] = useStateApp(true);
   const [form, setForm] = useStateApp({ name: '', name_kana: '', email: '', affiliation: '', grade: '', school_name: '', residence_prefecture: '', referrer_name: '', pre_interview_questions: '', desired_department_reason: '' });
-  const [times, setTimes] = useStateApp([{ mode: 'single', start: '', end: '' }]);
+  const [times, setTimes] = useStateApp([{ mode: 'range', start: '', end: '' }]);
   const [deptIds, setDeptIds] = useStateApp([]);
   const [expanded, setExpanded] = useStateApp({});
   const [submitting, setSubmitting] = useStateApp(false);
@@ -36243,7 +36656,15 @@ function PublicRecruitApply() {
   const [done, setDone] = useStateApp(null);
 
   useEffectApp(() => {
-    window.fetchData('listRecruitDepartments').then(function (d) { setDepts(Array.isArray(d) ? d : []); }).catch(function () {}).then(function () { setLoading(false); });
+    try {
+      var cached = JSON.parse(localStorage.getItem('reca_depts') || 'null');
+      if (cached && Array.isArray(cached.v) && (Date.now() - cached.t) < 600000) { setDepts(cached.v); setLoading(false); }
+    } catch (e) {}
+    window.fetchData('listRecruitDepartments').then(function (d) {
+      var arr = Array.isArray(d) ? d : [];
+      setDepts(arr);
+      try { localStorage.setItem('reca_depts', JSON.stringify({ t: Date.now(), v: arr })); } catch (e) {}
+    }).catch(function () {}).then(function () { setLoading(false); });
   }, []);
 
   function upd(k, v) { setForm(function (f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
@@ -36273,11 +36694,12 @@ function PublicRecruitApply() {
     if (!form.email.trim()) { setError('Gmailアドレスを入力してください'); return; }
     const t = times.map(fmtTimeEntry).filter(Boolean);
     setSubmitting(true);
+    setDone({ pending: true });
     try {
       const res = await window.postData('createRecruitApplication', Object.assign({}, form, { first_interview_candidate_times: t, desired_department_ids: deptIds }));
       if (res && res.ok) setDone(res);
-      else setError((res && res.error) || '送信に失敗しました');
-    } catch (e) { setError(e && e.message ? e.message : String(e)); }
+      else { setDone(null); setError((res && res.error) || '送信に失敗しました'); }
+    } catch (e) { setDone(null); setError(e && e.message ? e.message : String(e)); }
     finally { setSubmitting(false); }
   }
 
@@ -36285,8 +36707,9 @@ function PublicRecruitApply() {
     return (
       <PublicRecruitShell title="ご応募ありがとうございます">
         <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28 }}>
+          <PublicDoneMark />
           <div style={{ fontSize: 14, lineHeight: 1.8 }}>一次面談の応募を受け付けました。担当者より、いただいた候補日時をもとにご連絡します。</div>
-          <div style={{ marginTop: 14, fontSize: 13, color: 'var(--ink3)' }}>受付番号: <span className="mono">{done.candidateCode}</span></div>
+          <div style={{ marginTop: 14, fontSize: 13, color: 'var(--ink3)' }}>受付番号: <span className="mono">{done.candidateCode || '発行中…'}</span></div>
         </div></div>
       </PublicRecruitShell>
     );
@@ -36295,10 +36718,13 @@ function PublicRecruitApply() {
   return (
     <PublicRecruitShell title="参加申し込みフォーム" subtitle="お名前とGmailアドレスのみ必須です。その他は任意です。担当者よりご連絡します。">
       <div className="card"><div className="card-body" style={{ padding: 24 }}>
-        {loading && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中…</div>}
-        {!loading && (
           <>
             {error && <div className="error-banner" style={{ marginBottom: 14 }}><Icon n="warn" s={14} cls="error-banner-icon" /><div>{error}</div></div>}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 14px' }}>
+              <span style={{ width: 3, height: 15, background: 'var(--teal)', borderRadius: 2 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--jb-ink, var(--ink))', letterSpacing: '0.02em' }}>基本情報</span>
+            </div>
 
             <div style={{ marginBottom: 12 }}>
               <label className="field-label">氏名 <span className="field-req">*</span></label>
@@ -36313,12 +36739,12 @@ function PublicRecruitApply() {
               <input className="input" type="email" value={form.email} onChange={function (e) { upd('email', e.target.value); }} placeholder="you@example.com" />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div><label className="field-label">所属</label><input className="input" value={form.affiliation} onChange={function (e) { upd('affiliation', e.target.value); }} /></div>
-              <div><label className="field-label">学年</label><input className="input" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }} /></div>
+              <div><label className="field-label">区分</label><div className="select-wrap"><select className="input select" value={form.affiliation} onChange={function (e) { var v = e.target.value; var opts = gradeOptionsForAffil(v); setForm(function (f) { return Object.assign({}, f, { affiliation: v, grade: opts.indexOf(f.grade) >= 0 ? f.grade : (opts.length === 1 ? opts[0] : '') }); }); }}><option value="">選択してください</option>{AFFIL_OPTIONS.map(function (a) { return <option key={a} value={a}>{a}</option>; })}</select></div></div>
+              <div><label className="field-label">学年</label><div className="select-wrap"><select className="input select" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }}><option value="">選択してください</option>{gradeOptionsForAffil(form.affiliation).map(function (g) { return <option key={g} value={g}>{g}</option>; })}</select></div></div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div><label className="field-label">学校名または所属機関</label><input className="input" value={form.school_name} onChange={function (e) { upd('school_name', e.target.value); }} /></div>
-              <div><label className="field-label">在住県</label><input className="input" value={form.residence_prefecture} onChange={function (e) { upd('residence_prefecture', e.target.value); }} /></div>
+              <div><label className="field-label">在住県</label><div className="select-wrap"><select className="input select" value={form.residence_prefecture} onChange={function (e) { upd('residence_prefecture', e.target.value); }}><option value="">選択してください</option>{JP_PREFECTURES.map(function (p) { return <option key={p} value={p}>{p}</option>; })}</select></div></div>
             </div>
             <div style={{ marginBottom: 12 }}>
               <label className="field-label">紹介者（いれば）</label>
@@ -36329,39 +36755,40 @@ function PublicRecruitApply() {
               <textarea className="input" rows={3} value={form.pre_interview_questions} onChange={function (e) { upd('pre_interview_questions', e.target.value); }} />
             </div>
 
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '24px 0 14px' }}>
+              <span style={{ width: 3, height: 15, background: 'var(--teal)', borderRadius: 2 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--jb-ink, var(--ink))', letterSpacing: '0.02em' }}>面談の希望</span>
+            </div>
+
             <div style={{ marginBottom: 12 }}>
-              <label className="field-label">一次面談の候補日時（任意）</label>
-              <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 6 }}>単一の日時、または期間（開始〜終了）で複数入力できます。日時は代表が候補の中から決定します。</div>
+              <label className="field-label">一次面談の希望時間帯（任意）</label>
+              <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 6 }}>参加できる時間帯（開始〜終了）を入力してください。複数入力できます。日時は代表がこの中から決定します。</div>
               {times.map(function (e, i) {
                 return (
                   <div key={i} style={{ marginBottom: 8, border: '1px solid var(--line)', borderRadius: 8, padding: 10 }}>
-                    <div className="row" style={{ gap: 6, marginBottom: 8, alignItems: 'center' }}>
-                      <button type="button" className={'chip' + (e.mode === 'single' ? ' on' : '')} onClick={function () { setTime(i, { mode: 'single' }); }}>単一</button>
-                      <button type="button" className={'chip' + (e.mode === 'range' ? ' on' : '')} onClick={function () { setTime(i, { mode: 'range' }); }}>期間</button>
-                      <div style={{ flex: 1 }} />
+                    <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input className="input" type="datetime-local" value={e.start} onChange={function (ev) { setTime(i, { start: ev.target.value }); }} style={{ flex: 1, minWidth: 150 }} />
+                      <span style={{ color: 'var(--ink4)' }}>〜</span>
+                      <input className="input" type="datetime-local" value={e.end} onChange={function (ev) { setTime(i, { end: ev.target.value }); }} style={{ flex: 1, minWidth: 150 }} />
                       {times.length > 1 && <button className="btn btn-ghost btn-sm" onClick={function () { removeTime(i); }}><Icon n="x" s={13} /></button>}
                     </div>
-                    {e.mode === 'range' ? (
-                      <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input className="input" type="datetime-local" value={e.start} onChange={function (ev) { setTime(i, { start: ev.target.value }); }} style={{ flex: 1, minWidth: 150 }} />
-                        <span style={{ color: 'var(--ink4)' }}>〜</span>
-                        <input className="input" type="datetime-local" value={e.end} onChange={function (ev) { setTime(i, { end: ev.target.value }); }} style={{ flex: 1, minWidth: 150 }} />
-                      </div>
-                    ) : (
-                      <input className="input" type="datetime-local" value={e.start} onChange={function (ev) { setTime(i, { start: ev.target.value }); }} style={{ width: '100%' }} />
-                    )}
                   </div>
                 );
               })}
               <div className="row" style={{ gap: 6 }}>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={function () { addTime('single'); }}><Icon n="plus" s={13} /> 日時を追加</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={function () { addTime('range'); }}><Icon n="plus" s={13} /> 期間を追加</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={function () { addTime('range'); }}><Icon n="plus" s={13} /> 時間帯を追加</button>
               </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '24px 0 14px' }}>
+              <span style={{ width: 3, height: 15, background: 'var(--teal)', borderRadius: 2 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--jb-ink, var(--ink))', letterSpacing: '0.02em' }}>希望部署</span>
             </div>
 
             <div style={{ marginBottom: 12 }}>
               <label className="field-label">希望部署（任意）</label>
               <div style={{ fontSize: 11, color: 'var(--ink4)', marginBottom: 8 }}>1つ以上選んでください。各部署の説明も確認できます。</div>
+              {loading && depts.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink4)', padding: '6px 0' }}>部署を読み込んでいます…</div>}
               {depts.map(function (d) {
                 const on = deptIds.indexOf(d.id) >= 0;
                 return (
@@ -36387,7 +36814,6 @@ function PublicRecruitApply() {
               {submitting ? '送信中…' : '応募する'}
             </button>
           </>
-        )}
       </div></div>
     </PublicRecruitShell>
   );
@@ -36439,6 +36865,7 @@ function PublicRecruitSecond({ route }) {
   if (phase === 'done') return (
     <PublicRecruitShell title="予約完了">
       <div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28 }}>
+        <PublicDoneMark />
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10, color: 'var(--ink)' }}>予約完了！</div>
         <div style={{ fontSize: 14, lineHeight: 1.8 }}>記入いただいたメールアドレス{form.email ? '（' + form.email + '）' : ''}をご確認ください。予約内容の確認をお送りします。</div>
         <div style={{ fontSize: 12, color: 'var(--ink4)', marginTop: 18 }}>予約フォームが開かなかった場合は <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">こちら</a> から予約してください。</div>
@@ -36458,90 +36885,6 @@ function PublicRecruitSecond({ route }) {
         <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 12, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: 10 }}>回答を送信後、代表との二次面談の予約フォームに進みます。日時はそこで予約してください。</div>
         <div style={{ marginBottom: 16 }}><label className="field-label">補足事項（任意）</label><textarea className="input" rows={2} value={form.supplement} onChange={function (e) { upd('supplement', e.target.value); }} /></div>
         <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }} onClick={submit} disabled={submitting}>{submitting ? '送信中…' : '回答を送信して予約に進む'}</button>
-      </div></div>
-    </PublicRecruitShell>
-  );
-}
-
-function PublicRecruitAddInfo({ route }) {
-  const [ctx, setCtx] = useStateApp(null);
-  const [loading, setLoading] = useStateApp(true);
-  const [form, setForm] = useStateApp({ name: '', name_kana: '', email: '', grade: '', school_name: '', join_date: '', residence_prefecture: '', residence_country: '日本', remote_available: false, final_department_id: '', guardian_required: false, guardian_name: '', guardian_email: '', emergency_contact: '', membership_terms_accepted: false, privacy_policy_accepted: false });
-  const [submitting, setSubmitting] = useStateApp(false);
-  const [error, setError] = useStateApp('');
-  const [done, setDone] = useStateApp(false);
-
-  useEffectApp(() => {
-    window.fetchData('getRecruitPublicForm', { appId: route.appId, rt: route.rt, form: 'addinfo' }).then(function (d) {
-      setCtx(d);
-      if (d && d.ok) setForm(function (f) {
-        const p = d.prefill || {};
-        return Object.assign({}, f, { name: p.name || d.name || '', name_kana: p.name_kana || d.nameKana || '', email: p.email || d.email || '', grade: p.grade || '', school_name: p.school_name || '', join_date: p.join_date || '', residence_prefecture: p.residence_prefecture || '', residence_country: p.residence_country || '日本', final_department_id: p.final_department_id || '', emergency_contact: p.emergency_contact || '' });
-      });
-    }).catch(function () { setCtx({ ok: false, error: '読み込みに失敗しました' }); }).then(function () { setLoading(false); });
-  }, []);
-
-  function upd(k, v) { setForm(function (f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
-
-  async function submit() {
-    setError('');
-    if (!form.name.trim()) { setError('氏名を入力してください'); return; }
-    if (!form.email.trim()) { setError('Gmail宛先を入力してください'); return; }
-    if (form.guardian_required && (!form.guardian_name.trim() || !form.guardian_email.trim())) { setError('保護者の氏名とGmail宛先を入力してください'); return; }
-    if (!form.membership_terms_accepted) { setError('規約への同意が必要です'); return; }
-    if (!form.privacy_policy_accepted) { setError('個人情報の取り扱いへの同意が必要です'); return; }
-    setSubmitting(true);
-    try {
-      const res = await window.postData('submitAdditionalInfo', Object.assign({ appId: route.appId, rt: route.rt }, form));
-      if (res && res.ok) setDone(true);
-      else setError((res && res.error) || '送信に失敗しました');
-    } catch (e) { setError(e && e.message ? e.message : String(e)); }
-    finally { setSubmitting(false); }
-  }
-
-  if (loading) return <PublicRecruitShell title="採用後 追加情報入力"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24, color: 'var(--ink4)' }}>読み込み中…</div></div></PublicRecruitShell>;
-  if (!ctx || !ctx.ok) return <PublicRecruitShell title="採用後 追加情報入力"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24, color: 'var(--coral)' }}>{(ctx && ctx.error) || 'リンクが無効です'}</div></div></PublicRecruitShell>;
-  if (ctx.submitted) return <PublicRecruitShell title="採用後 追加情報入力"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24 }}>すでに提出済みです。ありがとうございます。</div></div></PublicRecruitShell>;
-  if (!ctx.allowed) return <PublicRecruitShell title="採用後 追加情報入力"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 24, color: 'var(--ink4)' }}>現在この入力は受け付けていません。</div></div></PublicRecruitShell>;
-  if (done) return <PublicRecruitShell title="ありがとうございます"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28 }}>追加情報を受け付けました。{form.guardian_required ? '保護者の方への同意のご案内を別途お送りします。' : ''}登録手続きが完了次第ご連絡します。</div></div></PublicRecruitShell>;
-
-  return (
-    <PublicRecruitShell title="採用後 追加情報入力" subtitle="正式登録に必要な情報をご記入ください。">
-      <div className="card"><div className="card-body" style={{ padding: 24 }}>
-        {error && <div className="error-banner" style={{ marginBottom: 14 }}><Icon n="warn" s={14} cls="error-banner-icon" /><div>{error}</div></div>}
-        <div style={{ marginBottom: 12 }}><label className="field-label">氏名 <span className="field-req">*</span></label><input className="input" value={form.name} onChange={function (e) { upd('name', e.target.value); }} /></div>
-        <div style={{ marginBottom: 12 }}><label className="field-label">ふりがな</label><input className="input" value={form.name_kana} onChange={function (e) { upd('name_kana', e.target.value); }} /></div>
-        <div style={{ marginBottom: 12 }}><label className="field-label">Gmail宛先 <span className="field-req">*</span></label><input className="input" type="email" value={form.email} onChange={function (e) { upd('email', e.target.value); }} /></div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div><label className="field-label">学年</label><input className="input" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }} /></div>
-          <div><label className="field-label">学校名または所属機関</label><input className="input" value={form.school_name} onChange={function (e) { upd('school_name', e.target.value); }} /></div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div><label className="field-label">入会時期</label><input className="input" type="date" value={form.join_date} onChange={function (e) { upd('join_date', e.target.value); }} /></div>
-          <div><label className="field-label">最終所属部署</label><div className="select-wrap"><select className="input select" value={form.final_department_id} onChange={function (e) { upd('final_department_id', e.target.value); }}><option value="">選択してください</option>{(ctx.departments || []).map(function (d) { return <option key={d.id} value={d.id}>{d.name}</option>; })}</select></div></div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div><label className="field-label">在住都道府県</label><input className="input" value={form.residence_prefecture} onChange={function (e) { upd('residence_prefecture', e.target.value); }} /></div>
-          <div><label className="field-label">在住国</label><input className="input" value={form.residence_country} onChange={function (e) { upd('residence_country', e.target.value); }} /></div>
-        </div>
-        <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 12, cursor: 'pointer' }}><input type="checkbox" checked={form.remote_available} onChange={function (e) { upd('remote_available', e.target.checked); }} /><span style={{ fontSize: 13 }}>フルリモート参加が可能</span></label>
-        <div style={{ marginBottom: 12 }}><label className="field-label">緊急連絡先</label><input className="input" value={form.emergency_contact} onChange={function (e) { upd('emergency_contact', e.target.value); }} /></div>
-
-        <div style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
-          <label className="row" style={{ gap: 8, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={form.guardian_required} onChange={function (e) { upd('guardian_required', e.target.checked); }} /><span style={{ fontSize: 13, fontWeight: 600 }}>保護者の同意が必要（高校生以下は必須）</span></label>
-          {form.guardian_required && (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ marginBottom: 8 }}><label className="field-label">保護者氏名</label><input className="input" value={form.guardian_name} onChange={function (e) { upd('guardian_name', e.target.value); }} /></div>
-              <div><label className="field-label">保護者Gmail宛先</label><input className="input" type="email" value={form.guardian_email} onChange={function (e) { upd('guardian_email', e.target.value); }} /></div>
-              <div style={{ fontSize: 11, color: 'var(--ink4)', marginTop: 6 }}>送信後、保護者の方へ同意のご案内をお送りします。</div>
-            </div>
-          )}
-        </div>
-
-        <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}><input type="checkbox" checked={form.membership_terms_accepted} onChange={function (e) { upd('membership_terms_accepted', e.target.checked); }} /><span style={{ fontSize: 13 }}>規約に同意します <span className="field-req">*</span></span></label>
-        <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 16, cursor: 'pointer' }}><input type="checkbox" checked={form.privacy_policy_accepted} onChange={function (e) { upd('privacy_policy_accepted', e.target.checked); }} /><span style={{ fontSize: 13 }}>個人情報の取り扱いに同意します <span className="field-req">*</span></span></label>
-
-        <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }} onClick={submit} disabled={submitting}>{submitting ? '送信中…' : '登録情報を送信する'}</button>
       </div></div>
     </PublicRecruitShell>
   );
@@ -36605,7 +36948,7 @@ function PublicGuardianConsent({ route }) {
 function PublicMemberRegister() {
   const [depts, setDepts] = useStateApp([]);
   const [loading, setLoading] = useStateApp(true);
-  const [form, setForm] = useStateApp({ name: '', name_kana: '', email: '', deptId: '', grade: '', school: '', residencePref: '', residenceCountry: '日本', remote: false, message: '' });
+  const [form, setForm] = useStateApp({ name: '', name_kana: '', email: '', deptId: '', grade: '', affiliation: '', school: '', residencePref: '', residenceCountry: '日本', remote: false, message: '' });
   const [submitting, setSubmitting] = useStateApp(false);
   const [error, setError] = useStateApp('');
   const [done, setDone] = useStateApp(false);
@@ -36657,11 +37000,15 @@ function PublicMemberRegister() {
               </select></div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div><label className="field-label">学年</label><input className="input" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }} /></div>
+              <div><label className="field-label">区分</label><div className="select-wrap"><select className="input select" value={form.affiliation} onChange={function (e) { var v = e.target.value; var opts = gradeOptionsForAffil(v); setForm(function (f) { return Object.assign({}, f, { affiliation: v, grade: opts.indexOf(f.grade) >= 0 ? f.grade : (opts.length === 1 ? opts[0] : '') }); }); }}><option value="">選択してください</option>{AFFIL_OPTIONS.map(function (a) { return <option key={a} value={a}>{a}</option>; })}</select></div></div>
+              <div />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div><label className="field-label">学年</label><div className="select-wrap"><select className="input select" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }}><option value="">選択してください</option>{gradeOptionsForAffil(form.affiliation).map(function (g) { return <option key={g} value={g}>{g}</option>; })}</select></div></div>
               <div><label className="field-label">学校名または所属機関</label><input className="input" value={form.school} onChange={function (e) { upd('school', e.target.value); }} /></div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div><label className="field-label">在住都道府県</label><input className="input" value={form.residencePref} onChange={function (e) { upd('residencePref', e.target.value); }} /></div>
+              <div><label className="field-label">在住都道府県</label><div className="select-wrap"><select className="input select" value={form.residencePref} onChange={function (e) { upd('residencePref', e.target.value); }}><option value="">選択してください</option>{JP_PREFECTURES.map(function (p) { return <option key={p} value={p}>{p}</option>; })}</select></div></div>
               <div><label className="field-label">在住国</label><input className="input" value={form.residenceCountry} onChange={function (e) { upd('residenceCountry', e.target.value); }} /></div>
             </div>
             <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 12, cursor: 'pointer' }}><input type="checkbox" checked={form.remote} onChange={function (e) { upd('remote', e.target.checked); }} /><span style={{ fontSize: 13 }}>フルリモート参加が可能</span></label>
@@ -36674,6 +37021,18 @@ function PublicMemberRegister() {
   );
 }
 
+const RECRUIT_GRADE_OPTIONS = ['中学1年', '中学2年', '中学3年', '高校1年', '高校2年', '高校3年', '大学1年', '大学2年', '大学3年', '大学4年', '大学院', '専門学校', '社会人', 'その他'];
+const RECRUIT_MINOR_GRADES = ['中学1年', '中学2年', '中学3年', '高校1年', '高校2年', '高校3年'];
+const JP_PREFECTURES = ['北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県', '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県', '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県', '静岡県', '愛知県', '三重県', '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県', '山口県', '徳島県', '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県', '海外・その他'];
+const AFFIL_OPTIONS = ['中学生', '高校生', '大学生', '社会人', 'その他'];
+function gradeOptionsForAffil(affil) {
+  if (affil === '中学生') return ['中学1年', '中学2年', '中学3年'];
+  if (affil === '高校生') return ['高校1年', '高校2年', '高校3年'];
+  if (affil === '大学生') return ['大学1年', '大学2年', '大学3年', '大学4年', '大学院'];
+  if (affil === '社会人') return ['社会人'];
+  if (affil === 'その他') return ['専門学校', 'その他'];
+  return RECRUIT_GRADE_OPTIONS;
+}
 function PublicRecruitFormV2({ route }) {
   const purpose = route.purpose || '';
   const [ctx, setCtx] = useStateApp(null);
@@ -36715,16 +37074,16 @@ function PublicRecruitFormV2({ route }) {
   function addSlot(mode) { setSlots(function (ss) { return ss.concat({ mode: mode || 'single', start: '', end: '' }); }); }
   function removeSlot(i) { setSlots(function (ss) { return ss.length > 1 ? ss.filter(function (_, idx) { return idx !== i; }) : ss; }); }
 
-  const titleMap = { primary_availability: '一次面談 希望日時の入力', join_intent: '加入意思の確認', second_input: '二次面談 事前入力', additional_info: '登録情報の入力', guardian_consent: '保護者同意のお願い' };
+  const titleMap = { primary_availability: '一次面談 希望日時の入力', join_intent: '加入意思の確認', second_input: '二次面談 事前入力', additional_info: '登録情報の入力', guardian_consent: '保護者同意のお願い', second_schedule: '二次面談の日程確認' };
   const title = titleMap[purpose] || 'connec+a';
 
   async function doSubmit(action, payload) {
     setError(''); setSubmitting(true);
+    setDone(true);
     try {
       const res = await window.postData(action, Object.assign({ appId: route.appId, purpose: purpose, exp: route.exp, sig: route.sig }, payload || {}));
-      if (res && res.ok) setDone(true);
-      else setError((res && res.error) || '送信に失敗しました');
-    } catch (e) { setError(e && e.message ? e.message : String(e)); }
+      if (!res || !res.ok) { setDone(false); setError((res && res.error) || '送信に失敗しました'); }
+    } catch (e) { setDone(false); setError(e && e.message ? e.message : String(e)); }
     finally { setSubmitting(false); }
   }
   function submitAvailability() {
@@ -36737,13 +37096,16 @@ function PublicRecruitFormV2({ route }) {
     if (!form.life_goal.trim()) { setError('人生のゴールを入力してください'); return; }
     doSubmit('submitSecondaryInputPublic', { life_goal: form.life_goal, env_usage: form.env_usage, second_interview_supplement: form.second_interview_supplement });
   }
+  const isMinor = RECRUIT_MINOR_GRADES.indexOf(form.grade) >= 0;
+  const secLabel = function (text, mt) { return <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--teal)', margin: (mt || 0) + 'px 0 10px', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 3, height: 14, background: 'var(--teal)', borderRadius: 2, display: 'inline-block' }} />{text}</div>; };
   function submitAddInfo() {
     if (!form.name.trim()) { setError('氏名を入力してください'); return; }
     if (!form.email.trim()) { setError('Gmail宛先を入力してください'); return; }
-    if (form.guardian_required && (!form.guardian_name.trim() || !form.guardian_email.trim())) { setError('保護者の氏名とGmail宛先を入力してください'); return; }
+    if (!form.grade) { setError('学年を選択してください'); return; }
+    if (isMinor && (!form.guardian_name.trim() || !form.guardian_email.trim())) { setError('未成年の方は保護者の氏名とGmail宛先を入力してください'); return; }
     if (!form.membership_terms_accepted) { setError('規約への同意が必要です'); return; }
     if (!form.privacy_policy_accepted) { setError('個人情報の取り扱いへの同意が必要です'); return; }
-    doSubmit('submitAdditionalInfoPublic', form);
+    doSubmit('submitAdditionalInfoPublic', Object.assign({}, form, { guardian_required: isMinor, final_department_id: '' }));
   }
   function submitGuardian() {
     if (!form.agree) { setError('同意のチェックが必要です'); return; }
@@ -36757,10 +37119,10 @@ function PublicRecruitFormV2({ route }) {
       primary_availability: 'ご希望日時を受け付けました。担当者が日時を確定し、ご連絡します。',
       join_intent: '加入意思を受け付けました。続いて登録情報の入力案内をメールでお送りします。',
       second_input: 'ご回答ありがとうございます。二次面談の日程は別途ご連絡します。',
-      additional_info: '登録情報を受け付けました。' + (form.guardian_required ? '保護者の方への同意のご案内をお送りします。' : '登録手続きが完了次第ご連絡します。'),
+      additional_info: '登録情報を受け付けました。' + (RECRUIT_MINOR_GRADES.indexOf(form.grade) >= 0 ? '保護者の方へ同意のご案内をお送りします。' : '登録手続きが完了次第ご連絡します。'),
       guardian_consent: 'ご同意を受け付けました。ご協力ありがとうございました。',
     };
-    return <PublicRecruitShell title="ありがとうございます"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28, fontSize: 14, lineHeight: 1.8 }}>{doneMsg[purpose] || '受け付けました。'}</div></div></PublicRecruitShell>;
+    return <PublicRecruitShell title="ありがとうございます"><div className="card"><div className="card-body" style={{ textAlign: 'center', padding: 28, fontSize: 14, lineHeight: 1.8 }}><PublicDoneMark />{doneMsg[purpose] || '受け付けました。'}</div></div></PublicRecruitShell>;
   }
 
   return (
@@ -36818,36 +37180,42 @@ function PublicRecruitFormV2({ route }) {
 
         {purpose === 'additional_info' && (
           <>
+            {secLabel('基本情報')}
             <div style={{ marginBottom: 12 }}><label className="field-label">氏名 <span className="field-req">*</span></label><input className="input" value={form.name} onChange={function (e) { upd('name', e.target.value); }} /></div>
-            <div style={{ marginBottom: 12 }}><label className="field-label">ふりがな</label><input className="input" value={form.name_kana} onChange={function (e) { upd('name_kana', e.target.value); }} /></div>
-            <div style={{ marginBottom: 12 }}><label className="field-label">Gmail宛先 <span className="field-req">*</span></label><input className="input" type="email" value={form.email} onChange={function (e) { upd('email', e.target.value); }} /></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div><label className="field-label">学年</label><input className="input" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }} /></div>
+              <div><label className="field-label">ふりがな</label><input className="input" value={form.name_kana} onChange={function (e) { upd('name_kana', e.target.value); }} placeholder="やまだ たろう" /></div>
+              <div><label className="field-label">Gmail宛先 <span className="field-req">*</span></label><input className="input" type="email" value={form.email} onChange={function (e) { upd('email', e.target.value); }} /></div>
+            </div>
+            {secLabel('学校・在住', 18)}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div><label className="field-label">学年 <span className="field-req">*</span></label><div className="select-wrap"><select className="input select" value={form.grade} onChange={function (e) { upd('grade', e.target.value); }}><option value="">選択してください</option>{RECRUIT_GRADE_OPTIONS.map(function (g) { return <option key={g} value={g}>{g}</option>; })}</select></div></div>
               <div><label className="field-label">学校名または所属機関</label><input className="input" value={form.school_name} onChange={function (e) { upd('school_name', e.target.value); }} /></div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div><label className="field-label">入会時期</label><input className="input" type="date" value={form.join_date} onChange={function (e) { upd('join_date', e.target.value); }} /></div>
-              <div><label className="field-label">最終所属部署</label><div className="select-wrap"><select className="input select" value={form.final_department_id} onChange={function (e) { upd('final_department_id', e.target.value); }}><option value="">選択してください</option>{depts.map(function (d) { return <option key={d.id} value={d.id}>{d.name}</option>; })}</select></div></div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div><label className="field-label">在住都道府県</label><input className="input" value={form.residence_prefecture} onChange={function (e) { upd('residence_prefecture', e.target.value); }} /></div>
+              <div><label className="field-label">在住都道府県</label><div className="select-wrap"><select className="input select" value={form.residence_prefecture} onChange={function (e) { upd('residence_prefecture', e.target.value); }}><option value="">選択してください</option>{JP_PREFECTURES.map(function (p) { return <option key={p} value={p}>{p}</option>; })}</select></div></div>
               <div><label className="field-label">在住国</label><input className="input" value={form.residence_country} onChange={function (e) { upd('residence_country', e.target.value); }} /></div>
             </div>
-            <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 12, cursor: 'pointer' }}><input type="checkbox" checked={form.remote_available} onChange={function (e) { upd('remote_available', e.target.checked); }} /><span style={{ fontSize: 13 }}>フルリモート参加が可能</span></label>
-            <div style={{ marginBottom: 12 }}><label className="field-label">緊急連絡先</label><input className="input" value={form.emergency_contact} onChange={function (e) { upd('emergency_contact', e.target.value); }} /></div>
-            <div style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
-              <label className="row" style={{ gap: 8, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={form.guardian_required} onChange={function (e) { upd('guardian_required', e.target.checked); }} /><span style={{ fontSize: 13, fontWeight: 600 }}>保護者の同意が必要（高校生以下は必須）</span></label>
-              {form.guardian_required && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ marginBottom: 8 }}><label className="field-label">保護者氏名</label><input className="input" value={form.guardian_name} onChange={function (e) { upd('guardian_name', e.target.value); }} /></div>
-                  <div><label className="field-label">保護者Gmail宛先</label><input className="input" type="email" value={form.guardian_email} onChange={function (e) { upd('guardian_email', e.target.value); }} /></div>
-                  <div style={{ fontSize: 11, color: 'var(--ink4)', marginTop: 6 }}>送信後、保護者の方へ同意のご案内をお送りします。</div>
-                </div>
-              )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div><label className="field-label">入会時期</label><input className="input" type="date" value={form.join_date} onChange={function (e) { upd('join_date', e.target.value); }} /></div>
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}><label className="row" style={{ gap: 8, alignItems: 'center', cursor: 'pointer', paddingBottom: 9 }}><input type="checkbox" checked={form.remote_available} onChange={function (e) { upd('remote_available', e.target.checked); }} /><span style={{ fontSize: 13 }}>フルリモート参加が可能</span></label></div>
             </div>
+            <div style={{ marginBottom: 12 }}><label className="field-label">緊急連絡先</label><input className="input" value={form.emergency_contact} onChange={function (e) { upd('emergency_contact', e.target.value); }} placeholder="電話番号など" /></div>
+            {isMinor && (
+              <div style={{ marginTop: 6 }}>
+                {secLabel('保護者の同意', 12)}
+                <div style={{ border: '1px solid var(--teal)', background: 'var(--teal-50, rgba(20,160,160,0.06))', borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 12.5, color: 'var(--ink3)', lineHeight: 1.7, marginBottom: 10 }}>選択された学年は未成年のため、保護者の同意が必要です。下記の宛先へ同意のご案内を自動でお送りします。</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div><label className="field-label">保護者氏名 <span className="field-req">*</span></label><input className="input" value={form.guardian_name} onChange={function (e) { upd('guardian_name', e.target.value); }} /></div>
+                    <div><label className="field-label">保護者Gmail宛先 <span className="field-req">*</span></label><input className="input" type="email" value={form.guardian_email} onChange={function (e) { upd('guardian_email', e.target.value); }} /></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {secLabel('同意事項', 18)}
             <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}><input type="checkbox" checked={form.membership_terms_accepted} onChange={function (e) { upd('membership_terms_accepted', e.target.checked); }} /><span style={{ fontSize: 13 }}>規約に同意します <span className="field-req">*</span></span></label>
-            <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 16, cursor: 'pointer' }}><input type="checkbox" checked={form.privacy_policy_accepted} onChange={function (e) { upd('privacy_policy_accepted', e.target.checked); }} /><span style={{ fontSize: 13 }}>個人情報の取り扱いに同意します <span className="field-req">*</span></span></label>
-            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }} onClick={submitAddInfo} disabled={submitting}>{submitting ? '送信中…' : '登録情報を送信する'}</button>
+            <label className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 18, cursor: 'pointer' }}><input type="checkbox" checked={form.privacy_policy_accepted} onChange={function (e) { upd('privacy_policy_accepted', e.target.checked); }} /><span style={{ fontSize: 13 }}>個人情報の取り扱いに同意します <span className="field-req">*</span></span></label>
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '13px 16px', fontSize: 15 }} onClick={submitAddInfo} disabled={submitting}>{submitting ? '送信中…' : '登録情報を送信する'}</button>
           </>
         )}
 
@@ -36862,6 +37230,17 @@ function PublicRecruitFormV2({ route }) {
             <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }} onClick={submitGuardian} disabled={submitting}>{submitting ? '送信中…' : '同意する'}</button>
           </>
         )}
+
+        {purpose === 'second_schedule' && (
+          <>
+            <div style={{ fontSize: 14, lineHeight: 1.9, marginBottom: 18 }}>二次面談に進んでいただくことになりました。下記より二次面談の日程をご確認ください。</div>
+            {ctx.externalUrl ? (
+              <a href={ctx.externalUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ display: 'inline-flex', justifyContent: 'center', padding: '12px 24px', textDecoration: 'none', width: '100%', boxSizing: 'border-box' }}>二次面談の日程を確認する</a>
+            ) : (
+              <div style={{ color: 'var(--ink4)', fontSize: 13 }}>日程リンクの準備中です。しばらくお待ちください。</div>
+            )}
+          </>
+        )}
       </div></div>
     </PublicRecruitShell>
   );
@@ -36871,7 +37250,6 @@ function PublicRecruitRouter({ route }) {
   if (route.form === 'recruit-apply') return <PublicRecruitApply />;
   if (route.sig || route.form === 'recruit-availability' || route.form === 'recruit-join') return <PublicRecruitFormV2 route={route} />;
   if (route.form === 'recruit-second') return <PublicRecruitSecond route={route} />;
-  if (route.form === 'recruit-addinfo') return <PublicRecruitAddInfo route={route} />;
   if (route.form === 'guardian-consent') return <PublicGuardianConsent route={route} />;
   return (
     <PublicRecruitShell title="準備中">
