@@ -184,7 +184,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Shippori+Mincho+B1:wght@400;500;600;700;800&family=Noto+Serif+JP:wght@400;500;600;700;900&family=M+PLUS+Rounded+1c:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Shippori+Mincho+B1:wght@400;500;600;700;800&family=Noto+Serif+JP:wght@400;500;600;700;900&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=M+PLUS+Rounded+1c:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <!-- Phase 7.2: ヒーローオーバーレイ用手書きフォント -->
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Kalam:wght@400;700&family=Permanent+Marker&family=Yuji+Mai&family=Yuji+Boku&family=Klee+One:wght@400;600&family=Zen+Kurenaido&family=Hachi+Maru+Pop&family=Fraunces:ital,wght@0,400;1,400&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -202,14 +202,14 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   /* PRIMARY — connec+a Navy Blue (logo source: #163d8a / RGB 22,61,138) */
-  --indigo:oklch(0.345 0.16 263);
-  --indigo-hover:oklch(0.28 0.17 263);
-  --indigo-50:oklch(0.97 0.02 263);
-  --indigo-100:oklch(0.93 0.05 263);
-  --indigo-200:oklch(0.86 0.09 263);
-  --indigo-600:oklch(0.345 0.16 263);
-  --indigo-700:oklch(0.28 0.17 263);
-  --indigo-ink:oklch(0.22 0.13 263);
+  --indigo:#005BAC;
+  --indigo-hover:#00477F;
+  --indigo-50:#EAF4FF;
+  --indigo-100:#D7E6F5;
+  --indigo-200:#BCD7F0;
+  --indigo-600:#005BAC;
+  --indigo-700:#003F73;
+  --indigo-ink:#003F73;
 
   /* ACCENT — 小田急レッド / グリーン (Phase 16.J10)
      (統一) coral/green/red は jb-* を単一の真実源として参照。
@@ -245,16 +245,16 @@
   --jp:          var(--jb-sans);
   --jb-bg:       var(--jb-paper);
 
-  --ink:oklch(0.18 0.012 265);
-  --ink2:oklch(0.32 0.012 265);
-  --ink3:oklch(0.48 0.010 265);
-  --ink4:oklch(0.62 0.008 265);
-  --ink5:oklch(0.78 0.006 265);
-  --line:oklch(0.92 0.005 265);
-  --line2:oklch(0.88 0.006 265);
-  --bg:oklch(0.985 0.002 265);
-  --bg2:oklch(0.965 0.004 265);
-  --bg3:oklch(0.94 0.005 265);
+  --ink:#102033;
+  --ink2:#28384A;
+  --ink3:#5B6B7D;
+  --ink4:#5B6B7D;
+  --ink5:#8A98A8;
+  --line:#D7E6F5;
+  --line2:#C7DBEF;
+  --bg:#F6F9FC;
+  --bg2:#EFF5FB;
+  --bg3:#E2EDF8;
   --white:#ffffff;
 
   --r:10px;--rs:8px;--rx:16px;--rr:6px;
@@ -264,7 +264,7 @@
   --sh-md:0 8px 24px -8px rgba(20,30,60,.12),0 2px 6px rgba(20,30,60,.05);
   --sh-lg:0 24px 48px -16px rgba(20,30,60,.18),0 4px 10px rgba(20,30,60,.06);
   --serif:'Instrument Serif',ui-serif,Georgia,serif;
-  --sans:'Inter Tight','Noto Sans JP',system-ui,sans-serif;
+  --sans:'Inter Tight','Zen Kaku Gothic New','Noto Sans JP',system-ui,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,monospace;
 }
 html{scroll-behavior:smooth}
@@ -334,7 +334,7 @@ svg{display:block}
 .app{display:flex;min-height:calc(100vh - 52px)}
 .sidebar{width:232px;background:var(--white);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px;flex:none;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;transition:width .25s cubic-bezier(.22,1,.36,1);font-family:'M PLUS Rounded 1c','Zen Maru Gothic','Hiragino Maru Gothic ProN','Noto Sans JP',var(--sans)}
 .sidebar .nav-item, .sidebar .nav-label, .sidebar .org-name, .sidebar .org-plan, .sidebar .signin-name{
-  font-family:'M PLUS Rounded 1c','Zen Maru Gothic','Hiragino Maru Gothic ProN','Noto Sans JP',var(--sans);
+  font-family:'Inter Tight','Zen Kaku Gothic New','Hiragino Sans','Noto Sans JP',var(--sans);
 }
 /* (Phase 17.S-fix) サイドバー 折り畳み — アイコンのみ表示 */
 .sidebar.collapsed{width:60px;padding:14px 6px;overflow-x:hidden}
@@ -783,34 +783,43 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
  * 背景: 純白基調 + 微かな寒色霞
  * ============================================================ */
 :root {
-  /* 配色: フェルメールブルー系 (= もっと明るく シアン寄り) */
-  --jb-blue:       #00A8E1;  /* メインブルー (= 明るい寒色) */
-  --jb-blue-deep:  #006FA6;  /* 深ブルー (見出し / 引き締め) */
-  --jb-blue-mid:   #1FB6E8;  /* 中間 */
-  --jb-blue-light: #6DCFF0;  /* ライト (アクセント) */
-  --jb-blue-pale:  #B0E1F2;  /* パステル */
-  --jb-blue-soft:  #E5F5FC;  /* 淡 (薄背景) */
-  --jb-blue-line:  #B8E4F4;  /* 淡藍の線 */
-  --jb-cyan:       #00C8E5;  /* シアン (= グラデの相棒) */
-  --jb-cyan-light: #58D8EF;  /* シアン淡 */
-  --jb-shouwa:     #E64530;  /* 小田急レッド (= ロマンスカー風 暖色) */
-  --jb-shouwa-soft:#FCE4DF;  /* 淡赤 */
-  --jb-success:    #009D6A;  /* 小田急グリーン (= 決済済 / 成功) */
-  --jb-success-soft:#D4F0E2; /* 淡緑 */
-  --jb-ink:        #1E3247;  /* 紺墨 (寒色寄りダーク) */
-  --jb-ink-soft:   #5C7186;  /* 淡墨 */
-  --jb-ink-ghost:  #A8BBCC;  /* さらに淡い */
-  --jb-paper:      #FFFFFF;  /* 純白 */
-  --jb-paper-mist: #F2F7FB;  /* 霞色 (寒色寄りグレー) */
-  --jb-paper-soft: #F8FBFD;  /* ほぼ白 寒色 */
-  --jb-paper-tint: #EAF2F8;  /* グレー寄りの差し色 */
-  --jb-line:       #D8E4ED;  /* 主線 (寒色グレー) */
-  --jb-line-soft:  #E9F0F5;  /* 副線 (極淡) */
+  /* 配色: JAPAN BLUE 系 (connec+a / Liquid Glass リデザイン) */
+  --jb-blue:       #005BAC;  /* JAPAN BLUE (主要操作 / 現在地 / 進行中) */
+  --jb-blue-deep:  #003F73;  /* 深い藍 (見出し / 引き締め) */
+  --jb-blue-mid:   #1A6FBE;  /* 中間 */
+  --jb-blue-light: #4E8FCB;  /* ライト (アクセント) */
+  --jb-blue-pale:  #BFD9F0;  /* パステル */
+  --jb-blue-soft:  #EAF4FF;  /* 淡い青 (薄背景 / 選択) */
+  --jb-blue-line:  #D7E6F5;  /* 青系境界線 */
+  --jb-cyan:       #2477C4;  /* グラデの相棒 (青寄りに統一) */
+  --jb-cyan-light: #5E9AD2;  /* 淡 */
+  --jb-shouwa:     #DC2626;  /* 危険 / 失敗 (赤) */
+  --jb-shouwa-soft:#FCE4E4;  /* 淡赤 */
+  --jb-success:    #16A34A;  /* 完了 (緑) */
+  --jb-success-soft:#DCF5E6; /* 淡緑 */
+  --jb-ink:        #102033;  /* 主文字 (濃紺) */
+  --jb-ink-soft:   #5B6B7D;  /* 補助文字 */
+  --jb-ink-ghost:  #98A8B8;  /* さらに淡い */
+  --jb-paper:      #FFFFFF;  /* 主な面 (白) */
+  --jb-paper-mist: #F6F9FC;  /* 全体背景 */
+  --jb-paper-soft: #FBFDFF;  /* ほぼ白 */
+  --jb-paper-tint: #EAF4FF;  /* 淡い青の差し色 */
+  --jb-line:       #D7E6F5;  /* 主線 (青系境界線) */
+  --jb-line-soft:  #E7F0F9;  /* 副線 (極淡) */
+  /* Liquid Glass (昼) */
+  --glass-bg:      rgba(255,255,255,0.72);
+  --glass-bg-strong:rgba(255,255,255,0.86);
+  --glass-border:  rgba(255,255,255,0.85);
+  --glass-hair:    rgba(0,91,172,0.10);
+  --glass-blur:    18px;
+  --glass-sheen:   linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0) 60%);
+  --glass-shadow:  0 8px 30px -10px rgba(0,63,115,0.18),0 2px 8px rgba(0,63,115,0.06);
+  --scrim:         rgba(16,32,51,0.32);
 
-  /* タイポ: 丸ゴシック (M PLUS Rounded 1c) 全面統一 */
-  --jb-display:  "M PLUS Rounded 1c", "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Quicksand", sans-serif;
-  --jb-serif:    "M PLUS Rounded 1c", "Zen Maru Gothic", "Hiragino Maru Gothic ProN", sans-serif;
-  --jb-sans:     "M PLUS Rounded 1c", "Noto Sans JP", -apple-system, "Hiragino Sans", sans-serif;
+  /* タイポ: シャープな角ゴシック (Zen Kaku Gothic New) + Inter Tight でクールに */
+  --jb-display:  "Inter Tight", "Zen Kaku Gothic New", "Hiragino Sans", sans-serif;
+  --jb-serif:    "Zen Kaku Gothic New", "Hiragino Sans", sans-serif;
+  --jb-sans:     "Inter Tight", "Zen Kaku Gothic New", "Noto Sans JP", -apple-system, "Hiragino Sans", sans-serif;
   --jb-mono:     "JetBrains Mono", "Roboto Mono", "Menlo", monospace;
 }
 
@@ -821,40 +830,49 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
 
 /* ========== (Phase 17.S-fix) Night Mode (= リッチ ダーク) ========== */
 :root[data-theme="night"] {
-  --jb-blue:       #38BDF8;
-  --jb-blue-deep:  #0284C7;
-  --jb-blue-mid:   #0EA5E9;
-  --jb-blue-light: #7DD3FC;
-  --jb-blue-pale:  #1E3A52;
-  --jb-blue-soft:  #0F1E2A;
-  --jb-blue-line:  #1E3A52;
-  --jb-cyan:       #22D3EE;
-  --jb-cyan-light: #67E8F9;
+  --jb-blue:       #3BA5FF;
+  --jb-blue-deep:  #2B8FE6;
+  --jb-blue-mid:   #2B8FE6;
+  --jb-blue-light: #8CCBFF;
+  --jb-blue-pale:  #143452;
+  --jb-blue-soft:  #102A44;
+  --jb-blue-line:  rgba(140,203,255,0.22);
+  --jb-cyan:       #3BA5FF;
+  --jb-cyan-light: #8CCBFF;
   --jb-shouwa:     #F87171;
   --jb-shouwa-soft:#3A1A1A;
-  --jb-success:    #34D399;
+  --jb-success:    #4ADE80;
   --jb-success-soft:#0F2E22;
-  --jb-ink:        #F1F5F9;
-  --jb-ink-soft:   #94A3B8;
-  --jb-ink-ghost:  #475569;
-  --jb-paper:      #0F172A;
-  --jb-paper-mist: #1E293B;
-  --jb-paper-soft: #161F33;
-  --jb-paper-tint: #1A2438;
-  --jb-line:       #334155;
-  --jb-line-soft:  #1E293B;
+  --jb-ink:        #EAF4FF;
+  --jb-ink-soft:   #9FB6CC;
+  --jb-ink-ghost:  #6E8299;
+  --jb-paper:      #0D1F33;
+  --jb-paper-mist: #102A44;
+  --jb-paper-soft: #0D1F33;
+  --jb-paper-tint: #102A44;
+  --jb-line:       rgba(140,203,255,0.22);
+  --jb-line-soft:  rgba(140,203,255,0.13);
+  /* Liquid Glass (夜) */
+  --glass-bg:      rgba(13,31,51,0.72);
+  --glass-bg-strong:rgba(13,31,51,0.88);
+  --glass-border:  rgba(140,203,255,0.20);
+  --glass-hair:    rgba(140,203,255,0.14);
+  --glass-blur:    18px;
+  --glass-sheen:   linear-gradient(180deg,rgba(140,203,255,0.10),rgba(140,203,255,0) 60%);
+  --glass-shadow:  0 10px 34px -10px rgba(0,0,0,0.55),0 2px 8px rgba(0,0,0,0.4);
+  --scrim:         rgba(3,9,18,0.55);
   /* (Phase 17.S-fix) サイドバー / トップバー 用 別系統 CSS変数 も 上書き */
-  --ink:           #F1F5F9;  /* 主テキスト → 月光白 */
-  --ink2:          #CBD5E1;
-  --ink3:          #94A3B8;
-  --ink4:          #94A3B8;  /* (= 暗かった ラベル を 明るく) */
-  --ink5:          #64748B;
-  --line:          #1E293B;
-  --line2:         #334155;
-  --bg:            #0F172A;
-  --bg2:           #1E293B;
-  --bg3:           #1A2438;
-  --white:         #1E293B;  /* 白背景 → 暗背景 */
+  --ink:           #EAF4FF;  /* 主テキスト → 月光白 */
+  --ink2:          #C5D8EC;
+  --ink3:          #9FB6CC;
+  --ink4:          #9FB6CC;  /* (= 暗かった ラベル を 明るく) */
+  --ink5:          #6E8299;
+  --line:          rgba(140,203,255,0.22);
+  --line2:         rgba(140,203,255,0.30);
+  --bg:            #071522;
+  --bg2:           #0D1F33;
+  --bg3:           #102A44;
+  --white:         #0D1F33;  /* 白背景 → 深い藍 */
   --sh-xs:         0 1px 0 rgba(0,0,0,.4);
   --sh-sm:         0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.3);
   --sh:            0 2px 8px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
@@ -865,14 +883,14 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
      淡色背景トークン(*-50/-100)が Noon の near-white のままだと
      ダークモードで白いブロックとして浮くため上書きする。
      coral/green/red の主色と -50 は jb-* エイリアス経由で自動追従済み。 */
-  --indigo:        #5B8DEF;
-  --indigo-hover:  #7BA5F2;
-  --indigo-50:     #18243A;
-  --indigo-100:    #1E2F4D;
-  --indigo-200:    #284069;
-  --indigo-600:    #5B8DEF;
-  --indigo-700:    #9DBDF7;
-  --indigo-ink:    #BFD3FA;
+  --indigo:        #3BA5FF;
+  --indigo-hover:  #62B8FF;
+  --indigo-50:     #102A44;
+  --indigo-100:    #143452;
+  --indigo-200:    #1C4A73;
+  --indigo-600:    #3BA5FF;
+  --indigo-700:    #8CCBFF;
+  --indigo-ink:    #BBDCFF;
   --coral-600:     #FF8B6F;
   --coral-100:     #3A1A1A;
   --green-100:     #0F2E22;
@@ -891,8 +909,8 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
 :root[data-theme="night"] .jb-page {
   background: var(--jb-paper);
   background-image:
-    radial-gradient(ellipse at top, rgba(56, 189, 248, 0.08) 0%, transparent 50%),
-    linear-gradient(180deg, #1E293B 0%, #0F172A 240px);
+    radial-gradient(ellipse at top, rgba(59, 165, 255, 0.10) 0%, transparent 55%),
+    linear-gradient(180deg, #0D1F33 0%, #071522 240px);
 }
 :root[data-theme="night"] body { background: var(--bg); color: var(--ink); }
 :root[data-theme="night"] .topbar { background: var(--bg2) !important; border-bottom-color: var(--line) !important; }
@@ -1669,6 +1687,146 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   .stat-num{font-size:20px}
   .grid-2,.grid-3{gap:8px}
 }
+
+/* ============================================================================
+   LIQUID GLASS リデザイン (connec+a / JAPAN BLUE)
+   固定領域・重要導線のみガラス化。一覧/入力/本文は不透明のまま可読性優先。
+   昼=白いガラス + JAPAN BLUE / 夜=深い藍のガラス + 明るい JAPAN BLUE。
+   ========================================================================= */
+
+/* ---- 上部帯 (Liquid Glass) ---- */
+.topbar{
+  background:
+    var(--glass-sheen),
+    linear-gradient(180deg, color-mix(in srgb, var(--jb-blue) 5%, var(--glass-bg)), var(--glass-bg));
+  -webkit-backdrop-filter:saturate(1.4) blur(var(--glass-blur));
+  backdrop-filter:saturate(1.4) blur(var(--glass-blur));
+  border-bottom:1px solid var(--glass-hair);
+  box-shadow:0 1px 0 rgba(255,255,255,.4) inset, 0 6px 20px -12px rgba(0,63,115,.30);
+}
+:root[data-theme="night"] .topbar{
+  background:
+    var(--glass-sheen),
+    linear-gradient(180deg, color-mix(in srgb, var(--jb-blue) 8%, var(--glass-bg)), var(--glass-bg)) !important;
+  border-bottom-color:var(--glass-hair) !important;
+  box-shadow:0 1px 0 rgba(140,203,255,.10) inset, 0 8px 24px -12px rgba(0,0,0,.6) !important;
+}
+
+/* ---- 左案内 (Liquid Glass) ---- */
+.sidebar{
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--jb-blue) 4%, var(--glass-bg)), var(--glass-bg));
+  -webkit-backdrop-filter:saturate(1.3) blur(var(--glass-blur));
+  backdrop-filter:saturate(1.3) blur(var(--glass-blur));
+  border-right:1px solid var(--glass-hair);
+  box-shadow:1px 0 0 rgba(255,255,255,.35) inset;
+}
+:root[data-theme="night"] .sidebar{
+  background:linear-gradient(180deg, color-mix(in srgb, var(--jb-blue) 9%, var(--glass-bg)), var(--glass-bg));
+  border-right-color:var(--glass-hair);
+  box-shadow:1px 0 0 rgba(140,203,255,.08) inset;
+}
+
+/* ---- 現在地 / 選択中 = JAPAN BLUE (淡い青背景 + 左の青線) ---- */
+.nav-item.active{
+  background:var(--jb-blue-soft);
+  color:var(--jb-blue);font-weight:700;
+}
+.nav-item.active::before{
+  background:var(--jb-blue);width:3px;left:-10px;border-radius:0 3px 3px 0;
+  box-shadow:0 0 10px -1px color-mix(in srgb, var(--jb-blue) 60%, transparent);
+}
+.nav-item.active .ic{color:var(--jb-blue)}
+:root[data-theme="night"] .nav-item.active{background:var(--jb-blue-soft);color:var(--jb-blue-light)}
+:root[data-theme="night"] .nav-item.active::before{background:var(--jb-blue)}
+:root[data-theme="night"] .nav-item.active .ic{color:var(--jb-blue-light)}
+.nav-sub a.active{background:var(--jb-blue-soft);color:var(--jb-blue);font-weight:700}
+.nav-sub a.active .nav-sub-badge{background:color-mix(in srgb,var(--jb-blue) 18%, transparent);color:var(--jb-blue)}
+:root[data-theme="night"] .nav-sub a.active{background:var(--jb-blue-soft);color:var(--jb-blue-light)}
+
+/* ---- 検索欄 (Liquid Glass / 文字と背景の明度差は確保) ---- */
+.cmdk{
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border-color:var(--glass-hair);color:var(--ink3);
+}
+.cmdk:hover{background:var(--glass-bg-strong);border-color:var(--jb-blue-line)}
+.search-bar{
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border-color:var(--jb-blue-line);
+}
+:root[data-theme="night"] .cmdk{background:var(--glass-bg);border-color:var(--glass-hair);color:var(--ink3)}
+:root[data-theme="night"] .search-bar{background:var(--glass-bg);border-color:var(--glass-hair)}
+
+/* ---- 絞り込み (浮遊するガラス枠) ---- */
+.filter-glass{
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:saturate(1.3) blur(14px);backdrop-filter:saturate(1.3) blur(14px);
+  border:1px solid var(--glass-hair);
+  border-radius:var(--rx);
+  box-shadow:var(--glass-shadow);
+}
+/* 選択中の条件チップ = 淡すぎない青 */
+.chip.on{background:var(--jb-blue);color:#fff;border-color:var(--jb-blue)}
+.chip.on-soft{background:var(--jb-blue-soft);color:var(--jb-blue);border-color:var(--jb-blue-line);font-weight:600}
+:root[data-theme="night"] .chip.on-soft{background:var(--jb-blue-soft);color:var(--jb-blue-light);border-color:var(--glass-hair)}
+
+/* ---- 主要操作 = JAPAN BLUE 塗り (光沢) ---- */
+.btn-indigo{
+  background:linear-gradient(180deg, color-mix(in srgb,#fff 14%, var(--jb-blue)), var(--jb-blue));
+  border-color:var(--jb-blue);color:#fff;
+  box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 4px 12px -4px color-mix(in srgb,var(--jb-blue) 55%, transparent);
+}
+.btn-indigo:hover{background:linear-gradient(180deg, var(--jb-blue), var(--jb-blue-deep))}
+/* 副次操作 = JAPAN BLUE の枠線 */
+.btn-line{background:transparent;color:var(--jb-blue);border:1px solid var(--jb-blue-line)}
+.btn-line:hover{background:var(--jb-blue-soft);border-color:var(--jb-blue)}
+:root[data-theme="night"] .btn-line{color:var(--jb-blue-light);border-color:var(--glass-hair)}
+:root[data-theme="night"] .btn-line:hover{background:var(--jb-blue-soft)}
+
+/* ---- 確認窓 (Liquid Glass + 背景ぼかし) ---- */
+.confirm-modal-bg{
+  background:var(--scrim);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+}
+.confirm-modal{
+  background:
+    var(--glass-sheen),
+    linear-gradient(180deg, var(--glass-bg-strong), var(--glass-bg-strong));
+  -webkit-backdrop-filter:saturate(1.4) blur(22px);backdrop-filter:saturate(1.4) blur(22px);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--glass-shadow);
+}
+/* 確認窓内の本文は不透明な可読面に */
+.confirm-modal-body{color:var(--ink2)}
+
+/* ---- 詳細パネルの外殻をガラスにするユーティリティ (中の本文は別途不透明) ---- */
+.glass-shell{
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:saturate(1.3) blur(var(--glass-blur));backdrop-filter:saturate(1.3) blur(var(--glass-blur));
+  border:1px solid var(--glass-hair);
+  border-radius:var(--rx);
+  box-shadow:var(--glass-shadow);
+}
+
+/* ---- 状態の進行/選択を JAPAN BLUE に統一 (進行バー等) ---- */
+.bar-fill{background:var(--jb-blue)}
+::selection{background:var(--jb-blue-soft);color:var(--jb-blue-deep)}
+:root[data-theme="night"] ::selection{background:#102A44;color:var(--jb-blue-light)}
+
+/* ---- アクセシビリティ: 透明/ぼかしが苦手な人 + 低性能端末 ---- */
+@media (prefers-reduced-transparency: reduce){
+  .topbar,.sidebar,.cmdk,.search-bar,.filter-glass,.confirm-modal,.confirm-modal-bg,.glass-shell{
+    -webkit-backdrop-filter:none !important;backdrop-filter:none !important;
+  }
+  .topbar,.sidebar{background:var(--bg2) !important}
+  .confirm-modal{background:var(--white) !important}
+  .confirm-modal-bg{background:rgba(16,32,51,.55) !important}
+}
+@media (prefers-reduced-motion: reduce){
+  *{scroll-behavior:auto !important}
+}
 </style>
 <script>
 /* (Runtime Error Overlay) window エラー / 未処理 Promise を捕捉し、画面隅にバッジ表示。
@@ -1720,6 +1878,15 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
 
 </head>
 <body>
+
+<template id="__bundler_thumbnail" data-bg-color="#005BAC">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#005BAC"/>
+    <rect x="380" y="250" width="440" height="300" rx="40" fill="#ffffff" opacity="0.16"/>
+    <text x="600" y="445" font-family="'Inter Tight','Zen Kaku Gothic New',sans-serif" font-size="150" font-weight="800" fill="#ffffff" text-anchor="middle">connec<tspan fill="#EAF4FF" font-style="italic">+</tspan>a</text>
+    <text x="600" y="545" font-family="'JetBrains Mono',monospace" font-size="34" letter-spacing="14" fill="#BFD9F0" text-anchor="middle">CONSOLE</text>
+  </svg>
+</template>
 
 <!-- (Phase 17.S-fix) オープニング スプラッシュ画面 -->
 <div id="connecta-splash" style="position:fixed;inset:0;z-index:99999;background:var(--bg, #fafafa);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1);">
@@ -1911,6 +2078,7 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
       <a href="#paypay" class="nav-item" data-nav="paypay"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a3 3 0 0 1 0 6H9V8zm0 6v4"/></svg>PayPay 決済管理</a>
       <a href="#coupons" class="nav-item" data-nav="coupons"><svg class="ic" viewBox="0 0 24 24"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>クーポン管理</a>
       <a href="#departments" class="nav-item" data-nav="departments"><svg class="ic" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>部署 / チーム</a>
+      <a href="#minutes" class="nav-item" data-nav="minutes"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>議事録</a>
       <a href="#mypage" class="nav-item" data-nav="mypage"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>マイページ</a>
       <a href="#manager-staff" class="nav-item" data-nav="manager-staff" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>運営管理</a>
       <a href="#member-admin" class="nav-item" data-nav="member-admin"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>メンバー管理</a>
@@ -35285,6 +35453,493 @@ window.PagePhotos = PagePhotos;
 window.PageOrg = PageOrg;
 window.PageAds = PageAds;
 window.PageSettings = PageSettings;
+
+// =================================================================
+// PageMinutes — 議事録一覧 (外部議事録アプリ連携)
+//   listMinutes(action) を fetchData 経由で取得。 権限スコープはサーバ側で強制。
+//   manager+ は全部署 + 部署プルダウン、 それ未満は自部署のみ (canSeeAll で文言切替)。
+// =================================================================
+function PageMinutes() {
+  const readQ = () => {
+    const q = ((location.hash || '').replace(/^#/, '').split('?')[1]) || '';
+    const o = {};
+    q.split('&').forEach(kv => { const i = kv.indexOf('='); if (i >= 0) o[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1) || ''); });
+    return o;
+  };
+  const [q, setQ] = useState(readQ);
+
+  useEffect(() => {                                   // 戻る/進む・カードクリック・タブ切替に追従
+    const onHash = () => {
+      const k = (location.hash || '').replace(/^#/, '').split('?')[0];
+      if (k === 'minutes') setQ(readQ());
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const dept = q.dept || '';
+  const isManager = !!(window.hasRole && window.hasRole('マネージャー'));
+  // タブ: dept(既定) / oneonone / recruit。 部署詳細表示中(dept指定)は dept タブ扱い。
+  const tab = dept ? 'dept'
+    : (q.tab === 'oneonone' || (q.tab === 'recruit' && isManager)) ? q.tab : 'dept';
+
+  const goIndex = () => { location.hash = '#minutes'; };
+  const goDept = (label) => { location.hash = '#minutes?dept=' + encodeURIComponent(label); };
+  const goTab = (t) => { location.hash = (t === 'dept') ? '#minutes' : ('#minutes?tab=' + t); };
+
+  const TABS = [{ key: 'dept', label: '部署議事録' }, { key: 'oneonone', label: '1on1・面談' }];
+  if (isManager) TABS.push({ key: 'recruit', label: '採用面接' });
+
+  const subtitle = tab === 'oneonone' ? '閲覧できる範囲で 1on1・面談の記録と議事録リンクを表示します'
+    : tab === 'recruit' ? '面接が行われた応募者を一覧し、 募集管理の詳細へ移動できます'
+    : (dept ? '部署別の議事録を新しい順に表示します' : '部署を選ぶと、 その部署の議事録が表示されます');
+
+  return (
+    <div className="jb-page">
+      <div className="page-head">
+        <h1>議事録</h1>
+        <p style={{ fontSize: 13, color: 'var(--ink3, #6b7689)', marginTop: 4 }}>{subtitle}</p>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => goTab(t.key)}
+                  style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                           background: tab === t.key ? 'var(--indigo)' : '#fff', color: tab === t.key ? '#fff' : 'var(--ink3, #6b7689)' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'dept' && (dept ? <MinutesDeptView dept={dept} onBack={goIndex} /> : <MinutesIndexView onOpen={goDept} />)}
+      {tab === 'oneonone' && <MinutesOneOnOneView />}
+      {tab === 'recruit' && isManager && <MinutesRecruitView />}
+    </div>
+  );
+}
+
+// (#2 表記ゆれ防止) 部署名の正規化 (サーバの canon と同等: NFKC + 空白畳み込み + trim)。
+function minutesCanonClient_(s) {
+  let t = String(s == null ? '' : s);
+  try { t = t.normalize('NFKC'); } catch (e) {}
+  return t.replace(/[\s\u3000]+/g, ' ').trim();
+}
+// レーベンシュタイン距離 (類似名サジェスト用)。
+function minutesLev_(a, b) {
+  a = String(a || ''); b = String(b || '');
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = []; for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+// 既存マスタ部署名から、 入力名に対する「正規化一致(=実質重複)」と「類似候補」を返す。
+function minutesSimilarDepts_(inputName, masterNames) {
+  const inCanon = minutesCanonClient_(inputName);
+  if (!inCanon) return { exactDup: null, similar: [] };
+  const inLc = inCanon.toLowerCase();
+  let exactDup = null;
+  const similar = [];
+  for (let i = 0; i < masterNames.length; i++) {
+    const name = masterNames[i];
+    const c = minutesCanonClient_(name);
+    if (!c) continue;
+    if (c === inCanon) { exactDup = name; continue; }            // 正規化一致 = 実質重複
+    const lc = c.toLowerCase();
+    const contains = lc.indexOf(inLc) >= 0 || inLc.indexOf(lc) >= 0;
+    const dist = minutesLev_(inLc, lc);
+    const thresh = Math.max(1, Math.floor(Math.min(inLc.length, lc.length) / 4)); // 長さに応じた許容
+    if (contains || dist <= thresh) similar.push(name);
+  }
+  similar.sort((x, y) => minutesLev_(inLc, minutesCanonClient_(x).toLowerCase()) - minutesLev_(inLc, minutesCanonClient_(y).toLowerCase()));
+  return { exactDup: exactDup, similar: similar.slice(0, 5) };
+}
+
+// 部署一覧 (インデックス)。 listMinutesDepartments を取得し、 部署カードを並べる。 新部署も自動的に出現。
+//   マスタ未登録の部署には、 代表のみ「マスタへ追加」導線を表示 (#2)。 ダイアログで部署名/略称/カラーを指定。
+function MinutesIndexView({ onOpen }) {
+  const [departments, setDepartments] = useState([]);
+  const [canSeeAll, setCanSeeAll] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  // マスタ追加ダイアログ
+  const [dialogDept, setDialogDept] = useState(null);
+  const [formName, setFormName] = useState('');
+  const [formAbbr, setFormAbbr] = useState('');
+  const [formColor, setFormColor] = useState('slate');
+  const [submitting, setSubmitting] = useState(false);
+  const [formErr, setFormErr] = useState('');
+
+  const load = React.useCallback(() => {
+    setLoading(true); setErr('');
+    window.fetchData('listMinutesDepartments')
+      .then(res => {
+        res = res || {};
+        setDepartments(Array.isArray(res.departments) ? res.departments : []);
+        setCanSeeAll(res.canSeeAll !== false);
+      })
+      .catch(e => setErr(String(e && (e.message || e))))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const isDaihyo = !!(window.currentUser && window.currentUser.highestRole === '代表');
+  const COLORS = ['indigo', 'coral', 'teal', 'violet', 'amber', 'pink', 'green', 'slate'];
+  const accent = (c) => 'var(--' + (c || 'indigo') + ', #64748b)';
+  const openCard = (label) => onOpen(label);
+
+  // (#2) 既存マスタ部署名 (代表は全マスタが index に含まれる) と、 入力名に対する重複/類似
+  const masterNames = React.useMemo(() => departments.filter(d => d.inMaster).map(d => d.label), [departments]);
+  const sim = React.useMemo(() => minutesSimilarDepts_(formName, masterNames), [formName, masterNames]);
+
+  const openDialog = (d) => { setFormErr(''); setDialogDept(d); setFormName(d.label); setFormAbbr(''); setFormColor('slate'); };
+  const closeDialog = () => { if (!submitting) setDialogDept(null); };
+  const submitDialog = () => {
+    const name = (formName || '').trim();
+    if (!name) { setFormErr('部署名を入力してください'); return; }
+    if (sim.exactDup) { setFormErr('「' + sim.exactDup + '」が既に存在します（表記ゆれの可能性）'); return; }
+    setSubmitting(true); setFormErr('');
+    Promise.resolve()
+      .then(() => window.postData('minutesPromoteDept', { name: name, abbr: (formAbbr || '').trim(), color: formColor }))
+      .then(() => { try { window.invalidateCache && window.invalidateCache('listMinutesDepartments'); } catch (e) {} setDialogDept(null); load(); })
+      .catch(e => setFormErr(String(e && (e.message || e))))
+      .finally(() => setSubmitting(false));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <button className="jb-btn" onClick={load} disabled={loading}>{loading ? '更新中' : '再読込'}</button>
+        {!loading && !err && <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>{departments.length} 部署</span>}
+        {!canSeeAll && <span style={{ fontSize: 11, color: 'var(--ink4, #7a869c)', marginLeft: 'auto' }}>自部署のみ表示しています</span>}
+      </div>
+      {err && <div className="card" style={{ borderColor: 'var(--coral)', color: 'var(--coral)' }}>読み込みに失敗しました: {err}</div>}
+      {loading && <div className="empty">読込中…</div>}
+      {!loading && !err && departments.length === 0 && <div className="empty">表示できる部署がありません</div>}
+      {!loading && !err && departments.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+          {departments.map(d => (
+            <div key={d.key} role="button" tabIndex={0}
+                 onClick={() => openCard(d.label)}
+                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCard(d.label); } }}
+                 className="card"
+                 style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--line, #e3e8f2)', borderLeft: '4px solid ' + accent(d.color), padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6, background: '#fff' }}>
+              <div style={{ fontWeight: 600, fontSize: 15, wordBreak: 'break-word' }}>{d.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>
+                {d.count > 0 ? (d.count + ' 件') : '議事録なし'}
+                {d.lastDate ? ' ・ 最終 ' + d.lastDate : ''}
+              </div>
+              {!d.inMaster && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }} onClick={(e) => e.stopPropagation()}>
+                  <span style={{ fontSize: 10, color: 'var(--ink5, #9aa4b8)' }}>マスタ未登録</span>
+                  {isDaihyo && (
+                    <button onClick={(e) => { e.stopPropagation(); openDialog(d); }}
+                            style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--indigo)', color: 'var(--indigo)', background: 'transparent', cursor: 'pointer' }}>
+                      マスタへ追加
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {dialogDept && (
+        <div onClick={closeDialog}
+             style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ background: '#fff', borderRadius: 14, padding: '22px 22px 18px', width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>部署をマスタへ追加</div>
+
+            <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>部署名</label>
+            <input value={formName} onChange={e => setFormName(e.target.value)} disabled={submitting}
+                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14, margin: '4px 0 12px' }} />
+
+            {sim.exactDup && (
+              <div style={{ fontSize: 12, color: 'var(--coral)', margin: '-6px 0 12px' }}>
+                「{sim.exactDup}」が既に存在します。 表記を寄せたい場合は別名表 (MINUTES_DEPT_ALIASES) の利用を検討してください。
+              </div>
+            )}
+            {!sim.exactDup && sim.similar.length > 0 && (
+              <div style={{ margin: '-6px 0 12px' }}>
+                <div style={{ fontSize: 11, color: 'var(--amber, #b45309)', marginBottom: 4 }}>似た部署があります（重複にご注意）:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {sim.similar.map(n => (
+                    <button key={n} type="button" onClick={() => setFormName(n)} disabled={submitting}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, border: '1px solid var(--line, #e3e8f2)', background: '#fff', color: 'var(--ink3, #6b7689)', cursor: 'pointer' }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>略称 (任意)</label>
+            <input value={formAbbr} onChange={e => setFormAbbr(e.target.value)} disabled={submitting} placeholder="例: HQ"
+                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14, margin: '4px 0 12px' }} />
+
+            <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>カラー</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 16px' }}>
+              {COLORS.map(c => (
+                <button key={c} onClick={() => setFormColor(c)} disabled={submitting} title={c}
+                        style={{ width: 28, height: 28, borderRadius: '50%', background: accent(c), cursor: 'pointer', padding: 0,
+                                 border: formColor === c ? '3px solid var(--ink, #1a2233)' : '2px solid #fff',
+                                 outline: formColor === c ? '1px solid var(--line, #e3e8f2)' : 'none' }} />
+              ))}
+            </div>
+
+            {formErr && <div style={{ color: 'var(--coral)', fontSize: 12, marginBottom: 10 }}>{formErr}</div>}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={closeDialog} disabled={submitting}
+                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', background: '#fff', color: 'var(--ink3, #6b7689)', cursor: 'pointer', fontSize: 13 }}>キャンセル</button>
+              <button onClick={submitDialog} disabled={submitting || !!sim.exactDup}
+                      style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--indigo)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                {submitting ? '追加中…' : 'マスタへ追加'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 部署別ページ。 listMinutes を dept 指定で取得し、 日付降順で一覧。 全文検索 + 期間フィルタ (#拡張)。
+function MinutesDeptView({ dept, onBack }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [q, setQ] = useState('');        // 全文検索 (会議名/プロジェクト/部署)
+  const [from, setFrom] = useState('');  // 期間 下限 (YYYY-MM-DD)
+  const [to, setTo] = useState('');      // 期間 上限
+
+  const load = React.useCallback(() => {
+    setLoading(true); setErr('');
+    window.fetchData('listMinutes', { dept })
+      .then(res => { res = res || {}; setItems(Array.isArray(res.items) ? res.items : []); })
+      .catch(e => setErr(String(e && (e.message || e))))
+      .finally(() => setLoading(false));
+  }, [dept]);
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = React.useMemo(() => {
+    const needle = (q || '').trim().toLowerCase();
+    return items.filter(it => {
+      if (needle) {
+        const hay = ((it.meeting_name || '') + ' ' + (it.project || '') + ' ' + (it.department || '')).toLowerCase();
+        if (hay.indexOf(needle) < 0) return false;
+      }
+      const d = it.meeting_date || '';
+      if (from && (!d || d < from)) return false;   // 期間下限 (空日付は範囲外)
+      if (to && (!d || d > to)) return false;        // 期間上限
+      return true;
+    });
+  }, [items, q, from, to]);
+
+  const hasFilter = !!(q || from || to);
+  const clearFilter = () => { setQ(''); setFrom(''); setTo(''); };
+  const dateStyle = { padding: '7px 10px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 13 };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button className="jb-btn" onClick={onBack} style={{ background: 'transparent', color: 'var(--indigo)', border: '1px solid var(--line, #e3e8f2)' }}>← 部署一覧へ</button>
+        <span style={{ fontWeight: 700, fontSize: 16, wordBreak: 'break-word' }}>{dept}</span>
+        <button className="jb-btn" onClick={load} disabled={loading}>{loading ? '更新中' : '再読込'}</button>
+        {!loading && !err && (
+          <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>
+            {hasFilter ? (filtered.length + ' / ' + items.length + ' 件') : (items.length + ' 件')}
+          </span>
+        )}
+      </div>
+
+      {!loading && !err && items.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="会議名・プロジェクトで検索"
+                 style={{ flex: '1 1 200px', minWidth: 160, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14 }} />
+          <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>期間</span>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={dateStyle} />
+          <span style={{ color: 'var(--ink4, #7a869c)' }}>〜</span>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} style={dateStyle} />
+          {hasFilter && (
+            <button onClick={clearFilter}
+                    style={{ fontSize: 12, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', background: '#fff', color: 'var(--ink3, #6b7689)', cursor: 'pointer' }}>クリア</button>
+          )}
+        </div>
+      )}
+
+      {err && <div className="card" style={{ borderColor: 'var(--coral)', color: 'var(--coral)' }}>読み込みに失敗しました: {err}</div>}
+      {loading && <div className="empty">読込中…</div>}
+      {!loading && !err && items.length === 0 && <div className="empty">この部署の議事録はまだありません</div>}
+      {!loading && !err && items.length > 0 && filtered.length === 0 && <div className="empty">条件に一致する議事録がありません</div>}
+      {!loading && !err && filtered.map(it => (
+        <div className="card" key={it.dedupe_key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, wordBreak: 'break-word' }}>{it.meeting_name || '(会議名なし)'}</div>
+            <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)', marginTop: 3 }}>
+              {it.meeting_date || '日付未設定'}{it.project ? ' ・ ' + it.project : ''}
+            </div>
+          </div>
+          {/^https?:\/\//i.test(it.drive_url || '')
+            ? <a className="jb-btn" href={it.drive_url} target="_blank" rel="noopener">開く</a>
+            : <span style={{ fontSize: 12, color: 'var(--ink5, #9aa4b8)' }}>リンクなし</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+// 1on1・面談タブ。 メンバーを選び、 既存の listOneOnOnes を呼ぶ (公開範囲: 本人/担当マネージャー/代表 はサーバが担保)。
+//   D導線: 「メンバー管理で開く」で既存の編集画面へ遷移。
+function MinutesOneOnOneView() {
+  const meId = (window.currentUser && window.currentUser.member && window.currentUser.member.id) || '';
+  const meName = (window.currentUser && window.currentUser.member && window.currentUser.member.name) || '';
+  const [members, setMembers] = useState([]);
+  const [memberId, setMemberId] = useState(meId);
+  const [data, setData] = useState({ allowed: true, logs: [] });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {                                   // 選択用メンバー一覧 (失敗しても自分は選べる)。 公開範囲はサーバ側で判定
+    window.fetchData('listMembers')
+      .then(res => { const arr = Array.isArray(res) ? res : ((res && res.members) || []); setMembers(arr.filter(m => m && m.id)); })
+      .catch(() => setMembers([]));
+  }, []);
+
+  const load = React.useCallback(() => {
+    if (!memberId) { setData({ allowed: false, logs: [] }); return; }
+    setLoading(true); setErr('');
+    window.fetchData('listOneOnOnes', { memberId: memberId })
+      .then(res => { res = res || {}; setData({ allowed: res.allowed !== false, logs: Array.isArray(res.logs) ? res.logs : [] }); })
+      .catch(e => setErr(String(e && (e.message || e))))
+      .finally(() => setLoading(false));
+  }, [memberId]);
+  useEffect(() => { load(); }, [load]);
+
+  const parseUrls = (raw) => {                        // 議事録URLは単一/JSON配列文字列の両対応
+    raw = raw || '';
+    if (!raw) return [];
+    try { const a = JSON.parse(raw); if (Array.isArray(a)) return a.filter(Boolean); } catch (e) {}
+    return [String(raw)];
+  };
+  const goMemberAdmin = () => { location.hash = '#member-admin'; };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--ink3, #6b7689)' }}>対象メンバー</span>
+        <select value={memberId} onChange={e => setMemberId(e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14, maxWidth: 280 }}>
+          {meId && <option value={meId}>{(meName || meId) + '（自分）'}</option>}
+          {members.filter(m => m.id !== meId).map(m => (
+            <option key={m.id} value={m.id}>{m.name ? (m.name + '（' + m.id + '）') : m.id}</option>
+          ))}
+        </select>
+        <button className="jb-btn" onClick={load} disabled={loading}>{loading ? '更新中' : '再読込'}</button>
+        <button className="jb-btn" onClick={goMemberAdmin}
+                style={{ marginLeft: 'auto', background: 'transparent', color: 'var(--indigo)', border: '1px solid var(--line, #e3e8f2)' }}>メンバー管理で開く →</button>
+      </div>
+
+      {err && <div className="card" style={{ borderColor: 'var(--coral)', color: 'var(--coral)' }}>読み込みに失敗しました: {err}</div>}
+      {loading && <div className="empty">読込中…</div>}
+      {!loading && !err && !data.allowed && <div className="empty">この相手の 1on1・面談記録を閲覧する権限がありません</div>}
+      {!loading && !err && data.allowed && data.logs.length === 0 && <div className="empty">記録がありません</div>}
+      {!loading && !err && data.allowed && data.logs.map(log => {
+        const urls = parseUrls(log.minutesUrl);
+        return (
+          <div className="card" key={log.logId} style={{ marginBottom: 10, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0, flex: '1 1 60%' }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>
+                  {log.typeLabel || '面談'}
+                  <span style={{ fontWeight: 400, color: 'var(--ink4, #7a869c)', marginLeft: 8 }}>{log.date || '日時未設定'}</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)', marginTop: 3 }}>担当: {log.interviewer || '—'}</div>
+                {log.memo && <div style={{ fontSize: 13, color: 'var(--ink2, #3a4661)', marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{log.memo}</div>}
+                {log.nextAction && <div style={{ fontSize: 12, color: 'var(--ink3, #6b7689)', marginTop: 6 }}>次回: {log.nextAction}{log.nextDate ? '（' + log.nextDate + '）' : ''}</div>}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                {urls.length === 0 && <span style={{ fontSize: 12, color: 'var(--ink5, #9aa4b8)' }}>議事録リンクなし</span>}
+                {urls.map((u, i) => (/^https?:\/\//i.test(u)
+                  ? <a key={i} className="jb-btn" href={u} target="_blank" rel="noopener">議事録{urls.length > 1 ? (' ' + (i + 1)) : ''}</a>
+                  : <span key={i} style={{ fontSize: 12, color: 'var(--ink5, #9aa4b8)' }}>{u}</span>))}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// 採用面接タブ (マネージャー以上)。 既存の listRecruitApplications を呼ぶ (権限はサーバが担保)。
+//   面接議事録 (生記録・AI評価) は応募者の機微情報のため一覧には出さず、 募集管理の詳細へ誘導 (D導線)。
+function MinutesRecruitView() {
+  const [apps, setApps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [onlyInterviewed, setOnlyInterviewed] = useState(true);
+
+  const load = React.useCallback(() => {
+    setLoading(true); setErr('');
+    window.fetchData('listRecruitApplications')
+      .then(res => { setApps(Array.isArray(res) ? res : []); })
+      .catch(e => setErr(String(e && (e.message || e))))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const list = React.useMemo(() => {
+    let a = apps.slice();
+    if (onlyInterviewed) a = a.filter(x => x.firstInterviewAt);
+    return a;
+  }, [apps, onlyInterviewed]);
+
+  const goRecruit = () => { location.hash = '#recruit'; };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button className="jb-btn" onClick={load} disabled={loading}>{loading ? '更新中' : '再読込'}</button>
+        <label style={{ fontSize: 13, color: 'var(--ink3, #6b7689)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type="checkbox" checked={onlyInterviewed} onChange={e => setOnlyInterviewed(e.target.checked)} />面接済みのみ
+        </label>
+        {!loading && !err && <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>{list.length} 名</span>}
+        <button className="jb-btn" onClick={goRecruit}
+                style={{ marginLeft: 'auto', background: 'transparent', color: 'var(--indigo)', border: '1px solid var(--line, #e3e8f2)' }}>募集管理コンソールを開く →</button>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)', marginBottom: 12 }}>
+        面接議事録 (生記録・AI評価) は応募者の機微情報のため、 各応募者の詳細画面で確認します。
+      </div>
+
+      {err && <div className="card" style={{ borderColor: 'var(--coral)', color: 'var(--coral)' }}>読み込みに失敗しました: {err}</div>}
+      {loading && <div className="empty">読込中…</div>}
+      {!loading && !err && list.length === 0 && <div className="empty">対象の応募者がいません</div>}
+      {!loading && !err && list.map(a => (
+        <div className="card" key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-word' }}>
+              {a.name || a.candidateCode || a.id}
+              {a.result ? <span style={{ fontSize: 11, marginLeft: 8, color: 'var(--ink4, #7a869c)' }}>{a.result}</span> : null}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)', marginTop: 3 }}>
+              {(a.desiredDepartments && a.desiredDepartments.join('・')) || '—'}
+              {a.currentPhase ? ' ・ ' + a.currentPhase : ''}
+              {a.firstInterviewAt ? ' ・ 面接 ' + a.firstInterviewAt : ''}
+            </div>
+          </div>
+          <button className="jb-btn" onClick={goRecruit}
+                  style={{ background: 'transparent', color: 'var(--indigo)', border: '1px solid var(--line, #e3e8f2)' }}>詳細へ</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+window.PageMinutes = PageMinutes;
 window.PageHeroSettings = PageHeroSettings;
 // (Phase 15.S7) モバイル Hero 専用ラッパー (PageHeroSettings に isMobile=true を渡すだけ)
 function PageHeroSettingsMobile() {
@@ -36587,6 +37242,7 @@ const PAGES = {
   paypay:         () => renderPage('PagePayPay'),
   coupons:        () => renderPage('PageCoupons'),
   departments:    () => renderPage('PageDepartments'),
+  minutes:        () => renderPage('PageMinutes'),
   'member-admin': () => renderPage('PageMembersAdmin'),
   'member-detail': () => renderPage('PageMemberDetail'),
   mypage: () => renderPage('PageMyPage'),
