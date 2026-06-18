@@ -35487,7 +35487,7 @@ function PageMinutes() {
   const goDept = (label) => { location.hash = '#minutes?dept=' + encodeURIComponent(label); };
   const goTab = (t) => { location.hash = (t === 'dept') ? '#minutes' : ('#minutes?tab=' + t); };
 
-  const TABS = [{ key: 'dept', label: '部署議事録' }, { key: 'oneonone', label: '1on1・面談' }];
+  const TABS = [{ key: 'dept', label: '部署議事録' }, { key: 'oneonone', label: '1on1・面談' }, { key: 'upload', label: '録音を投稿' }];
   if (isManager) TABS.push({ key: 'recruit', label: '採用面接' });
 
   const subtitle = tab === 'oneonone' ? '閲覧できる範囲で 1on1・面談の記録と議事録リンクを表示します'
@@ -35511,7 +35511,144 @@ function PageMinutes() {
       </div>
       {tab === 'dept' && (dept ? <MinutesDeptView dept={dept} onBack={goIndex} /> : <MinutesIndexView onOpen={goDept} />)}
       {tab === 'oneonone' && <MinutesOneOnOneView />}
+      {tab === 'upload' && <MinutesUploadView />}
       {tab === 'recruit' && isManager && <MinutesRecruitView />}
+    </div>
+  );
+}
+
+
+// (録音アップロード hub一本化) 運営メンバーが録音を投稿するビュー。
+//   その場録音(MediaRecorder, opus 16kbps)またはファイル選択 → Base64 →
+//   window.postData('uploadMinutesAudio', {...})。部署は listMinutesDepartments から動的取得。
+//   Safari/iOS など MediaRecorder 非対応時はファイル選択にフォールバック。27MB上限。
+function MinutesUploadView() {
+  const [depts, setDepts] = useState([]);
+  const [dept, setDept] = useState('');
+  const [name, setName] = useState('');
+  const [mdate, setMdate] = useState('');
+  const [mtype, setMtype] = useState('');
+  const [attendees, setAttendees] = useState('');
+  const [project, setProject] = useState('');
+  const [recBlob, setRecBlob] = useState(null);
+  const [recMime, setRecMime] = useState('');
+  const [recState, setRecState] = useState('idle');
+  const [recInfo, setRecInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const recRef = React.useRef(null);
+  const chunksRef = React.useRef([]);
+  const fileRef = React.useRef(null);
+  const MAX_BYTES = 27 * 1024 * 1024;
+
+  useEffect(() => {
+    window.fetchData('listMinutesDepartments').then(res => {
+      const ds = (res && res.departments) || [];
+      setDepts(ds.map(d => (d && (d.label || d.key)) || '').filter(Boolean));
+    }).catch(() => {});
+  }, []);
+
+  const pickMime = () => {
+    if (typeof MediaRecorder === 'undefined') return null;
+    const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+    for (let i = 0; i < cands.length; i++) {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cands[i])) return cands[i];
+    }
+    return '';
+  };
+
+  const startRec = async () => {
+    const mime = pickMime();
+    if (mime === null) { setRecInfo('この端末は録音非対応です。下のファイル選択をご利用ください。'); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const opt = { audioBitsPerSecond: 16000 };
+      if (mime) opt.mimeType = mime;
+      const mr = new MediaRecorder(stream, opt);
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const b = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
+        setRecBlob(b); setRecMime(mime || 'audio/webm');
+        setRecInfo('録音完了 (' + Math.round(b.size / 1024) + 'KB)');
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start(); recRef.current = mr; setRecState('recording'); setRecInfo('録音中…');
+    } catch (e) { setRecInfo('マイク取得に失敗: ' + (e && e.message || e)); }
+  };
+  const stopRec = () => {
+    if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop();
+    setRecState('done');
+  };
+
+  const blobToB64 = (blob) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => { const s = String(r.result); const i = s.indexOf(','); resolve(i >= 0 ? s.slice(i + 1) : s); };
+    r.onerror = reject; r.readAsDataURL(blob);
+  });
+
+  const submit = async () => {
+    let blob = null, filename = 'recording.webm';
+    const f = fileRef.current && fileRef.current.files && fileRef.current.files[0];
+    if (f) { blob = f; filename = f.name; }
+    else if (recBlob) { blob = recBlob; filename = 'recording.' + (recMime.indexOf('mp4') >= 0 ? 'm4a' : 'webm'); }
+    if (!blob) { setMsg('録音するかファイルを選択してください'); return; }
+    if (blob.size > MAX_BYTES) { setMsg('ファイルが大きすぎます(27MBまで)。短く録るか会議を分割してください'); return; }
+    if (!dept) { setMsg('部署を選択してください'); return; }
+    setBusy(true); setMsg('アップロード中…(回線により数十秒かかります)');
+    try {
+      const b64 = await blobToB64(blob);
+      const res = await window.postData('uploadMinutesAudio', {
+        dataBase64: b64, mimeType: blob.type || 'application/octet-stream', filename: filename,
+        dept: dept, meeting_name: name || '(未入力)', meeting_date: mdate || '',
+        meeting_type: mtype || '', project: project || '', attendees: attendees || ''
+      });
+      const ok = res && (res.ok || res.intake_id || (res.data && (res.data.ok || res.data.intake_id)));
+      if (ok) {
+        setMsg('✅ 投稿しました。議事録は数分後に自動生成され、この議事録ページに掲載されます。');
+        setRecBlob(null); setRecState('idle'); setRecInfo('');
+        if (fileRef.current) fileRef.current.value = '';
+      } else { setMsg('⚠️ 投稿に失敗しました: ' + JSON.stringify(res)); }
+    } catch (e) { setMsg('⚠️ エラー: ' + (e && e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  const fld = { width: '100%', padding: 8, marginBottom: 8, borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 13, fontFamily: 'inherit' };
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <div style={{ background: '#fff', border: '1px solid var(--line, #e3e8f2)', borderRadius: 12, padding: 18 }}>
+        <div style={{ fontSize: 13, color: 'var(--ink3, #6b7689)', marginBottom: 12 }}>
+          会議の録音をアップロードすると、自動で文字起こし・議事録生成され、この議事録ページに掲載されます。
+        </div>
+        <select value={dept} onChange={e => setDept(e.target.value)} style={fld}>
+          <option value="">— 部署を選択 —</option>
+          {depts.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <input placeholder="会議名" value={name} onChange={e => setName(e.target.value)} style={fld} />
+        <input type="datetime-local" value={mdate} onChange={e => setMdate(e.target.value)} style={fld} />
+        <select value={mtype} onChange={e => setMtype(e.target.value)} style={fld}>
+          <option value="">会議の種類(任意)</option>
+          <option value="通常">通常</option>
+          <option value="1on1">1on1</option>
+          <option value="商談">商談</option>
+        </select>
+        <input placeholder="出席者(カンマ区切り・任意)" value={attendees} onChange={e => setAttendees(e.target.value)} style={fld} />
+        <input placeholder="案件名(任意・案件管理部署のみ)" value={project} onChange={e => setProject(e.target.value)} style={fld} />
+        <div style={{ margin: '12px 0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {recState !== 'recording'
+            ? <button className="jb-btn" onClick={startRec} disabled={busy}>● 録音開始</button>
+            : <button className="jb-btn" onClick={stopRec}>■ 停止</button>}
+          <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>{recInfo}</span>
+        </div>
+        <div style={{ margin: '12px 0', fontSize: 12, color: 'var(--ink4, #7a869c)' }}>
+          または既存ファイル: <input type="file" accept="audio/*" ref={fileRef} />
+        </div>
+        <button onClick={submit} disabled={busy}
+                style={{ background: 'var(--indigo)', color: '#fff', border: 0, padding: '10px 18px', borderRadius: 8, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          投稿する
+        </button>
+        {msg && <div style={{ marginTop: 10, fontSize: 13 }}>{msg}</div>}
+      </div>
     </div>
   );
 }
