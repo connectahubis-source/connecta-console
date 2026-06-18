@@ -35481,7 +35481,7 @@ function PageMinutes() {
   const isManager = !!(window.hasRole && window.hasRole('マネージャー'));
   // タブ: dept(既定) / oneonone / recruit。 部署詳細表示中(dept指定)は dept タブ扱い。
   const tab = dept ? 'dept'
-    : (q.tab === 'oneonone' || (q.tab === 'recruit' && isManager)) ? q.tab : 'dept';
+    : (q.tab === 'oneonone' || q.tab === 'upload' || (q.tab === 'recruit' && isManager)) ? q.tab : 'dept';
 
   const goIndex = () => { location.hash = '#minutes'; };
   const goDept = (label) => { location.hash = '#minutes?dept=' + encodeURIComponent(label); };
