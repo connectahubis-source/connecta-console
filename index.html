@@ -2238,6 +2238,7 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
     if (!window.getStoredToken || !window.getStoredToken()) return;
     window.__authRedirecting = true;
     try { window.setStoredToken(''); window.setStoredMemberId(''); window.currentUser = null; } catch (e) {}
+    try { if (window._dataCache) window._dataCache.clear(); if (window._inflightRequests) window._inflightRequests.clear(); } catch (e) {}
     try { if (window.toast) window.toast.error('セッションが切れました。再ログインしてください。'); } catch (e) {}
     setTimeout(function() { try { location.reload(); } catch (e) {} }, 700);
   };
@@ -2263,7 +2264,9 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   window.getMyRank = function() {
     const u = window.currentUser;
     if (!u || !u.member) return 0;
-    return window.ROLE_RANK[u.highestRole] || 1;   // member 未指定なら 1
+    // backend highestRank を信頼 (||1 のフロアは backend と食い違うため撤去)。
+    if (typeof u.highestRank === 'number') return u.highestRank;
+    return window.ROLE_RANK[u.highestRole] || 0;
   };
 
   /**
@@ -2343,9 +2346,76 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
       'channels.update':      '副代表',
     };
     const required = PERMISSIONS[action];
-    if (!required) return true;   // 未定義アクションは許可 (デフォルト)
+    if (!required) return false;   // 未定義アクションは拒否 (default-DENY)。サーバ側 requireAction_ と一致。
     return window.hasRole(required);
   };
+
+  /**
+   * 「指定アクション」を「指定部署」で実行できるか (per-dept スコープ)。
+   * currentUser.allRoles を読み、その部署 (canon 一致) で持つロールが
+   * アクション要件を満たすかを判定する。
+   * これにより「ある部署だけのマネージャー」が全部署でマネージャー扱いされない。
+   *
+   * 全社権限 (highestRank>=4: 代表/副代表) は部署を問わず許可。
+   * 未定義アクション・不明部署は default-DENY。
+   *
+   * @param {string} action  例 'members.update'
+   * @param {string} deptKey 部署名 (canon 前後どちらでも可。内部で deptCanon)
+   * @returns {boolean}
+   */
+  window.canDoInDept = function(action, deptKey) {
+    const u = window.currentUser;
+    if (!u || !u.member) return false;
+
+    // アクションの要求ロールを解決 (default-DENY: 未定義アクションは拒否)。
+    const requiredRole = _dept_action_required(action);
+    if (!requiredRole) return false;
+    const requiredRank = window.ROLE_RANK[requiredRole] || 0;
+
+    // 全社権限 (副代表以上) は部署を問わず許可。
+    if (window.getMyRank() >= window.ROLE_RANK['副代表']) return true;
+
+    const canon = (window.deptCanon ? window.deptCanon(deptKey) : (deptKey || '')).trim();
+    if (!canon) return false;
+
+    // allRoles から該当部署 (canon 一致) で持つ最高ランクを取得。
+    const roles = Array.isArray(u.allRoles) ? u.allRoles : [];
+    let myRankInDept = 0;
+    for (let i = 0; i < roles.length; i++) {
+      const r = roles[i] || {};
+      const rCanon = (window.deptCanon ? window.deptCanon(r.deptName || '') : (r.deptName || '')).trim();
+      if (rCanon !== canon) continue;
+      const rank = window.ROLE_RANK[r.role] || 0;
+      if (rank > myRankInDept) myRankInDept = rank;
+    }
+    return myRankInDept >= requiredRank;
+  };
+
+  /**
+   * canDo の PERMISSIONS テーブルから action の要求ロール名を返す (なければ '')。
+   * canDoInDept 専用ヘルパ。default-DENY を保つため未定義は '' を返す。
+   */
+  function _dept_action_required(action) {
+    const PERMISSIONS = {
+      'members.create': '副代表', 'members.update': '副代表', 'members.delete': '副代表',
+      'departments.create': '代表', 'departments.update': '代表', 'departments.delete': '代表',
+      'events.delete': '副代表', 'participants.delete': '副代表', 'registrations.delete': '副代表',
+      'todos.delete': '副代表', 'payments.delete': '副代表', 'templates.delete': '副代表',
+      'news.delete': '副代表', 'surveys.delete': '副代表', 'ads.delete': '副代表',
+      'albums.delete': '副代表', 'channels.delete': '副代表', 'notifications.delete': '副代表',
+      'events.update': 'アシマネ', 'participants.update': 'アシマネ', 'registrations.update': 'アシマネ',
+      'todos.update': 'アシマネ', 'payments.update': 'アシマネ', 'templates.update': 'アシマネ',
+      'news.update': 'アシマネ', 'surveys.update': 'アシマネ', 'ads.update': 'アシマネ',
+      'albums.update': 'アシマネ', 'org.update': 'マネージャー',
+      'events.create': 'アシマネ', 'participants.create': 'アシマネ', 'registrations.create': 'アシマネ',
+      'todos.create': 'アシマネ', 'payments.create': 'アシマネ', 'templates.create': 'アシマネ',
+      'news.create': 'アシマネ', 'surveys.create': 'アシマネ', 'ads.create': 'アシマネ',
+      'albums.create': 'アシマネ',
+      'chat.send': 'メンバー', 'chat.deleteOwn': 'メンバー', 'chat.deleteOthers': '副代表',
+      'channels.create': '副代表', 'channels.update': '副代表',
+    };
+    return PERMISSIONS[action] || '';
+  }
 
   // ============ キャッシュ機構 ============
   // 目的: 短時間内の同じリクエストを再送しない、レスポンスを使い回す
@@ -2361,7 +2431,10 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
    * キャッシュキーを生成 (action + params のハッシュ)
    */
   function _cacheKey(action, params) {
-    return action + ':' + (params ? JSON.stringify(params) : '');
+    // ログイン中の memberId を含める → スコープ付きレスポンスが再ログインを跨いで漏れない
+    let mid = '';
+    try { mid = (window.getStoredMemberId && window.getStoredMemberId()) || ''; } catch (e) {}
+    return mid + '|' + action + ':' + (params ? JSON.stringify(params) : '');
   }
 
   /**
@@ -2448,6 +2521,21 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
     // ダッシュボードや関連ページのキャッシュもクリア
     window.invalidateCache('getDashboard');
   }
+
+  /**
+   * 明示的な部署/メンバー キャッシュ無効化ハブ。
+   * dept/member の mutation 後に必ず呼ぶ。regex ベースの _autoInvalidate は
+   * get* / dotted / minutes 系の action を取りこぼすため、それを補完する。
+   * listDepartments + listScopedDepartments + listMembersDetail
+   * + getMembersBundle + listMinutesDepartments をまとめて bust する。
+   */
+  window.invalidateDeptData = function() {
+    window.invalidateCache('listDepartments');
+    window.invalidateCache('listScopedDepartments');
+    window.invalidateCache('listMembersDetail');
+    window.invalidateCache('getMembersBundle');
+    window.invalidateCache('listMinutesDepartments');
+  };
 
   /**
    * サーバーからのエラーメッセージをユーザーフレンドリーに変換。
@@ -17908,7 +17996,27 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
 
   const [name, setName] = useState(init.name || "");
   const [email, setEmail] = useState(init.email || "");
-  const [dept, setDept] = useState(init.dept || safeDeptList[0]);
+  // (FE-9) 主所属は DeptID で保持・送信 (raw name === を廃止)。 init.dept は名前キャッシュなので
+  //   canon マッチでマスタ行の DeptID に解決。 init.deptId があれば優先。
+  const canonOf = (s) => (window.deptCanon ? window.deptCanon(s || '') : String(s || '')).trim();
+  const resolveInitDeptId = () => {
+    if (init.deptId != null && init.deptId !== '') {
+      // 既に DeptID が来ている場合はそのまま (マスタに存在する前提)
+      if (safeDepts.some(d => String(d.id) === String(init.deptId))) return String(init.deptId);
+    }
+    if (init.dept) {
+      const k = canonOf(init.dept);
+      const hit = safeDepts.find(d => canonOf(d.name) === k);
+      if (hit) return String(hit.id);
+    }
+    return safeDepts[0] ? String(safeDepts[0].id) : '';
+  };
+  const [deptId, setDeptId] = useState(resolveInitDeptId());
+  // 選択中の主所属名 (DeptID から逆引き) — 兼任の重複判定 / 表示用キャッシュに使用。
+  const selectedDeptName = React.useMemo(() => {
+    const d = safeDepts.find(x => String(x.id) === String(deptId));
+    return d ? d.name : '';
+  }, [safeDepts, deptId]);
   const [title, setTitle] = useState(init.title || "メンバー");
   const [role, setRole] = useState(init.role || "メンバー");
   const [initial, setInitial] = useState(init.initial || "");
@@ -17929,8 +18037,8 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
       setError('副所属を追加するには、まず部署を作成してください');
       return;
     }
-    // 主所属と同じ部署はデフォルトで除外
-    const available = safeDepts.filter(d => d.name !== dept && !subRoles.some(r => r.deptId === d.id));
+    // 主所属と同じ部署はデフォルトで除外 (DeptID で比較)
+    const available = safeDepts.filter(d => String(d.id) !== String(deptId) && !subRoles.some(r => String(r.deptId) === String(d.id)));
     const firstDept = available[0] || safeDepts[0];
     setSubRoles(prev => [...prev, {
       tempId: `temp-${Date.now()}-${Math.random()}`,
@@ -17961,36 +18069,43 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
   async function handleSubmit() {
     if (!name.trim()) { setError("氏名は必須です"); return; }
     if (!email.trim()) { setError("メールは必須です"); return; }
-    // 副所属の重複チェック
-    const deptIds = subRoles.map(r => r.deptId);
+    if (!deptId) { setError("主所属の部署を選択してください"); return; }
+    // 副所属の重複チェック (DeptID で比較)
+    const deptIds = subRoles.map(r => String(r.deptId));
     if (new Set(deptIds).size !== deptIds.length) {
       setError('同じ部署を兼任に2回以上指定することはできません');
       return;
     }
-    // 副所属が主所属と同じでないかチェック
-    const conflictDept = subRoles.find(r => r.deptName === dept);
+    // 副所属が主所属と同じでないかチェック (DeptID で比較)
+    const conflictDept = subRoles.find(r => String(r.deptId) === String(deptId));
     if (conflictDept) {
-      setError(`兼任「${conflictDept.deptName}」は主所属と同じです。削除してください`);
+      setError(`兼任「${conflictDept.deptName || selectedDeptName}」は主所属と同じです。削除してください`);
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      // 副所属の差分を計算 (作成時は全件作成、編集時は既存と比較)
+      // (FE-9) 副所属の差分を計算。 idempotent/再実行可能にするため、 既に存在する DeptID への
+      //   toCreate は除外 (二重作成防止) — 同じ保存を再試行しても重複 MemberRoles を生まない。
+      const existingDeptIds = new Set(initialSubRoles.map(r => String(r.deptId)));
+      const toCreate = subRoles
+        .filter(r => r.isNew && !existingDeptIds.has(String(r.deptId)))
+        .map(r => ({ deptId: r.deptId, role: r.role, note: r.note || '' }));
       const subRolesPayload = {
-        toCreate: subRoles.filter(r => r.isNew).map(r => ({
-          deptId: r.deptId,
-          role: r.role,
-          note: r.note || '',
-        })),
+        toCreate,
         toDelete: initialSubRoles
           .filter(orig => !subRoles.some(curr => curr.id === orig.id))
           .map(r => r.id),
       };
+      // (FE-9) 統一作成パス (registerMember/updateMember, BE-6) に DeptID を送信 (raw name は送らない)。
+      //   主所属は常に MemberRoles に着地する。 dept(名前) は denormalize キャッシュとして併送し、
+      //   表示用に残す (サーバは DeptID から再解決)。
       await onSave({
         name: name.trim(),
         email: email.trim(),
-        dept, title, role,
+        deptId: deptId,
+        dept: selectedDeptName,
+        title, role,
         initial: initial.trim(),
       }, subRolesPayload);
     } catch (err) {
@@ -18034,8 +18149,11 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
               <div className="field">
                 <label className="field-label">部署 <span className="field-req">*</span></label>
                 <div className="select-wrap">
-                  <select className="input select" value={dept} onChange={e=>setDept(e.target.value)}>
-                    {safeDeptList.map(d => <option key={d} value={d}>{d}</option>)}
+                  {/* (FE-9) DeptID キーの <select> (value={d.id})。 マスタ行 (safeDepts) から id->name を表示し、
+                      submit は deptId。 マスタが空なら選択肢なし (フォールバック生成は廃止)。 */}
+                  <select className="input select" value={deptId} onChange={e=>setDeptId(e.target.value)}>
+                    {safeDepts.length === 0 && <option value="">部署を作成してください</option>}
+                    {safeDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -18117,7 +18235,7 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
 
 // ============ メンバー管理: 構成員一覧 (Step1C 前半) ============
 // 構成員 新規登録モーダル (Step1C)
-function MemberRegisterModal({ depts, onClose, onCreated }) {
+function MemberRegisterModal({ depts, onClose, onCreated, onDeptsChanged }) {
   const [name, setName] = useState('');
   const [kana, setKana] = useState('');
   const [email, setEmail] = useState('');
@@ -18134,8 +18252,28 @@ function MemberRegisterModal({ depts, onClose, onCreated }) {
   const [joinMonth, setJoinMonth] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [showDeptDialog, setShowDeptDialog] = useState(false);
 
   const ROLES = ['代表', '副代表', 'マネージャー', 'アシマネ', 'メンバー'];
+
+  // (FE-8) マスタ部署名一覧 (id->name) と canon キー対応。 部署選択 / マスタ追加ダイアログで共有。
+  const deptList = depts || [];
+  const masterNames = React.useMemo(() => deptList.map(d => d.name).filter(Boolean), [deptList]);
+  // 選択中の部署名 (id から逆引き)。 類似警告は選択名 vs 他マスタで判定。
+  const selectedDeptName = React.useMemo(() => {
+    const d = deptList.find(x => String(x.id) === String(deptId));
+    return d ? d.name : '';
+  }, [deptList, deptId]);
+  // (#1) 選択部署が他マスタ名と表記ゆれで似ている場合の警告 (自分自身は exactDup として除外しない)。
+  const deptSim = React.useMemo(() => {
+    if (!selectedDeptName || !window.deptSimilar) return { exactDup: null, similar: [] };
+    const others = masterNames.filter(n => String(n) !== String(selectedDeptName));
+    return window.deptSimilar(selectedDeptName, others);
+  }, [selectedDeptName, masterNames]);
+  // (#2) 代表のみ: 登録中に新部署をマスタへ追加できる導線。 server checks をミラー (default-DENY)。
+  const canPromote = !!(window.canDo && window.canDo('departments.create'));
+  // (#3) 入会時期 (YYYY-MM) のフォーマット検証。
+  const joinMonthValid = !joinMonth.trim() || /^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth.trim());
 
   async function submit() {
     setErr('');
@@ -18143,6 +18281,7 @@ function MemberRegisterModal({ depts, onClose, onCreated }) {
     if (!email.trim()) { setErr('メールは必須です'); return; }
     if (!deptId) { setErr('主所属の部署を選択してください'); return; }
     if (!role) { setErr('ロールを選択してください'); return; }
+    if (joinMonth.trim() && !joinMonthValid) { setErr('入会時期は YYYY-MM 形式で入力してください（例: 2026-05）'); return; }
     setBusy(true);
     try {
       const res = await window.postData('registerMember', {
@@ -18197,9 +18336,20 @@ function MemberRegisterModal({ depts, onClose, onCreated }) {
               <div className="select-wrap">
                 <select className="input select" value={deptId} onChange={e => setDeptId(e.target.value)}>
                   <option value="">選択してください</option>
-                  {(depts || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  {deptList.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
+              {!deptSim.exactDup && deptSim.similar.length > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--amber, #b45309)', marginTop: 4 }}>
+                  似た部署があります（表記ゆれの可能性）: {deptSim.similar.join('、')}
+                </div>
+              )}
+              {canPromote && (
+                <button type="button" onClick={() => setShowDeptDialog(true)}
+                        style={{ marginTop: 6, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--indigo)', color: 'var(--indigo)', background: 'transparent', cursor: 'pointer' }}>
+                  + 新しい部署をマスタへ追加
+                </button>
+              )}
             </div>
             <div style={{ flex: 1 }}>
               <label className="field-label">ロール <span className="field-req">*</span></label>
@@ -18231,8 +18381,16 @@ function MemberRegisterModal({ depts, onClose, onCreated }) {
             <div style={{ flex: 1 }}><label className="field-label">在住国</label><input className="input" value={residenceCountry} onChange={e => setResidenceCountry(e.target.value)} placeholder="例: 日本" /></div>
           </div>
           <div className="row" style={{ gap: 10, marginBottom: 10 }}>
-            <div style={{ flex: 1 }}><label className="field-label">入会日</label><input className="input" type="date" value={joinedAt} onChange={e => setJoinedAt(e.target.value)} /></div>
-            <div style={{ flex: 1 }}><label className="field-label">入会時期</label><input className="input" value={joinMonth} onChange={e => setJoinMonth(e.target.value)} placeholder="例: 2026-05" /></div>
+            <div style={{ flex: 1 }}>
+              <label className="field-label">入会日</label>
+              <input className="input" type="date" value={joinedAt} onChange={e => setJoinedAt(e.target.value)} />
+              {!joinedAt && <div style={{ fontSize: 11, color: 'var(--ink4, #7a869c)', marginTop: 4 }}>未入力の場合は空欄のまま登録されます</div>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="field-label">入会時期</label>
+              <input className="input" value={joinMonth} onChange={e => setJoinMonth(e.target.value)} placeholder="例: 2026-05" />
+              {!joinMonthValid && <div style={{ fontSize: 11, color: 'var(--coral)', marginTop: 4 }}>YYYY-MM 形式で入力してください</div>}
+            </div>
           </div>
           <label className="row" style={{ gap: 8, alignItems: 'center', marginTop: 4, cursor: 'pointer' }}>
             <input type="checkbox" checked={remote} onChange={e => setRemote(e.target.checked)} />
@@ -18241,9 +18399,25 @@ function MemberRegisterModal({ depts, onClose, onCreated }) {
         </div>
         <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={onClose} disabled={busy}>キャンセル</button>
-          <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? '登録中...' : '登録する'}</button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy || !joinMonthValid}>{busy ? '登録中...' : '登録する'}</button>
         </div>
       </div>
+      {showDeptDialog && (
+        <DeptMasterDialog
+          initial={{ name: '', abbr: '', color: 'slate' }}
+          masterNames={masterNames}
+          onClose={() => setShowDeptDialog(false)}
+          onSubmit={({ name, abbr, color }) => Promise.resolve()
+            .then(() => window.postData('minutesPromoteDept', { name: name, abbr: abbr, color: color }))
+            .then((res) => {
+              if (res && res.ok === false) { throw new Error((res && res.error) || '部署の追加に失敗しました'); }
+              try { window.invalidateDeptData && window.invalidateDeptData(); } catch (e) {}
+              setShowDeptDialog(false);
+              if (window.toast) window.toast.success('部署をマスタへ追加しました');
+              // 親が depts 再取得コールバックを渡していれば、追加部署を即時選択肢に反映。
+              if (onDeptsChanged) onDeptsChanged();
+            })} />
+      )}
     </div>
   );
 }
@@ -18255,15 +18429,17 @@ function PageMembersAdmin() {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("active"); // active / left / all
-  const [deptFilter, setDeptFilter] = useState("all");
+  const [deptFilter, setDeptFilter] = useState("all"); // canon dept key, or "all"
   const [depts, setDepts] = useState([]);
+  const [canSeeAll, setCanSeeAll] = useState(true);
   const [showReg, setShowReg] = useState(false);
   function exportCSV() {
-    const header = ['表示ID', '氏名', 'カナ', 'メール', '部署', '役職', '状態'];
+    const header = ['表示ID', '氏名', 'カナ', 'メール', '部署', '兼任', '役職', '状態'];
     const esc = v => { const t = (v == null ? '' : String(v)); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
     const lines = [header.join(',')];
     filtered.forEach(m => {
-      lines.push([m.memberCode, m.name, m.nameKana, m.email, m.primary ? m.primary.deptName : '', m.primary ? m.primary.role : '', m.status].map(esc).join(','));
+      const concurrent = (m.concurrent || []).map(c => c.deptName).filter(Boolean).join(' / ');
+      lines.push([m.memberCode, m.name, m.nameKana, m.email, m.primary ? m.primary.deptName : '', concurrent, m.primary ? m.primary.role : '', m.status].map(esc).join(','));
     });
     const csv = '\ufeff' + lines.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -18281,6 +18457,7 @@ function PageMembersAdmin() {
       const b = await window.fetchData('getMembersBundle');
       setRows(Array.isArray(b && b.members) ? b.members : []);
       if (Array.isArray(b && b.departments)) setDepts(b.departments);
+      setCanSeeAll(!!(b && b.canSeeAll === true));   // (verify-fix) 欠落時は制限側(false)を既定にしてスコープ表示
     } catch (e) {
       setError(e && e.message ? e.message : String(e));
     } finally {
@@ -18289,14 +18466,26 @@ function PageMembersAdmin() {
   }
   useEffect(() => { fetchAll(); }, []);
 
+  // (FE-7) 部署フィルタは deptIndex_ 由来の canon キー済みマスタ (departments[].key/label) から構築。
+  //   行から deptName をスクレイプせず、 canon キーで一意化。
   const deptOptions = useMemo(() => {
-    const s = new Set();
-    rows.forEach(m => {
-      if (m.primary && m.primary.deptName) s.add(m.primary.deptName);
-      (m.concurrent || []).forEach(c => { if (c.deptName) s.add(c.deptName); });
-    });
-    return Array.from(s).sort();
-  }, [rows]);
+    return (depts || [])
+      .filter(d => d && d.key)
+      .map(d => ({ key: d.key, label: d.label || d.key }));
+  }, [depts]);
+
+  // メンバーの所属 (主務 + 兼任) を canon キー集合へ。 DeptID/部署名 のどちらからでも key を導出。
+  function memberDeptKeys_(m) {
+    const out = {};
+    const add = (a) => {
+      if (!a) return;
+      const k = window.deptCanon ? window.deptCanon(a.deptName || '') : (a.deptName || '');
+      if (k) out[k] = true;
+    };
+    if (m.primary) add(m.primary);
+    (m.concurrent || []).forEach(add);
+    return out;
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -18304,9 +18493,7 @@ function PageMembersAdmin() {
       if (statusFilter === "active" && !m.isActive) return false;
       if (statusFilter === "left" && m.isActive) return false;
       if (deptFilter !== "all") {
-        const depts = [m.primary && m.primary.deptName]
-          .concat((m.concurrent || []).map(c => c.deptName)).filter(Boolean);
-        if (depts.indexOf(deptFilter) < 0) return false;
+        if (!memberDeptKeys_(m)[deptFilter]) return false;
       }
       if (q) {
         const hay = [m.name, m.email, m.memberCode, m.nameKana].filter(Boolean).join(' ').toLowerCase();
@@ -18319,6 +18506,17 @@ function PageMembersAdmin() {
   const activeCount = rows.filter(m => m.isActive).length;
   const leftCount = rows.filter(m => !m.isActive).length;
 
+  // (verify-fix) getMembersBundle の departments[].count は usageRows 無しの経路で 0 になるため、
+  //   在籍カードの「N名 在籍」は members[] から canon キーで自前集計する。
+  const deptMemberCounts = useMemo(() => {
+    const acc = {};
+    rows.forEach(m => {
+      if (!m.isActive) return;
+      Object.keys(memberDeptKeys_(m)).forEach(k => { acc[k] = (acc[k] || 0) + 1; });
+    });
+    return acc;
+  }, [rows]);
+
   function fmtDate(s) {
     if (!s) return '—';
     try {
@@ -18329,9 +18527,8 @@ function PageMembersAdmin() {
     } catch (e) { return String(s); }
   }
   function statusBadgeColor(m) {
-    if (m.isActive && m.status === '在籍中') return 'badge-green';
     if (!m.isActive) return 'badge-amber';
-    return 'badge-indigo';
+    return 'badge-green';
   }
 
   return (
@@ -18348,7 +18545,7 @@ function PageMembersAdmin() {
           <div>MEMBERS</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {window.hasRole && window.hasRole('代表') && <button className="jb-btn" onClick={exportCSV}>CSV</button>}
-            <button className="jb-btn jb-btn-primary" onClick={() => setShowReg(true)}>+ メンバー</button>
+            {window.canDo && window.canDo('members.create') && <button className="jb-btn jb-btn-primary" onClick={() => setShowReg(true)}>+ メンバー</button>}
           </div>
         </div>
       </header>
@@ -18359,6 +18556,32 @@ function PageMembersAdmin() {
         <MiniStat label="部署数" value={String(depts.length)} sub="" icon="building" color="violet" />
         <MiniStat label="表示中" value={String(filtered.length)} sub="" icon="list" color="coral" />
       </div>
+
+      {/* (FE-7) 部署別カード — 部署管理と共有する <DeptCardGrid/>。 deptIndex_ 由来 (master ∪ usage, canon キー)。
+          カードクリックで deptFilter を d.key に設定。 <ScopeBanner/> で自部署スコープを明示。 */}
+      {depts.length > 0 && (
+        <React.Fragment>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 10 }}>
+            <div className="card-title" style={{ margin: 0 }}><Icon n="building" s={16} /> 部署 ・チーム</div>
+            <ScopeBanner canSeeAll={canSeeAll} count={depts.length} />
+          </div>
+          <DeptCardGrid
+            departments={depts}
+            onOpen={(label) => {
+              const k = window.deptCanon ? window.deptCanon(label || '') : (label || '');
+              setDeptFilter(deptFilter === k ? 'all' : k);
+            }}
+            renderExtra={(d) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--ink4)' }}>{(deptMemberCounts[d.key] || 0)}名 在籍</span>
+                {!d.inMaster && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--coral)', border: '1px solid var(--coral)', borderRadius: 5, padding: '2px 6px' }}>マスタ未登録</span>
+                )}
+              </div>
+            )}
+          />
+        </React.Fragment>
+      )}
 
       <div className="card mt16">
         <div className="card-head">
@@ -18381,7 +18604,7 @@ function PageMembersAdmin() {
           <div className="select-wrap" style={{ minWidth: 160 }}>
             <select className="input select" value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
               <option value="all">全部署</option>
-              {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
+              {deptOptions.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
             </select>
           </div>
         </div>
@@ -18449,14 +18672,16 @@ window.PageMembersAdmin = PageMembersAdmin;
 
 // ============ メンバー管理: 構成員詳細 (Step1C 後半) ============
 // 構成員 変更申請モーダル (Step1D)
-function MemberChangeRequestModal({ member, depts, onClose, onSubmitted }) {
+function MemberChangeRequestModal({ member, depts, onClose, onSubmitted, onDeptsChanged }) {
   const [type, setType] = useState('department_add');
   const [beforeDept, setBeforeDept] = useState('');
   const [afterDept, setAfterDept] = useState('');
+  // (FE-10) 役職: 空文字 '' = 現状維持。 department_add/role_change はメンバー既定、 department_change は未指定既定。
   const [afterRole, setAfterRole] = useState('メンバー');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [showDeptDialog, setShowDeptDialog] = useState(false);
 
   const ROLES = ['代表', '副代表', 'マネージャー', 'アシマネ', 'メンバー'];
   const TYPES = [
@@ -18466,10 +18691,27 @@ function MemberChangeRequestModal({ member, depts, onClose, onSubmitted }) {
   const affs = (member && member.affiliations) || [];
   const currentIds = {};
   affs.forEach(a => { currentIds[a.deptId] = true; });
-  const addOptions = (depts || []).filter(d => !currentIds[d.id]);
+  // (FE-10) 選択肢はスコープ済み dept index (BE-2/BE-8 = listScopedDepartments) を親から受け取った depts から構築。
+  //   フルリストではなく、 自部署スコープ内のマスタ部署のみ。
+  const deptList = depts || [];
+  const addOptions = deptList.filter(d => !currentIds[d.id]);
   const leaveOptions = affs.filter(a => !a.isPrimary);
 
-  function changeType(v) { setType(v); setBeforeDept(''); setAfterDept(''); setAfterRole('メンバー'); setErr(''); }
+  // (FE-10) マスタ部署名一覧 + 選択名の類似警告 (表記ゆれ guard)。 MemberRegisterModal と同形。
+  const masterNames = React.useMemo(() => deptList.map(d => d.name).filter(Boolean), [deptList]);
+  const selectedAfterName = React.useMemo(() => {
+    const d = deptList.find(x => String(x.id) === String(afterDept));
+    return d ? d.name : '';
+  }, [deptList, afterDept]);
+  const deptSim = React.useMemo(() => {
+    if (!selectedAfterName || !window.deptSimilar) return { exactDup: null, similar: [] };
+    const others = masterNames.filter(n => String(n) !== String(selectedAfterName));
+    return window.deptSimilar(selectedAfterName, others);
+  }, [selectedAfterName, masterNames]);
+  // (FE-10) 代表のみ: 申請中に不足部署をマスタへ追加できる導線。 server checks をミラー (default-DENY)。
+  const canPromote = !!(window.canDo && window.canDo('departments.create'));
+
+  function changeType(v) { setType(v); setBeforeDept(''); setAfterDept(''); setAfterRole(v === 'department_change' ? '' : 'メンバー'); setErr(''); }
 
   async function submit() {
     setErr('');
@@ -18478,15 +18720,14 @@ function MemberChangeRequestModal({ member, depts, onClose, onSubmitted }) {
     if (type === 'role_change' && (!beforeDept || !afterRole)) { setErr('対象部署と変更後の役職を選択してください'); return; }
     if (type === 'department_leave' && !beforeDept) { setErr('退部する部署を選択してください'); return; }
 
-    const applicant = (window.currentUser && window.currentUser.member && window.currentUser.member.id)
-      || (window.getStoredMemberId && window.getStoredMemberId()) || '';
     setBusy(true);
     try {
+      // (FE-10) applicant をクライアントから送らない。 申請者は BE-10 がセッション (session user.member.id) から導出する。
       const res = await window.postData('submitMembershipChangeRequest', {
         type: type, memberId: member.id,
         beforeDept: beforeDept, afterDept: afterDept,
         afterRole: (type === 'department_add' || type === 'role_change' || type === 'department_change') ? afterRole : '',
-        reason: reason.trim(), applicant: applicant,
+        reason: reason.trim(),
       });
       if (res && res.ok) {
         if (window.toast) window.toast.success('変更申請を送信しました (' + res.requestId + ')');
@@ -18530,6 +18771,17 @@ function MemberChangeRequestModal({ member, depts, onClose, onSubmitted }) {
                     {addOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
+                {!deptSim.exactDup && deptSim.similar.length > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--amber, #b45309)', marginTop: 4 }}>
+                    似た部署があります（表記ゆれの可能性）: {deptSim.similar.join('、')}
+                  </div>
+                )}
+                {canPromote && (
+                  <button type="button" onClick={() => setShowDeptDialog(true)}
+                          style={{ marginTop: 6, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--indigo)', color: 'var(--indigo)', background: 'transparent', cursor: 'pointer' }}>
+                    + 新しい部署をマスタへ追加
+                  </button>
+                )}
               </div>
               <div style={{ flex: 1 }}>
                 <label className="field-label">役職</label>
@@ -18559,15 +18811,28 @@ function MemberChangeRequestModal({ member, depts, onClose, onSubmitted }) {
                   <div className="select-wrap">
                     <select className="input select" value={afterDept} onChange={e => setAfterDept(e.target.value)}>
                       <option value="">選択してください</option>
-                      {(depts || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      {deptList.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
+                  {!deptSim.exactDup && deptSim.similar.length > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--amber, #b45309)', marginTop: 4 }}>
+                      似た部署があります（表記ゆれの可能性）: {deptSim.similar.join('、')}
+                    </div>
+                  )}
+                  {canPromote && (
+                    <button type="button" onClick={() => setShowDeptDialog(true)}
+                            style={{ marginTop: 6, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--indigo)', color: 'var(--indigo)', background: 'transparent', cursor: 'pointer' }}>
+                      + 新しい部署をマスタへ追加
+                    </button>
+                  )}
                 </div>
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label className="field-label">変更後の役職（任意・未指定なら現状維持）</label>
                 <div className="select-wrap">
+                  {/* (FE-10) 既定を空 '' = 現状維持 にし、 '未指定なら現状維持' を到達可能にする (afterRole は changeType で '' 初期化)。 */}
                   <select className="input select" value={afterRole} onChange={e => setAfterRole(e.target.value)}>
+                    <option value="">現状維持</option>
                     {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
@@ -18624,6 +18889,22 @@ function MemberChangeRequestModal({ member, depts, onClose, onSubmitted }) {
           <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? '送信中...' : '申請する'}</button>
         </div>
       </div>
+      {/* (FE-10) 代表-only 部署昇格: 不足部署を共有 DeptMasterDialog -> minutesPromoteDept (createDepartment シンク) へ funnel。 */}
+      {showDeptDialog && (
+        <DeptMasterDialog
+          initial={{ name: '', abbr: '', color: 'slate' }}
+          masterNames={masterNames}
+          onClose={() => setShowDeptDialog(false)}
+          onSubmit={({ name, abbr, color }) => Promise.resolve()
+            .then(() => window.postData('minutesPromoteDept', { name: name, abbr: abbr, color: color }))
+            .then((res) => {
+              if (res && res.ok === false) { throw new Error((res && res.error) || '部署の追加に失敗しました'); }
+              try { window.invalidateDeptData && window.invalidateDeptData(); } catch (e) {}
+              setShowDeptDialog(false);
+              if (window.toast) window.toast.success('部署をマスタへ追加しました');
+              if (onDeptsChanged) onDeptsChanged();
+            })} />
+      )}
     </div>
   );
 }
@@ -18638,7 +18919,7 @@ function PageMemberDetail() {
       return new URLSearchParams(h.substring(q + 1)).get('id') || '';
     } catch (e) { return ''; }
   });
-  const [rows, setRows] = useState([]);
+  const [member, setMember] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('basic'); // basic / affiliation
@@ -18703,21 +18984,34 @@ function PageMemberDetail() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
+  // (FE-12) 全件取得→.find() (O(all)・全ロスター露出) を廃し、 id でスコープ済み単一メンバを取得。
+  //   getMemberDetail は listMembersDetail と同形 (primary/concurrent/highestRole 等) を 1 件だけ返す。
+  //   サーバが役割スコープ外と判定したら null → 「見つかりません」表示。 id 変化で再取得。
   async function load() {
+    if (!id) { setMember(null); setLoading(false); setError(null); return; }
     setLoading(true); setError(null);
     try {
-      const data = await window.fetchData('listMembersDetail');
-      setRows(Array.isArray(data) ? data : []);
+      const data = await window.fetchData('getMemberDetail', { memberId: id });
+      setMember(data && data.id ? data : null);
     } catch (e) {
       setError(e && e.message ? e.message : String(e));
     } finally {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
-  useEffect(() => { window.fetchData('listDepartments').then(ds => setDepts(Array.isArray(ds) ? ds : [])).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [id]);
+  // (FE-10) スコープ済み dept index (BE-2/BE-8 = listScopedDepartments = deptIndex_(user)) から選択肢を構築。
+  //   フルリストではなく自部署スコープのマスタ部署を {id,name} 形へ写像し、 変更申請モーダルへ渡す。
+  function loadDepts() {
+    window.fetchData('listScopedDepartments')
+      .then(d => {
+        const arr = (d && Array.isArray(d.departments)) ? d.departments : (Array.isArray(d) ? d : []);
+        setDepts(arr.filter(x => x && x.inMaster !== false && (x.deptId != null && x.deptId !== '')).map(x => ({ id: x.deptId, name: x.label || x.key, key: x.key })));
+      })
+      .catch(() => {});
+  }
+  useEffect(() => { loadDepts(); }, []);
   useEffect(() => { setHistLoaded(false); setHistories([]); setOoLoaded(false); setOneonones([]); setOoAllowed(false); }, [id]);
-  const member = useMemo(() => rows.find(m => m.id === id) || null, [rows, id]);
   useEffect(() => {
     if (tab !== 'history' || !member || histLoaded) return;
     setHistLoading(true);
@@ -18796,7 +19090,8 @@ function PageMemberDetail() {
               <span className={clsx("chip", tab === 'oneonone' && "on")} onClick={() => setTab('oneonone')}>1on1</span>
             </div>
             <div className="row" style={{ gap: 6 }}>
-              <button className="btn btn-sm" onClick={() => setShowReq(true)}><Icon n="edit" s={14} /> 変更申請</button>
+              {/* (FE-10) 変更申請ボタンを canDoInDept でゲート (隣のリセットボタンと同様の default-DENY)。 対象は当該メンバーの主所属部署。 */}
+              {window.canDoInDept && window.canDoInDept('members.update', (member.primary && member.primary.deptName) || member.dept || '') && <button className="btn btn-sm" onClick={() => setShowReq(true)}><Icon n="edit" s={14} /> 変更申請</button>}
               {window.hasRole && window.hasRole('代表') && <button className="btn btn-ghost btn-sm" onClick={() => setConfirmReset(true)}><Icon n="lock" s={14} /> パスワードリセット</button>}
             </div>
           </div>
@@ -18971,7 +19266,7 @@ function PageMemberDetail() {
           </div>
         </div>
       )}
-      {showReq && member && <MemberChangeRequestModal member={member} depts={depts} onClose={() => setShowReq(false)} onSubmitted={() => setShowReq(false)} />}
+      {showReq && member && <MemberChangeRequestModal member={member} depts={depts} onClose={() => setShowReq(false)} onSubmitted={() => setShowReq(false)} onDeptsChanged={loadDepts} />}
     </div>
   );
 }
@@ -19001,10 +19296,7 @@ function PageApprovals() {
   }
   useEffect(() => { if (isChair) load(); else setLoading(false); }, [statusFilter]);
 
-  function myId() {
-    return (window.currentUser && window.currentUser.member && window.currentUser.member.id)
-      || (window.getStoredMemberId && window.getStoredMemberId()) || '';
-  }
+  // (FE-11) approverId/rejecterId をクライアントから送らなくなったため myId() を撤去 (権限は BE-10 セッションで判定)。
   function fmtDate(s) {
     if (!s) return '—';
     try { const d = new Date(s); if (isNaN(d.getTime())) return String(s); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
@@ -19022,7 +19314,8 @@ function PageApprovals() {
   async function approve(r) {
     setBusyId(r.requestId);
     try {
-      const res = await window.postData('approveMembershipChangeRequest', { requestId: r.requestId, approverId: myId() });
+      // (FE-11) approverId は送らない: 権限は BE-10 のセッションユーザ (session.member.id) で判定する。
+      const res = await window.postData('approveMembershipChangeRequest', { requestId: r.requestId });
       if (res && res.ok) { if (window.toast) window.toast.success('承認しました'); if (window.__refreshApprovalsBadge__) window.__refreshApprovalsBadge__(); load(); }
       else { if (window.toast) window.toast.error((res && res.error) || '承認に失敗しました'); setBusyId(''); }
     } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyId(''); }
@@ -19031,7 +19324,8 @@ function PageApprovals() {
     const r = rejecting; if (!r) return;
     setBusyId(r.requestId);
     try {
-      const res = await window.postData('rejectMembershipChangeRequest', { requestId: r.requestId, rejecterId: myId(), reason: rejectReason.trim() });
+      // (FE-11) rejecterId は送らない: 権限は BE-10 のセッションユーザで判定する。 却下理由は必須。
+      const res = await window.postData('rejectMembershipChangeRequest', { requestId: r.requestId, reason: rejectReason.trim() });
       if (res && res.ok) { if (window.toast) window.toast.success('却下しました'); if (window.__refreshApprovalsBadge__) window.__refreshApprovalsBadge__(); setRejecting(null); setRejectReason(''); load(); }
       else { if (window.toast) window.toast.error((res && res.error) || '却下に失敗しました'); setBusyId(''); }
     } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyId(''); }
@@ -19118,7 +19412,8 @@ function PageApprovals() {
             <div className="card-body">
               <div style={{ fontSize: 13, marginBottom: 8 }}>{rejecting.memberName}（{rejecting.typeLabel}）を却下します。</div>
               <label className="field-label">却下理由 <span className="field-req">*</span></label>
-              <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="却下の理由（任意）" />
+              {/* (FE-11) ラベル(必須*) / placeholder / 却下ボタンの活性条件を整合: 却下理由は必須。 */}
+              <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="却下の理由を入力してください（必須）" />
             </div>
             <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button className="btn btn-ghost" onClick={() => setRejecting(null)} disabled={busyId === (rejecting && rejecting.requestId)}>キャンセル</button>
@@ -19159,9 +19454,12 @@ function PageMyPage() {
     if (!myId) { setLoading(false); return; }
     setLoading(true); setError(null);
     try {
+      // (FE-13) .catch(()=>[]) を撤廃し、 取得失敗を「空」と混同しない (error vs empty を区別)。
+      //   失敗時は Promise.all が reject -> 下の catch で error 表示。
+      //   memberId は送らない: listMyEventStaff は BE-11 でセッション本人にスコープされる。
       const [ev, mine] = await Promise.all([
-        window.fetchData('listEvents').catch(() => []),
-        window.fetchData('listMyEventStaff', { memberId: myId }).catch(() => []),
+        window.fetchData('listEvents'),
+        window.fetchData('listMyEventStaff'),
       ]);
       setEvents(Array.isArray(ev) ? ev : []);
       setMyStaff(Array.isArray(mine) ? mine : []);
@@ -19169,6 +19467,16 @@ function PageMyPage() {
     finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
+
+  // (FE-13) 対象日の read(文字列 'all'|'a,b')/write(配列) 形状を 1 か所で統一。
+  //   サーバは 'all' か comma 文字列を返し、 mutation は配列を期待する。
+  const daysToArray = (d) => {
+    if (Array.isArray(d)) return d.filter(Boolean);
+    const s = String(d == null ? '' : d).trim();
+    if (!s || s === 'all') return [];
+    return s.split(',').map(x => x.trim()).filter(Boolean);
+  };
+  const daysLabel = (d) => { const a = daysToArray(d); return a.length ? '対象日 ' + a.join(' / ') : '全日'; };
 
   const STATUS_LABEL = { committed: '参加表明', attended: '出席', absent: '欠席', withdrawn: '取消' };
   const STATUS_BADGE = { committed: 'badge-indigo', attended: 'badge-green', absent: 'badge-coral', withdrawn: 'badge-amber' };
@@ -19178,6 +19486,38 @@ function PageMyPage() {
 
   const today = new Date(); const p = n => String(n).padStart(2, '0');
   const todayStr = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+
+  // (FE-13) 欠席ボタンのサーバ日付セマンティクスを反映:
+  //   markEventStaffAbsent は (活動日 <= 今日) なら 'absent'(評価マイナス)、 前日までは 'withdrawn'(取消/対象外)。
+  //   s.date(=活動日) で当日以降か判定し、 ボタン文言・確認文を切り替える。
+  const isAbsentDate = (s) => !!(s && s.date && todayStr >= String(s.date));
+
+  // (FE-13) 自分の所属(主務+兼任)/ロール/スコープは、 セッション本人にスコープ済みの
+  //   whoami(currentUser.allRoles, id-keyed affiliations) から導出する。 メンバー詳細リンクの
+  //   payload.id に依存せず IDOR を避ける。 canon キーで部署を一意化し、 <DeptCardGrid/> へ。
+  const myCanon = (s) => (window.deptCanon ? window.deptCanon(s || '') : String(s || '')).trim();
+  const myHighestRank = (window.currentUser && Number(window.currentUser.highestRank)) || 0;
+  const myCanSeeAll = myHighestRank >= 3;   // deptScope_ と同じ閾値 (マネージャー以上)
+  const myAffiliations = React.useMemo(() => {
+    const roles = (window.currentUser && Array.isArray(window.currentUser.allRoles)) ? window.currentUser.allRoles : [];
+    const byKey = {};
+    let order = 0;
+    roles.forEach(r => {
+      if (!r) return;
+      const label = r.deptName || '';
+      const key = myCanon(label) || ('role:' + (order));
+      if (!byKey[key]) {
+        byKey[key] = { key: key, label: label || '(部署未設定)', color: 'slate', count: 0, roles: [], isPrimary: false, order: order++ };
+      }
+      const slot = byKey[key];
+      if (r.role && slot.roles.indexOf(r.role) < 0) slot.roles.push(r.role);
+      if (r.isPrimary) slot.isPrimary = true;
+    });
+    // count は保有ロール数 (DeptCardGrid の組込み件数行を意味のある値にし「議事録なし」表示を避ける)。
+    Object.keys(byKey).forEach(k => { byKey[k].count = byKey[k].roles.length; });
+    return Object.keys(byKey).map(k => byKey[k]).sort((a, b) => (b.isPrimary - a.isPrimary) || (a.order - b.order));
+  }, [window.currentUser]);
+
   const EXCL = ['終了', '中止', '実施済', 'アーカイブ', '下書き'];
   const openEvents = events.filter(e => e.date && e.date >= todayStr && EXCL.indexOf(e.status) < 0);
   const joinable = openEvents.filter(e => { const st = staffMap[e.id]; return !st || st === 'withdrawn' || st === 'absent'; });
@@ -19199,7 +19539,7 @@ function PageMyPage() {
     if (!sAll && sDays.length === 0) { if (window.toast) window.toast.error('参加する日を選択してください'); return; }
     setBusyEvent(ev.id);
     try {
-      const res = await window.postData('signupEventStaff', { memberId: myId, eventId: ev.id, days: sAll ? [] : sDays });
+      const res = await window.postData('signupEventStaff', { eventId: ev.id, days: sAll ? [] : daysToArray(sDays) });
       if (res && res.ok) { if (window.toast) window.toast.success('運営参加を表明しました'); setSignupEvent(null); load(); }
       else { if (window.toast) window.toast.error((res && res.error) || '表明に失敗しました'); setBusyEvent(''); }
     } catch (e) { if (window.toast) window.toast.error(e && e.message ? e.message : String(e)); setBusyEvent(''); }
@@ -19208,7 +19548,7 @@ function PageMyPage() {
     const s = confirmAbsent; if (!s) return;
     setBusyEvent(s.eventId);
     try {
-      const res = await window.postData('markEventStaffAbsent', { memberId: myId, eventId: s.eventId });
+      const res = await window.postData('markEventStaffAbsent', { eventId: s.eventId });
       if (res && res.ok) {
         if (window.toast) window.toast.success(res.status === 'absent' ? '欠席として記録しました' : '参加を取り消しました');
         setConfirmAbsent(null); load();
@@ -19225,7 +19565,7 @@ function PageMyPage() {
     if (newPw !== newPw2) { setPwErr('新しいパスワードが一致しません'); return; }
     setPwBusy(true);
     try {
-      const res = await window.postData('setPassword', { memberId: myId, currentPassword: curPw, newPassword: newPw });
+      const res = await window.postData('setPassword', { currentPassword: curPw, newPassword: newPw });
       if (res && res.ok) {
         if (res.token) window.setStoredToken(res.token);
         if (window.toast) window.toast.success('パスワードを変更しました');
@@ -19250,7 +19590,10 @@ function PageMyPage() {
       <div className="row between" style={{ marginBottom: 14, alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>マイページ</h1>
-          <p style={{ fontSize: 13, color: 'var(--ink3)', margin: '4px 0 0' }}>{me && me.name ? me.name + ' さん' : myId}</p>
+          {/* (FE-13) 生の内部 MemberID をフォールバック表示しない。 氏名 -> 表示ID -> 「あなた」。 */}
+          <p style={{ fontSize: 13, color: 'var(--ink3)', margin: '4px 0 0' }}>
+            {(me && me.name) ? me.name + ' さん' : ((me && me.memberCode) ? me.memberCode + ' さん' : 'あなた')}
+          </p>
         </div>
         <div className="row" style={{ gap: 6 }}>
           <a className="btn btn-ghost btn-sm" href={'#member-detail?id=' + encodeURIComponent(myId)}><Icon n="user" s={14} /> 自分の詳細</a>
@@ -19264,6 +19607,34 @@ function PageMyPage() {
 
       {!loading && !error && (
         <div>
+          {/* (FE-13) 自分の所属(主務+兼任)/ロール/スコープ。 メンバー詳細リンクへ飛ばす代わりに、
+              セッション本人にスコープ済みの whoami affiliations を <DeptCardGrid/> でその場に表示する。
+              <ScopeBanner/> で「自部署のみ表示しています」を明示 (canSeeAll = 最高ランク>=3)。 */}
+          <div className="card mb16">
+            <div className="card-head" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="card-title" style={{ margin: 0 }}><Icon n="building" s={16} /> 自分の所属・ロール</div>
+              <ScopeBanner canSeeAll={myCanSeeAll} count={myAffiliations.length} />
+            </div>
+            <div className="card-body">
+              {myAffiliations.length === 0 && <div style={{ color: 'var(--ink4)', padding: 8 }}>所属部署が登録されていません。</div>}
+              {myAffiliations.length > 0 && (
+                <DeptCardGrid
+                  departments={myAffiliations}
+                  onOpen={() => {}}
+                  renderExtra={(d) => (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      {d.isPrimary && <span className="badge badge-indigo" style={{ fontSize: 10 }}>主所属</span>}
+                      {!d.isPrimary && <span className="badge badge-amber" style={{ fontSize: 10 }}>兼任</span>}
+                      {(d.roles || []).map(r => (
+                        <span key={r} style={{ fontSize: 11, color: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: 5, padding: '1px 6px' }}>{r}</span>
+                      ))}
+                    </div>
+                  )}
+                />
+              )}
+            </div>
+          </div>
+
           <div className="card mb16">
             <div className="card-head"><div className="card-title"><Icon n="star" s={16} /> 運営に携われるイベント</div></div>
             <div className="card-body">
@@ -19291,10 +19662,12 @@ function PageMyPage() {
                       <span style={{ fontWeight: 600 }}>{s.title}</span>
                       <span className={clsx('badge', STATUS_BADGE[s.status] || 'badge-indigo')}>{STATUS_LABEL[s.status] || s.status}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--ink4)' }}>{s.date}{s.role ? ' ／ ' + s.role : ''} ／ {s.days && s.days !== 'all' ? '対象日 ' + s.days.split(',').join(' / ') : '全日'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink4)' }}>{s.date}{s.role ? ' ／ ' + s.role : ''} ／ {daysLabel(s.days)}</div>
                   </div>
                   {s.status === 'committed' && (
-                    <button className="btn btn-sm" onClick={() => setConfirmAbsent(s)} disabled={busyEvent === s.eventId}><Icon n="x" s={14} /> 欠席</button>
+                    <button className="btn btn-sm" onClick={() => setConfirmAbsent(s)} disabled={busyEvent === s.eventId}>
+                      <Icon n="x" s={14} /> {isAbsentDate(s) ? '欠席' : '取消'}
+                    </button>
                   )}
                 </div>
               ))}
@@ -19368,14 +19741,15 @@ function PageMyPage() {
       {confirmAbsent && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setConfirmAbsent(null)}>
           <div className="card" style={{ width: 440, maxWidth: '94%' }} onClick={e => e.stopPropagation()}>
-            <div className="card-head"><div className="card-title"><Icon n="warn" s={16} /> 欠席の確認</div></div>
+            {/* (FE-13) サーバ日付セマンティクスに合わせ、 当日以降は「欠席」、 前日までは「取消」として文言を出し分け。 */}
+            <div className="card-head"><div className="card-title"><Icon n="warn" s={16} /> {isAbsentDate(confirmAbsent) ? '欠席の確認' : '取消の確認'}</div></div>
             <div className="card-body">
-              <div style={{ fontSize: 13 }}>「{confirmAbsent.title}」の運営参加を欠席にします。</div>
+              <div style={{ fontSize: 13 }}>「{confirmAbsent.title}」の運営参加を{isAbsentDate(confirmAbsent) ? '欠席にします' : '取り消します'}。</div>
               <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 8 }}>イベント当日以降の欠席は人事評価に影響します（前日までの取消は対象外）。よろしいですか。</div>
             </div>
             <div className="card-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button className="btn btn-ghost" onClick={() => setConfirmAbsent(null)} disabled={busyEvent === confirmAbsent.eventId}>やめる</button>
-              <button className="btn btn-primary" onClick={doAbsent} disabled={busyEvent === confirmAbsent.eventId}>欠席にする</button>
+              <button className="btn btn-primary" onClick={doAbsent} disabled={busyEvent === confirmAbsent.eventId}>{isAbsentDate(confirmAbsent) ? '欠席にする' : '取り消す'}</button>
             </div>
           </div>
         </div>
@@ -20722,7 +21096,15 @@ function MemberRequestCard({ req, depts, onChanged }) {
   const [role, setRole] = useState('メンバー');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showDeptDialog, setShowDeptDialog] = useState(false);
   const pending = req.status === 'pending';
+  // (FE-11) 昇格アフォーダンス: 希望部署がスコープ済み dept index (= 承認で選べる部署集合) に
+  //   無い場合のみ、 共有 DeptMasterDialog -> minutesPromoteDept (createDepartment シンク) へ funnel する。
+  const canon = (s) => (window.deptCanon ? window.deptCanon(s || '') : String(s || '')).trim();
+  const masterNames = (depts || []).map(function (d) { return d.name; });
+  const desiredName = req.desiredDeptName || '';
+  const desiredInMaster = !desiredName || (depts || []).some(function (d) { return canon(d.name) === canon(desiredName) || canon(d.key) === canon(desiredName); });
+  const canPromote = !!(window.hasRole && window.hasRole('代表'));
 
   async function approve() {
     if (!deptId) { if (window.toast) window.toast.error('所属部署を選んでください'); return; }
@@ -20764,6 +21146,14 @@ function MemberRequestCard({ req, depts, onChanged }) {
       {req.message && <div style={{ fontSize: 12, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: 10, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{req.message}</div>}
       {req.status === 'approved' && req.member_id && <div style={{ fontSize: 12, color: 'var(--ink4)' }}>登録済み構成員ID: <span className="mono">{req.member_id}</span></div>}
       {req.status === 'rejected' && req.reject_reason && <div style={{ fontSize: 12, color: 'var(--ink4)' }}>却下理由: {req.reject_reason}</div>}
+      {/* (FE-11) 申請者への結果通知状態をサーフェスする。 BE が notified/notified_at を返す場合に表示。 */}
+      {!pending && (req.notified != null || req.notified_at) && (
+        <div style={{ fontSize: 12, marginTop: 4, color: req.notified ? 'var(--green)' : 'var(--amber)' }}>
+          {req.notified
+            ? <span><Icon n="mail" s={12} /> 申請者へ結果を通知済み{req.notified_at ? '（' + String(req.notified_at).replace('T', ' ').slice(0, 16) + '）' : ''}</span>
+            : <span><Icon n="warn" s={12} /> 申請者への結果通知は未送信です</span>}
+        </div>
+      )}
 
       {pending && (
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 4 }}>
@@ -20774,6 +21164,14 @@ function MemberRequestCard({ req, depts, onChanged }) {
                 <option value="">選択してください</option>
                 {(depts || []).map(function (d) { return <option key={d.id} value={d.id}>{d.name}</option>; })}
               </select></div>
+              {/* (FE-11) 希望部署がマスタ未登録のとき、 代表は共有 DeptMasterDialog で昇格してから承認できる。 */}
+              {!desiredInMaster && desiredName && (
+                <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>
+                  希望部署「{desiredName}」は未登録です。{canPromote
+                    ? <a style={{ cursor: 'pointer', color: 'var(--indigo)', marginLeft: 4 }} onClick={function () { setShowDeptDialog(true); }}>マスタへ追加</a>
+                    : <span style={{ marginLeft: 4 }}>代表に追加を依頼してください。</span>}
+                </div>
+              )}
             </div>
             <div>
               <label className="field-label">初期役職</label>
@@ -20790,6 +21188,25 @@ function MemberRequestCard({ req, depts, onChanged }) {
           </div>
         </div>
       )}
+      {/* (FE-11) 部署昇格ダイアログ: 共有 <DeptMasterDialog/> -> minutesPromoteDept (createDepartment シンク)。
+          成功後は invalidateDeptData で失効させ、 onChanged で親の dept index を再取得 -> 承認の選択肢に反映。 */}
+      {showDeptDialog && window.DeptMasterDialog && (
+        <DeptMasterDialog
+          initial={{ name: desiredName || '', abbr: '', color: 'slate' }}
+          masterNames={masterNames}
+          onClose={function () { setShowDeptDialog(false); }}
+          onSubmit={function (p) {
+            return Promise.resolve()
+              .then(function () { return window.postData('minutesPromoteDept', { name: p.name, abbr: p.abbr, color: p.color }); })
+              .then(function (res) {
+                if (res && res.ok === false) { throw new Error((res && res.error) || '部署の追加に失敗しました'); }
+                try { window.invalidateDeptData && window.invalidateDeptData(); } catch (e) {}
+                setShowDeptDialog(false);
+                if (window.toast) window.toast.success('部署をマスタへ追加しました');
+                if (onChanged) onChanged();
+              });
+          }} />
+      )}
     </div></div>
   );
 }
@@ -20803,7 +21220,13 @@ function PageMemberRequests() {
   function load() {
     setLoading(true);
     window.fetchData('listMemberRegistrationRequests', { status: statusFilter }).then(function (d) { setReqs(Array.isArray(d) ? d : []); }).catch(function () {}).then(function () { setLoading(false); });
-    window.fetchData('listRecruitDepartments').then(function (d) { setDepts(Array.isArray(d) ? d : []); }).catch(function () {});
+    // (FE-11) 登録承認も変更申請と同じスコープ済み dept index (BE-2/BE-12 = listScopedDepartments = deptIndex_(user)) を
+    //   唯一のソースにする。 両承認パイプラインが同一の部署集合を見るようにし、 マスタ部署を {id,name} 形へ写像する。
+    window.fetchData('listScopedDepartments').then(function (d) {
+      var arr = (d && Array.isArray(d.departments)) ? d.departments : (Array.isArray(d) ? d : []);
+      setDepts(arr.filter(function (x) { return x && x.inMaster !== false && (x.deptId != null && x.deptId !== ''); })
+        .map(function (x) { return { id: x.deptId, name: x.label || x.key, key: x.key }; }));
+    }).catch(function () {});
   }
   useEffect(function () { load(); }, [statusFilter]);
 
@@ -20834,7 +21257,10 @@ window.PageMemberRequests = PageMemberRequests;
 
 function PageDepartments(){
   const [members, setMembers] = useState([]);
-  const [departments, setDepartments] = useState([]);   // 動的取得
+  // (FE-5) deptIndex_ ユニオン (master ∪ orphan member.dept as inMaster:false)。 サーバ scope 済み・canon キー済み。
+  const [deptIndex, setDeptIndex] = useState([]);       // [{key,deptId,label,color,order,count,inMaster}]
+  const [masterRows, setMasterRows] = useState([]);     // listDepartments 行 (id/status/略称等。アーカイブ含む)
+  const [canSeeAll, setCanSeeAll] = useState(true);     // (FE-5) サーバ判定。 FE は文言のみ切替。
   const [settings, setSettings] = useState({});         // (運用可視化) 学年更新の最終実行など
   const [memberRoles, setMemberRoles] = useState([]);   // 兼任 (副所属) 全件
   const [loading, setLoading] = useState(false);
@@ -20842,23 +21268,31 @@ function PageDepartments(){
   const [filter, setFilter] = useState("active");
   const [query, setQuery] = useState("");
   const [deptFilter, setDeptFilter] = useState("all");
+  const [includeArchived, setIncludeArchived] = useState(false);   // (FE-5) アーカイブ部署も表示し復元可能に
   const [modalMode, setModalMode] = useState(null);
   const [editingM, setEditingM] = useState(null);
   // 部署 CRUD 用
-  const [tab, setTab] = useState("members");   // departments / members
   const [editingDept, setEditingDept] = useState(null);   // {mode, values}
+  const [promoteDept, setPromoteDept] = useState(null);   // (FE-5) マスタ未登録部署の昇格ダイアログ用 {label,...}
 
   async function fetchAll() {
     setLoading(true);
     setError(null);
     try {
-      const [mems, depts, roles] = await Promise.all([
+      // (FE-5) BE-8 スコープ済み: listScopedDepartments=deptIndex_(user) (union+canSeeAll)、
+      //   listMembers/listMemberRoles も user 転送で自部署のみ。 listDepartments は id/status/略称等の
+      //   マスタ詳細 (アーカイブ含む) を編集/復元/略称表示のために併取。
+      const [mems, scoped, master, roles] = await Promise.all([
         window.fetchData('listMembers'),
-        window.fetchData('listDepartments'),
+        window.fetchData('listScopedDepartments'),
+        window.fetchData('listDepartments', { includeArchived: true }),
         window.fetchData('listMemberRoles'),
       ]);
       setMembers(Array.isArray(mems) ? mems : []);
-      setDepartments(Array.isArray(depts) ? depts : []);
+      const idx = (scoped && Array.isArray(scoped.departments)) ? scoped.departments : [];
+      setDeptIndex(idx);
+      setCanSeeAll(!(scoped && scoped.canSeeAll === false));
+      setMasterRows(Array.isArray(master) ? master : []);
       setMemberRoles(Array.isArray(roles) ? roles : []);
       window.getAdminSettings().then(s => setSettings(s || {})).catch(() => {});
     } catch (err) {
@@ -20955,14 +21389,92 @@ function PageDepartments(){
     return memberRoles.filter(r => r.memberId === memberId);
   }
 
-  // フィルタ (主所属 + 副所属どちらでも引っかかる)
+  // (FE-5) canon キー正規化ヘルパ (FE-1 で promote 済みの window.deptCanon に委譲。 raw === は使わない)。
+  const canon = (s) => (window.deptCanon ? window.deptCanon(s || '') : (s || '')).trim();
+
+  // (FE-5) 部署別 在籍メンバー集計を canon キーで構築 (m.dept===d.name の生比較を廃止)。
+  //   主所属 (member.部署) + 副所属 (MemberRoles.部署名) を canon キーへ畳み込み、 在籍中のみカウント。
+  const membersByDeptKey = React.useMemo(() => {
+    const map = {};   // canonKey -> { members:[], primaryCount, subCount }
+    const seen = {};  // canonKey -> Set(memberId) (重複カウント防止)
+    const touch = (key) => { if (!map[key]) { map[key] = { members: [], primaryCount: 0, subCount: 0 }; seen[key] = new Set(); } return map[key]; };
+    members.forEach(m => {
+      if (!m.isActive) return;
+      const pk = canon(m.dept);
+      if (pk) { const b = touch(pk); if (!seen[pk].has(m.id)) { seen[pk].add(m.id); b.members.push(m); b.primaryCount += 1; } }
+    });
+    memberRoles.forEach(r => {
+      const m = members.find(x => x.id === r.memberId);
+      if (!m || !m.isActive) return;
+      const sk = canon(r.deptName);
+      if (!sk) return;
+      const b = touch(sk);
+      if (!seen[sk].has(m.id)) { seen[sk].add(m.id); b.members.push(m); b.subCount += 1; }
+    });
+    return map;
+  }, [members, memberRoles]);
+
+  const memberCountFor = (key) => (membersByDeptKey[key] ? membersByDeptKey[key].members.length : 0);
+
+  // (FE-5) アーカイブ済みマスタ行 (listDepartments の status=archived)。 復元候補として canon キーで保持。
+  const archivedByKey = React.useMemo(() => {
+    const map = {};
+    masterRows.forEach(d => { if (String(d.status) === 'archived') map[canon(d.name)] = d; });
+    return map;
+  }, [masterRows]);
+
+  // (FE-5) deptIndex_ ユニオンをカード表示用へ整形。 count はサーバ scope 済みメンバー数 (canon)。
+  //   includeArchived のときアーカイブ済みマスタ行を末尾に合流させ復元可能にする。
+  const deptCards = React.useMemo(() => {
+    const cards = deptIndex.map(d => {
+      const bucket = membersByDeptKey[d.key];
+      const dm = bucket ? bucket.members : [];
+      const lead = dm.find(m => m.title === "リーダー" || m.title === "代表" || m.title === "副代表");
+      return {
+        key: d.key,
+        deptId: d.deptId || '',
+        label: d.label,
+        color: d.color || 'slate',
+        order: (typeof d.order === 'number') ? d.order : 999,
+        inMaster: !!d.inMaster,
+        archived: false,
+        count: dm.length,
+        members: dm,
+        lead: lead ? lead.name : '未設定',
+        abbr: (masterRows.find(r => r.id && r.id === d.deptId) || {}).abbr || '',
+      };
+    });
+    // (FE-5) アーカイブ合流は全社可視 (canSeeAll) のときのみ。 FE は可視範囲を勝手に広げない
+    //   (復元は departments.update=代表 が必要で、 これは canSeeAll と一致する)。
+    if (includeArchived && canSeeAll) {
+      const shownKeys = new Set(cards.map(c => c.key));
+      Object.keys(archivedByKey).forEach(k => {
+        if (shownKeys.has(k)) return;
+        const d = archivedByKey[k];
+        cards.push({
+          key: k, deptId: d.id || '', label: d.name, color: d.color || 'slate',
+          order: Number(d.order) || 999, inMaster: true, archived: true,
+          count: memberCountFor(k), members: (membersByDeptKey[k] || {}).members || [],
+          lead: '未設定', abbr: d.abbr || '',
+        });
+      });
+    }
+    cards.sort((a, b) => (a.order - b.order) || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+    return cards;
+  }, [deptIndex, membersByDeptKey, masterRows, includeArchived, archivedByKey, canSeeAll]);
+
+  // メンバー一覧テーブル/フィルタ用の部署名リスト (マスタ登録部署のみ)。
+  const deptList = deptCards.filter(d => d.inMaster && !d.archived).map(d => d.label);
+
+  // フィルタ (主所属 + 副所属どちらでも引っかかる。 canon 一致で判定)。
   const filtered = members.filter(m => {
     if (filter === "active" && !m.isActive) return false;
     if (filter === "left" && m.isActive) return false;
     if (deptFilter !== "all") {
-      const subDepts = getSubRolesFor(m.id).map(r => r.deptName);
-      const allDepts = [m.dept].concat(subDepts);
-      if (!allDepts.includes(deptFilter)) return false;
+      const fk = canon(deptFilter);
+      const subKeys = getSubRolesFor(m.id).map(r => canon(r.deptName));
+      const allKeys = [canon(m.dept)].concat(subKeys);
+      if (!allKeys.includes(fk)) return false;
     }
     if (query) {
       const q = query.toLowerCase();
@@ -20973,36 +21485,12 @@ function PageDepartments(){
     return true;
   });
 
-  // 部署別集計 (在籍中のみ、主所属 + 副所属の両方をカウント)
-  const activeDepts = departments.filter(d => d.status !== 'archived');
-  const deptList = activeDepts.map(d => d.name);
-  const deptStats = activeDepts.map(d => {
-    // 主所属
-    const primary = members.filter(m => m.dept === d.name && m.isActive);
-    // 副所属 (主所属で既にカウントされていない人のみ)
-    const primaryIds = primary.map(m => m.id);
-    const subMemberIds = memberRoles
-      .filter(r => r.deptName === d.name && !primaryIds.includes(r.memberId))
-      .map(r => r.memberId);
-    const subMembers = members.filter(m => subMemberIds.includes(m.id) && m.isActive);
-    const dm = primary.concat(subMembers);
-    const lead = dm.find(m => m.title === "リーダー" || m.title === "代表" || m.title === "副代表");
-    return {
-      ...d,
-      count: dm.length,
-      primaryCount: primary.length,
-      subCount: subMembers.length,
-      members: dm,
-      lead: lead ? lead.name : '未設定',
-      accent: d.color || 'indigo',
-    };
-  });
-
   // ========== 部署 CRUD ハンドラ ==========
 
   async function handleDeptCreate(payload) {
     try {
       await window.postData('createDepartment', payload);
+      window.invalidateDeptData();   // (FE-5) Departments + scoped/minutes index を一括失効
       window.toast.success('部署を作成しました');
       setEditingDept(null);
       await fetchAll();
@@ -21014,6 +21502,7 @@ function PageDepartments(){
   async function handleDeptUpdate(deptId, payload) {
     try {
       await window.postData('updateDepartment', {deptId, fields: payload});
+      window.invalidateDeptData();
       window.toast.success('部署を更新しました');
       setEditingDept(null);
       await fetchAll();
@@ -21022,7 +21511,18 @@ function PageDepartments(){
     }
   }
 
-  async function handleDeptDelete(deptId, name, memberCount) {
+  // (FE-5) マスタ未登録部署 (inMaster:false) の昇格。 共有 createDepartment シンクへ funnel。
+  async function handleDeptPromote({ name, abbr, color }) {
+    await window.postData('createDepartment', { name, abbr, color });
+    window.invalidateDeptData();
+    window.toast.success('マスタへ追加しました');
+    setPromoteDept(null);
+    await fetchAll();
+  }
+
+  // (FE-5) アーカイブ。 ガードはバックエンドの count 定義 (canon キーで集計した在籍メンバー数) に揃える。
+  async function handleDeptDelete(deptId, name, key) {
+    const memberCount = memberCountFor(key);
     if (memberCount > 0) {
       window.toast.error(`この部署には ${memberCount} 名の在籍メンバーがいます。先に別の部署に移動してください。`);
       return;
@@ -21035,7 +21535,25 @@ function PageDepartments(){
     })) return;
     try {
       await window.postData('deleteDepartment', {deptId});
+      window.invalidateDeptData();
       window.toast.success('アーカイブしました');
+      await fetchAll();
+    } catch (err) {
+      window.toast.error('失敗: ' + err.message);
+    }
+  }
+
+  // (FE-5) 復元。 アーカイブ部署を status='active' に戻す (updateDepartment 経由)。
+  async function handleDeptRestore(deptId, name) {
+    if (!await window.confirmDialog({
+      title: `「${name}」を復元しますか?`,
+      body: 'アーカイブから戻し、再び部署一覧に表示されます。',
+      confirmLabel: '復元',
+    })) return;
+    try {
+      await window.postData('updateDepartment', {deptId, fields: {status: 'active'}});
+      window.invalidateDeptData();
+      window.toast.success('復元しました');
       await fetchAll();
     } catch (err) {
       window.toast.error('失敗: ' + err.message);
@@ -21093,57 +21611,79 @@ function PageDepartments(){
         <MiniStat label="在籍メンバー" value={loading ? '…' : String(activeCount)} sub="" icon="users" color="indigo"/>
         <MiniStat label="退会済み" value={loading ? '…' : String(leftCount)} sub="" icon="user" color="amber"/>
         <MiniStat label="部署数" value={String(deptList.length)} sub="" icon="building" color="violet"/>
-        <MiniStat label="ロール種別" value="5" sub="" icon="lock" color="coral"/>
+        <MiniStat label="マスタ未登録" value={loading ? '…' : String(deptCards.filter(d => !d.inMaster).length)} sub="" icon="layers" color="coral"/>
       </div>
 
-      {/* 部署別カード (在籍中のみ表示) */}
-      <div className="grid-3">
-        {deptStats.map(d => (
-          <div key={d.id || d.name} className="card">
-            <div style={{padding:16,display:'flex',gap:12,alignItems:'center',borderBottom:'1px solid var(--line)'}}>
-              <div style={{width:44,height:44,borderRadius:10,background:`var(--${d.accent}-50)`,color:`var(--${d.accent})`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--serif)',fontSize:22}}>{d.abbr ? d.abbr.charAt(0) : d.name.charAt(0)}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontFamily:'var(--serif)',fontSize:18,letterSpacing:'-.015em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.name}</div>
-                <div style={{fontSize:11,color:'var(--ink4)'}}>{d.count}名 在籍 {d.abbr && `· ${d.abbr}`}</div>
-              </div>
-              <div style={{display:'flex',gap:4}}>
-                <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>setDeptFilter(d.name)} title={`${d.name}でフィルタ`}>
-                  <Icon n="filter" s={12}/>
-                </button>
-                {window.canDo('departments.update') && (
-                  <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>setEditingDept({mode:'edit', values:d})} title="編集">
-                    <Icon n="edit" s={12}/>
-                  </button>
-                )}
-                {window.canDo('departments.delete') && (
-                  <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>handleDeptDelete(d.id, d.name, d.count)} title="アーカイブ" style={{color:'var(--coral)'}}>
-                    <Icon n="trash" s={12}/>
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="card-body">
-              <div className="row between mb8" style={{fontSize:11}}>
-                <span style={{color:'var(--ink4)'}}>リーダー</span>
-                <span style={{fontWeight:600}}>{d.lead}</span>
-              </div>
-              <div style={{display:'flex',marginTop:8}}>
-                {d.members.slice(0, 5).map((m, i) => (
-                  <div key={m.id} className={`avatar sm ${m.accent}`} style={{marginLeft:i?-6:0,border:'2px solid white'}}>
-                    {m.initial}
-                  </div>
-                ))}
-                {d.count > 5 && (
-                  <div className="avatar sm" style={{marginLeft:-6,border:'2px solid white',background:'var(--bg3)',color:'var(--ink3)'}}>+{d.count-5}</div>
-                )}
-                {d.count === 0 && (
-                  <span style={{fontSize:11,color:'var(--ink5)'}}>(0名)</span>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* 部署別カード — 共有 <DeptCardGrid/>。 deptIndex_ ユニオン (master ∪ orphan member.dept)。 */}
+      <div style={{display:'flex',alignItems:'center',gap:10,marginTop:16,marginBottom:10}}>
+        <div className="card-title" style={{margin:0}}><Icon n="building" s={16}/> 部署 ・チーム</div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--ink4)',cursor:'pointer'}}>
+          <input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)}/>
+          アーカイブを表示
+        </label>
+        <ScopeBanner canSeeAll={canSeeAll} count={deptCards.length}/>
       </div>
+      {!loading && deptCards.length === 0 ? (
+        <div className="empty" style={{padding:'40px 20px'}}>
+          <Icon n="building" s={28}/>
+          <div>表示できる部署がありません</div>
+        </div>
+      ) : (
+        <DeptCardGrid
+          departments={deptCards}
+          onOpen={(label)=>setDeptFilter(label)}
+          renderExtra={(d) => (
+            <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:4}} onClick={(e)=>e.stopPropagation()}>
+              <div style={{fontSize:11,color:'var(--ink4)'}}>
+                {d.count}名 在籍{d.abbr ? ` ・${d.abbr}` : ''}{d.archived ? ' ・アーカイブ済み' : ''}
+                <span style={{marginLeft:8}}>リーダー: <b>{d.lead}</b></span>
+              </div>
+              {d.members && d.members.length > 0 && (
+                <div style={{display:'flex'}}>
+                  {d.members.slice(0,5).map((m,i)=>(
+                    <div key={m.id} className={`avatar sm ${m.accent}`} style={{marginLeft:i?-6:0,border:'2px solid white'}}>{m.initial}</div>
+                  ))}
+                  {d.count > 5 && (
+                    <div className="avatar sm" style={{marginLeft:-6,border:'2px solid white',background:'var(--bg3)',color:'var(--ink3)'}}>+{d.count-5}</div>
+                  )}
+                </div>
+              )}
+              <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                {!d.inMaster && (
+                  <span style={{fontSize:10,fontWeight:600,color:'var(--coral)',border:'1px solid var(--coral)',borderRadius:5,padding:'2px 6px'}}>マスタ未登録</span>
+                )}
+                {/* 代表のみ: マスタ未登録部署を昇格 (#2) */}
+                {!d.inMaster && window.canDo('departments.create') && (
+                  <button className="btn btn-soft btn-sm" onClick={()=>setPromoteDept(d)} title="マスタへ追加">
+                    <Icon n="plus" s={11}/> マスタへ追加
+                  </button>
+                )}
+                {d.archived ? (
+                  window.canDo('departments.update') && (
+                    <button className="btn btn-soft btn-sm" onClick={()=>handleDeptRestore(d.deptId, d.label)} title="復元">
+                      <Icon n="refresh" s={11}/> 復元
+                    </button>
+                  )
+                ) : (
+                  <React.Fragment>
+                    {d.inMaster && window.canDo('departments.update') && (
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>{
+                        const row = masterRows.find(r => r.id && r.id === d.deptId) || {name:d.label,abbr:d.abbr,color:d.color,id:d.deptId};
+                        setEditingDept({mode:'edit', values:row});
+                      }} title="編集"><Icon n="edit" s={11}/></button>
+                    )}
+                    {d.inMaster && window.canDo('departments.delete') && (
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>handleDeptDelete(d.deptId, d.label, d.key)} title="アーカイブ" style={{color:'var(--coral)'}}>
+                        <Icon n="trash" s={11}/>
+                      </button>
+                    )}
+                  </React.Fragment>
+                )}
+              </div>
+            </div>
+          )}
+        />
+      )}
 
       {/* メンバー一覧テーブル */}
       <div className="card mt16">
@@ -21198,7 +21738,7 @@ function PageDepartments(){
                       {subRoles.length > 0 && (
                         <div style={{display:'flex',flexWrap:'wrap',gap:3}}>
                           {subRoles.map(r => {
-                            const dept = departments.find(d => d.id === r.deptId);
+                            const dept = masterRows.find(d => d.id === r.deptId);
                             const accent = dept ? dept.color : 'ink';
                             return (
                               <span key={r.id}
@@ -21260,42 +21800,8 @@ function PageDepartments(){
         )}
       </div>
 
-      {/* 権限マトリクス (準備中) */}
-      <div className="card mt16">
-        <div className="card-head">
-          <div className="card-title"><Icon n="lock" s={16}/> 権限マトリクス</div>
-        </div>
-        <div className="card-body" style={{padding:0,overflowX:'auto'}}>
-          <table className="tbl">
-            <thead><tr>
-              <th>ロール</th>
-              <th className="center">イベント作成</th>
-              <th className="center">メール配信</th>
-              <th className="center">決済管理</th>
-              <th className="center">メンバー編集</th>
-              <th className="center">設定変更</th>
-            </tr></thead>
-            <tbody>
-              {[
-                {r:"オーナー",  c:"coral",  p:[1,1,1,1,1]},
-                {r:"管理者",    c:"indigo", p:[1,1,1,1,0]},
-                {r:"リーダー",  c:"violet", p:[1,1,0,0,0]},
-                {r:"編集者",    c:"teal",   p:[1,0,0,0,0]},
-                {r:"閲覧者",    c:"ink",    p:[0,0,0,0,0]},
-              ].map((r, i) => (
-                <tr key={i} style={{opacity:0.6}}>
-                  <td><span className={`badge badge-${r.c}`}><span className="badge-dot"></span>{r.r}</span></td>
-                  {r.p.map((v, j) => (
-                    <td key={j} className="center">
-                      {v ? <Icon n="check" s={14}/> : <span style={{color:'var(--ink5)'}}>—</span>}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* (FE-5) モック権限マトリクス (常時 opacity:0.6 の固定表) は実権限を反映しないため撤去。
+          実際の権限は requireAction_/requireRole_ (サーバ) と window.canDo/canDoInDept (FE) が司る。 */}
 
       {modalMode && (
         <MemberModal
@@ -21304,147 +21810,62 @@ function PageDepartments(){
           onSave={handleSave}
           onCancel={()=>{setModalMode(null); setEditingM(null);}}
           deptList={deptList}
-          departments={departments}
+          departments={masterRows}
           existingSubRoles={editingM ? memberRoles.filter(r => r.memberId === editingM.id) : []}
         />
       )}
 
+      {/* (FE-6) 作成・編集とも共有 <DeptMasterDialog/> を使い、 exactDup (表記ゆれ) + 類似チップ guard を通す。
+              desc/order/多言語フィールドは initialValues から carry-through し、 createDepartment/updateDepartment に渡す
+              (作成行が second-class にならないよう保持)。 */}
       {editingDept && (
-        <DepartmentModal
-          mode={editingDept.mode}
-          initialValues={editingDept.values}
-          onSave={editingDept.mode === 'create' ? handleDeptCreate : (payload => handleDeptUpdate(editingDept.values.id, payload))}
-          onCancel={()=>setEditingDept(null)}
+        <DeptMasterDialog
+          initial={{
+            label: editingDept.values.name || '',
+            abbr: editingDept.values.abbr || '',
+            color: editingDept.values.color || (editingDept.mode === 'create' ? 'slate' : 'indigo'),
+          }}
+          masterNames={deptCards.filter(d => d.inMaster && !(editingDept.mode === 'edit' && d.deptId === editingDept.values.id)).map(d => d.label)}
+          onClose={()=>setEditingDept(null)}
+          onSubmit={({ name, abbr, color }) => {
+            const v = editingDept.values || {};
+            const payload = {
+              name, abbr, color,
+              // (FE-6) carry-through: 共有ダイアログが編集しない既存フィールドを保持
+              desc: v.desc || '',
+              order: (v.order || v.order === 0) ? Number(v.order) : undefined,
+              name_easy: v.name_easy || '',
+              name_en: v.name_en || '',
+              abbr_easy: v.abbr_easy || '',
+              abbr_en: v.abbr_en || '',
+            };
+            return editingDept.mode === 'create'
+              ? handleDeptCreate(payload)
+              : handleDeptUpdate(editingDept.values.id, payload);
+          }}
+        />
+      )}
+
+      {/* (FE-5) マスタ未登録部署 (inMaster:false) を共有 <DeptMasterDialog/> で昇格。 createDepartment シンクへ funnel。 */}
+      {promoteDept && (
+        <DeptMasterDialog
+          initial={{ label: promoteDept.label, abbr: '', color: 'slate' }}
+          masterNames={deptCards.filter(d => d.inMaster).map(d => d.label)}
+          onClose={()=>setPromoteDept(null)}
+          onSubmit={handleDeptPromote}
         />
       )}
     </div>
   );
 }
 
-/**
- * 部署作成・編集モーダル。
- */
-function DepartmentModal({mode, initialValues, onSave, onCancel}){
-  const init = initialValues || {};
-  const [name, setName] = useState(init.name || "");
-  const [abbr, setAbbr] = useState(init.abbr || "");
-  const [desc, setDesc] = useState(init.desc || "");
-  const [color, setColor] = useState(init.color || "indigo");
-  const [order, setOrder] = useState(init.order || "");
-  // (Phase 7.8) 多言語
-  const [nameEasy, setNameEasy] = useState(init.name_easy || "");
-  const [nameEn, setNameEn] = useState(init.name_en || "");
-  const [abbrEasy, setAbbrEasy] = useState(init.abbr_easy || "");
-  const [abbrEn, setAbbrEn] = useState(init.abbr_en || "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+// (FE-6) DepartmentModal を撤去。 部署の作成・編集は共有 <DeptMasterDialog/> (FE-4) に funnel し、
+//   exactDup ('表記ゆれの可能性') + 最大5件の類似クリック可能チップ guard を通し、 exactDup 時は submit を disable する。
+//   desc/order/多言語フィールドは呼び出し側で carry-through (作成行が second-class にならないよう保持)。
+//   旧 orphan-warning ('部署名を変更してもメンバーの部署は古いまま') は rename cascade (BE-3) により不要となり撤去。
 
-  async function handleSubmit() {
-    if (!name.trim()) { setError("部署名は必須です"); return; }
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave({
-        name: name.trim(),
-        abbr: abbr.trim(),
-        desc: desc.trim(),
-        color,
-        order: order ? Number(order) : undefined,
-        // (Phase 7.8) 多言語
-        name_easy: nameEasy.trim(),
-        name_en: nameEn.trim(),
-        abbr_easy: abbrEasy.trim(),
-        abbr_en: abbrEn.trim(),
-      });
-    } catch (err) {
-      setError(err.message || String(err));
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onCancel}>
-      <div className="card" style={{width:520,maxWidth:'94%'}} onClick={(e)=>e.stopPropagation()}>
-        <div className="card-head">
-          <div className="card-title"><Icon n="layers" s={16}/> {mode === "create" ? "部署を追加" : "部署を編集"}</div>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel}><Icon n="x" s={14}/></button>
-        </div>
-        <div className="card-body stack" style={{gap:14}}>
-          {error && <div style={{padding:10,background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:6,color:'var(--red)',fontSize:12}}>{error}</div>}
-          <div className="field">
-            <label className="field-label">部署名 <span className="field-req">*</span></label>
-            <input className="input input-lg" value={name} onChange={e=>setName(e.target.value)} placeholder="例: IFT班 / 広報班 / 新規プロジェクト班"/>
-            <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
-              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
-              <input className="input" style={{padding:8,fontSize:12}} value={nameEasy} onChange={e=>setNameEasy(e.target.value)} placeholder="やさしい日本語"/>
-              <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
-              <input className="input" style={{padding:8,fontSize:12}} value={nameEn} onChange={e=>setNameEn(e.target.value)} placeholder="English"/>
-            </div>
-          </div>
-          <div className="grid-2" style={{gap:14}}>
-            <div className="field">
-              <label className="field-label">略称</label>
-              <input className="input" value={abbr} onChange={e=>setAbbr(e.target.value)} placeholder="例: IFT, PR"/>
-              <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:6,marginTop:6,fontSize:11}}>
-                <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>easy</div>
-                <input className="input" style={{padding:8,fontSize:12}} value={abbrEasy} onChange={e=>setAbbrEasy(e.target.value)} placeholder="やさしい"/>
-                <div style={{fontSize:10,color:'var(--ink5)',paddingTop:8}}>英語</div>
-                <input className="input" style={{padding:8,fontSize:12}} value={abbrEn} onChange={e=>setAbbrEn(e.target.value)} placeholder="EN"/>
-              </div>
-              <div className="field-hint">アバター表示・チャンネル名等で使用</div>
-            </div>
-            <div className="field">
-              <label className="field-label">表示順</label>
-              <input className="input" type="number" value={order} onChange={e=>setOrder(e.target.value)} placeholder="自動 (最後に追加)"/>
-              <div className="field-hint">小さいほど上に表示</div>
-            </div>
-          </div>
-          <div className="field">
-            <label className="field-label">説明</label>
-            <input className="input" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="この部署の役割・目的"/>
-          </div>
-          <div className="field">
-            <label className="field-label">カラー</label>
-            <div className="select-wrap">
-              <select className="input select" value={color} onChange={e=>setColor(e.target.value)}>
-                <option value="indigo">Indigo (青)</option>
-                <option value="coral">Coral (赤)</option>
-                <option value="teal">Teal (青緑)</option>
-                <option value="violet">Violet (紫)</option>
-                <option value="amber">Amber (黄)</option>
-                <option value="green">Green (緑)</option>
-              </select>
-            </div>
-          </div>
-          {mode === 'edit' && (
-            <div style={{padding:10,background:'var(--bg2)',borderRadius:6,fontSize:11,color:'var(--ink4)',lineHeight:1.6}}>
-              <b>注意:</b> 部署名を変更しても、既に所属しているメンバーの「部署」フィールドは古いままです。手動でメンバーの部署を再設定してください。
-            </div>
-          )}
-        </div>
-        <div style={{padding:14,borderTop:'1px solid var(--line)',display:'flex',justifyContent:'flex-end',gap:8}}>
-          <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>キャンセル</button>
-          <button className="btn btn-indigo" onClick={handleSubmit} disabled={saving}>
-            {saving ? '保存中…' : (mode === "create" ? '作成' : '更新')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// 部署別アクセントカラーマップ (フロント側ヘルパ)
-function getDefaultAccent(dept) {
-  const map = {
-    '運営本部':     'indigo',
-    'IFT班':        'coral',
-    'hub班':        'violet',
-    'community班':  'teal',
-    'order made班': 'amber',
-    '広報班':       'green',
-  };
-  return map[dept] || 'indigo';
-}
+// (FE-5) dead getDefaultAccent を撤去。 部署カラーはバックエンド (d.color) を唯一の源とする
+//   (未指定は slate に統一: BE-3 write default / index/usage seed と一致)。
 
 // -------------------- PageMobile --------------------
 
@@ -35481,16 +35902,17 @@ function PageMinutes() {
   const isManager = !!(window.hasRole && window.hasRole('マネージャー'));
   // タブ: dept(既定) / oneonone / recruit。 部署詳細表示中(dept指定)は dept タブ扱い。
   const tab = dept ? 'dept'
-    : (q.tab === 'oneonone' || q.tab === 'upload' || (q.tab === 'recruit' && isManager)) ? q.tab : 'dept';
+    : (q.tab === 'oneonone' || q.tab === 'upload' || q.tab === 'attendance' || (q.tab === 'recruit' && isManager)) ? q.tab : 'dept';
 
   const goIndex = () => { location.hash = '#minutes'; };
   const goDept = (label) => { location.hash = '#minutes?dept=' + encodeURIComponent(label); };
   const goTab = (t) => { location.hash = (t === 'dept') ? '#minutes' : ('#minutes?tab=' + t); };
 
-  const TABS = [{ key: 'dept', label: '部署議事録' }, { key: 'oneonone', label: '1on1・面談' }, { key: 'upload', label: '録音を投稿' }];
+  const TABS = [{ key: 'dept', label: '部署議事録' }, { key: 'oneonone', label: '1on1・面談' }, { key: 'upload', label: '録音を投稿' }, { key: 'attendance', label: '出欠・連絡' }];
   if (isManager) TABS.push({ key: 'recruit', label: '採用面接' });
 
   const subtitle = tab === 'oneonone' ? '閲覧できる範囲で 1on1・面談の記録と議事録リンクを表示します'
+    : tab === 'attendance' ? '会議ごとの参加者・出欠・連絡日を管理します（投稿後も編集できます）'
     : tab === 'recruit' ? '面接が行われた応募者を一覧し、 募集管理の詳細へ移動できます'
     : (dept ? '部署別の議事録を新しい順に表示します' : '部署を選ぶと、 その部署の議事録が表示されます');
 
@@ -35512,11 +35934,84 @@ function PageMinutes() {
       {tab === 'dept' && (dept ? <MinutesDeptView dept={dept} onBack={goIndex} /> : <MinutesIndexView onOpen={goDept} />)}
       {tab === 'oneonone' && <MinutesOneOnOneView />}
       {tab === 'upload' && <MinutesUploadView />}
+      {tab === 'attendance' && <MinutesAttendanceView />}
       {tab === 'recruit' && isManager && <MinutesRecruitView />}
     </div>
   );
 }
 
+
+// (出欠) 選択中の部署に主務 or 兼任で所属するメンバー候補を返す (canon キー一致)。
+//   members は getMembersBundle().members (役割スコープ済み)。
+window.deptMemberCandidates = function deptMemberCandidates(members, dept) {
+  const dk = window.deptCanon ? window.deptCanon(dept || '') : (dept || '');
+  if (!dk) return [];
+  return (members || []).filter(m => {
+    const affs = (m.affiliations && m.affiliations.length)
+      ? m.affiliations
+      : [m.primary].concat(m.concurrent || []).filter(Boolean);
+    return affs.some(a => a && (window.deptCanon ? window.deptCanon(a.deptName || '') : (a.deptName || '')) === dk);
+  });
+};
+
+// (出欠) 参加者ロスター編集UI。 部署メンバーをチェックで追加 + 組織外を手入力で追加。
+//   各参加者に 出欠(出席/欠席) と 連絡日。 value=[{memberId,name,external,attendance,contactedAt}] / onChange(next)。
+window.AttendeeRosterEditor = function AttendeeRosterEditor({ dept, members, value, onChange }) {
+  const roster = value || [];
+  const candidates = window.deptMemberCandidates(members, dept);
+  const inRoster = {};
+  roster.forEach(r => { if (r.memberId) inRoster[r.memberId] = true; });
+  const update = (next) => { if (onChange) onChange(next); };
+  const toggleMember = (m) => {
+    if (inRoster[m.id]) update(roster.filter(r => r.memberId !== m.id));
+    else update(roster.concat([{ memberId: m.id, name: m.name || '', external: false, attendance: 'present', contactedAt: '' }]));
+  };
+  const addExternal = () => update(roster.concat([{ memberId: '', name: '', external: true, attendance: 'present', contactedAt: '' }]));
+  const setAt = (i, patch) => update(roster.map((r, idx) => idx === i ? Object.assign({}, r, patch) : r));
+  const removeAt = (i) => update(roster.filter((_, idx) => idx !== i));
+  const chip = (on) => ({ padding: '4px 10px', borderRadius: 14, border: '1px solid var(--line, #e3e8f2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? 'var(--indigo)' : '#fff', color: on ? '#fff' : 'var(--ink3, #6b7689)' });
+  const att = (on) => ({ padding: '3px 8px', borderRadius: 6, border: '1px solid var(--line, #e3e8f2)', cursor: 'pointer', fontSize: 11, fontWeight: 600 });
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink3, #6b7689)', marginBottom: 6 }}>部署メンバー（主務＋兼任）</div>
+      {!dept && <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>先に部署を選択してください</div>}
+      {dept && candidates.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>この部署の選択可能なメンバーがいません（組織外として手入力できます）</div>}
+      {dept && candidates.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {candidates.map(m => (
+            <span key={m.id} role="button" tabIndex={0} onClick={() => toggleMember(m)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMember(m); } }}
+                  style={chip(!!inRoster[m.id])}>{m.name || m.memberCode || m.id}</span>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink3, #6b7689)' }}>参加者（{roster.length}名）</div>
+        <button type="button" className="jb-btn" onClick={addExternal} style={{ fontSize: 12, padding: '4px 10px' }}>＋ 組織外を追加</button>
+      </div>
+      {roster.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>参加者が未選択です</div>}
+      {roster.map((r, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '6px 0', borderTop: i ? '1px solid var(--line, #eef1f6)' : 'none' }}>
+          {r.external
+            ? <input placeholder="組織外の氏名／会社名" value={r.name} onChange={e => setAt(i, { name: e.target.value })}
+                     style={{ flex: '1 1 160px', minWidth: 120, padding: 6, borderRadius: 6, border: '1px solid var(--line, #e3e8f2)', fontSize: 13 }} />
+            : <span style={{ flex: '1 1 140px', fontSize: 13, fontWeight: 600 }}>{r.name}</span>}
+          {r.external && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--coral)', border: '1px solid var(--coral)', borderRadius: 5, padding: '1px 5px' }}>組織外</span>}
+          <span role="button" tabIndex={0} onClick={() => setAt(i, { attendance: 'present' })}
+                style={Object.assign(att(), { background: r.attendance === 'present' ? 'var(--teal, #0ea5a4)' : '#fff', color: r.attendance === 'present' ? '#fff' : 'var(--ink3, #6b7689)' })}>出席</span>
+          <span role="button" tabIndex={0} onClick={() => setAt(i, { attendance: 'absent' })}
+                style={Object.assign(att(), { background: r.attendance === 'absent' ? 'var(--coral, #f43f5e)' : '#fff', color: r.attendance === 'absent' ? '#fff' : 'var(--ink3, #6b7689)' })}>欠席</span>
+          <label style={{ fontSize: 11, color: 'var(--ink4, #7a869c)' }}>連絡日
+            <input type="date" value={r.contactedAt || ''} onChange={e => setAt(i, { contactedAt: e.target.value })}
+                   style={{ marginLeft: 4, padding: 4, borderRadius: 6, border: '1px solid var(--line, #e3e8f2)', fontSize: 12 }} />
+          </label>
+          <button type="button" onClick={() => removeAt(i)} title="削除"
+                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--ink4, #7a869c)', fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 // (録音アップロード hub一本化) 運営メンバーが録音を投稿するビュー。
 //   その場録音(MediaRecorder, opus 16kbps)またはファイル選択 → Base64 →
@@ -35528,7 +36023,8 @@ function MinutesUploadView() {
   const [name, setName] = useState('');
   const [mdate, setMdate] = useState('');
   const [mtype, setMtype] = useState('');
-  const [attendees, setAttendees] = useState('');
+  const [members, setMembers] = useState([]);   // (出欠) 役割スコープ済みメンバー
+  const [roster, setRoster] = useState([]);     // (出欠) 参加者ロスター
   const [project, setProject] = useState('');
   const [recBlob, setRecBlob] = useState(null);
   const [recMime, setRecMime] = useState('');
@@ -35545,6 +36041,10 @@ function MinutesUploadView() {
     window.fetchData('listMinutesDepartments').then(res => {
       const ds = (res && res.departments) || [];
       setDepts(ds.map(d => (d && (d.label || d.key)) || '').filter(Boolean));
+    }).catch(() => {});
+    // (出欠) 部署メンバー候補のため、役割スコープ済みメンバーを取得
+    window.fetchData('getMembersBundle').then(b => {
+      setMembers(Array.isArray(b && b.members) ? b.members : []);
     }).catch(() => {});
   }, []);
 
@@ -35601,12 +36101,12 @@ function MinutesUploadView() {
       const res = await window.postData('uploadMinutesAudio', {
         dataBase64: b64, mimeType: blob.type || 'application/octet-stream', filename: filename,
         dept: dept, meeting_name: name || '(未入力)', meeting_date: mdate || '',
-        meeting_type: mtype || '', project: project || '', attendees: attendees || ''
+        meeting_type: mtype || '', project: project || '', roster: roster
       });
       const ok = res && (res.ok || res.intake_id || (res.data && (res.data.ok || res.data.intake_id)));
       if (ok) {
-        setMsg('✅ 投稿しました。議事録は数分後に自動生成され、この議事録ページに掲載されます。');
-        setRecBlob(null); setRecState('idle'); setRecInfo('');
+        setMsg('✅ 投稿しました。議事録は数分後に自動生成され、この議事録ページに掲載されます。出欠・連絡は「出欠・連絡」タブで後から編集できます。');
+        setRecBlob(null); setRecState('idle'); setRecInfo(''); setRoster([]);
         if (fileRef.current) fileRef.current.value = '';
       } else { setMsg('⚠️ 投稿に失敗しました: ' + JSON.stringify(res)); }
     } catch (e) { setMsg('⚠️ エラー: ' + (e && e.message || e)); }
@@ -35632,7 +36132,9 @@ function MinutesUploadView() {
           <option value="1on1">1on1</option>
           <option value="商談">商談</option>
         </select>
-        <input placeholder="出席者(カンマ区切り・任意)" value={attendees} onChange={e => setAttendees(e.target.value)} style={fld} />
+        <div style={{ border: '1px solid var(--line, #e3e8f2)', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+          <AttendeeRosterEditor dept={dept} members={members} value={roster} onChange={setRoster} />
+        </div>
         <input placeholder="案件名(任意・案件管理部署のみ)" value={project} onChange={e => setProject(e.target.value)} style={fld} />
         <div style={{ margin: '12px 0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {recState !== 'recording'
@@ -35653,14 +36155,18 @@ function MinutesUploadView() {
   );
 }
 
+// (FE-1) 共有 FE 部署 canon + 類似度モジュール。
+//   部署名を扱う全ページの唯一の正規化/類似度オーソリティ (window.deptCanon/deptLev/deptSimilar)。
+//   議事録モジュールの挙動は byte-identical: 旧 minutes*_ は薄いラッパとして委譲する。
+//   (FE 側のフルなエイリアス整合は BE-3 のサーバ backstop に依存)
 // (#2 表記ゆれ防止) 部署名の正規化 (サーバの canon と同等: NFKC + 空白畳み込み + trim)。
-function minutesCanonClient_(s) {
+window.deptCanon = function deptCanon(s) {
   let t = String(s == null ? '' : s);
   try { t = t.normalize('NFKC'); } catch (e) {}
   return t.replace(/[\s\u3000]+/g, ' ').trim();
-}
+};
 // レーベンシュタイン距離 (類似名サジェスト用)。
-function minutesLev_(a, b) {
+window.deptLev = function deptLev(a, b) {
   a = String(a || ''); b = String(b || '');
   const m = a.length, n = b.length;
   if (!m) return n; if (!n) return m;
@@ -35674,28 +36180,32 @@ function minutesLev_(a, b) {
     prev = cur;
   }
   return prev[n];
-}
+};
 // 既存マスタ部署名から、 入力名に対する「正規化一致(=実質重複)」と「類似候補」を返す。
-function minutesSimilarDepts_(inputName, masterNames) {
-  const inCanon = minutesCanonClient_(inputName);
+window.deptSimilar = function deptSimilar(inputName, masterNames) {
+  const inCanon = window.deptCanon(inputName);
   if (!inCanon) return { exactDup: null, similar: [] };
   const inLc = inCanon.toLowerCase();
   let exactDup = null;
   const similar = [];
   for (let i = 0; i < masterNames.length; i++) {
     const name = masterNames[i];
-    const c = minutesCanonClient_(name);
+    const c = window.deptCanon(name);
     if (!c) continue;
     if (c === inCanon) { exactDup = name; continue; }            // 正規化一致 = 実質重複
     const lc = c.toLowerCase();
     const contains = lc.indexOf(inLc) >= 0 || inLc.indexOf(lc) >= 0;
-    const dist = minutesLev_(inLc, lc);
+    const dist = window.deptLev(inLc, lc);
     const thresh = Math.max(1, Math.floor(Math.min(inLc.length, lc.length) / 4)); // 長さに応じた許容
     if (contains || dist <= thresh) similar.push(name);
   }
-  similar.sort((x, y) => minutesLev_(inLc, minutesCanonClient_(x).toLowerCase()) - minutesLev_(inLc, minutesCanonClient_(y).toLowerCase()));
+  similar.sort((x, y) => window.deptLev(inLc, window.deptCanon(x).toLowerCase()) - window.deptLev(inLc, window.deptCanon(y).toLowerCase()));
   return { exactDup: exactDup, similar: similar.slice(0, 5) };
-}
+};
+// 旧 minutes*_ は薄いラッパ: 議事録 MinutesIndexView は引き続きこれらを呼ぶ (additive, no behavior change)。
+function minutesCanonClient_(s) { return window.deptCanon(s); }
+function minutesLev_(a, b) { return window.deptLev(a, b); }
+function minutesSimilarDepts_(inputName, masterNames) { return window.deptSimilar(inputName, masterNames); }
 
 // 部署一覧 (インデックス)。 listMinutesDepartments を取得し、 部署カードを並べる。 新部署も自動的に出現。
 //   マスタ未登録の部署には、 代表のみ「マスタへ追加」導線を表示 (#2)。 ダイアログで部署名/略称/カラーを指定。
@@ -35704,13 +36214,8 @@ function MinutesIndexView({ onOpen }) {
   const [canSeeAll, setCanSeeAll] = useState(true);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  // マスタ追加ダイアログ
+  // マスタ追加ダイアログ (フォーム状態は共有 DeptMasterDialog が自前で管理)
   const [dialogDept, setDialogDept] = useState(null);
-  const [formName, setFormName] = useState('');
-  const [formAbbr, setFormAbbr] = useState('');
-  const [formColor, setFormColor] = useState('slate');
-  const [submitting, setSubmitting] = useState(false);
-  const [formErr, setFormErr] = useState('');
 
   const load = React.useCallback(() => {
     setLoading(true); setErr('');
@@ -35725,126 +36230,178 @@ function MinutesIndexView({ onOpen }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const isDaihyo = !!(window.currentUser && window.currentUser.highestRole === '代表');
-  const COLORS = ['indigo', 'coral', 'teal', 'violet', 'amber', 'pink', 'green', 'slate'];
-  const accent = (c) => 'var(--' + (c || 'indigo') + ', #64748b)';
+  // 部署マスタ追加 (minutesPromoteDept) は departments.create 相当。canDo に統一 (旧 isDaihyo)。
+  const isDaihyo = !!(window.canDo && window.canDo('departments.create'));
   const openCard = (label) => onOpen(label);
 
-  // (#2) 既存マスタ部署名 (代表は全マスタが index に含まれる) と、 入力名に対する重複/類似
+  // (#2) 既存マスタ部署名 (代表は全マスタが index に含まれる)。 共有ダイアログへ渡し、 重複/類似を判定。
   const masterNames = React.useMemo(() => departments.filter(d => d.inMaster).map(d => d.label), [departments]);
-  const sim = React.useMemo(() => minutesSimilarDepts_(formName, masterNames), [formName, masterNames]);
 
-  const openDialog = (d) => { setFormErr(''); setDialogDept(d); setFormName(d.label); setFormAbbr(''); setFormColor('slate'); };
-  const closeDialog = () => { if (!submitting) setDialogDept(null); };
-  const submitDialog = () => {
-    const name = (formName || '').trim();
-    if (!name) { setFormErr('部署名を入力してください'); return; }
-    if (sim.exactDup) { setFormErr('「' + sim.exactDup + '」が既に存在します（表記ゆれの可能性）'); return; }
-    setSubmitting(true); setFormErr('');
-    Promise.resolve()
-      .then(() => window.postData('minutesPromoteDept', { name: name, abbr: (formAbbr || '').trim(), color: formColor }))
-      .then(() => { try { window.invalidateCache && window.invalidateCache('listMinutesDepartments'); } catch (e) {} setDialogDept(null); load(); })
-      .catch(e => setFormErr(String(e && (e.message || e))))
-      .finally(() => setSubmitting(false));
-  };
+  const openDialog = (d) => { setDialogDept(d); };
+  const closeDialog = () => { setDialogDept(null); };
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <button className="jb-btn" onClick={load} disabled={loading}>{loading ? '更新中' : '再読込'}</button>
         {!loading && !err && <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>{departments.length} 部署</span>}
-        {!canSeeAll && <span style={{ fontSize: 11, color: 'var(--ink4, #7a869c)', marginLeft: 'auto' }}>自部署のみ表示しています</span>}
+        <ScopeBanner canSeeAll={canSeeAll} count={departments.length} />
       </div>
       {err && <div className="card" style={{ borderColor: 'var(--coral)', color: 'var(--coral)' }}>読み込みに失敗しました: {err}</div>}
       {loading && <div className="empty">読込中…</div>}
       {!loading && !err && departments.length === 0 && <div className="empty">表示できる部署がありません</div>}
       {!loading && !err && departments.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-          {departments.map(d => (
-            <div key={d.key} role="button" tabIndex={0}
-                 onClick={() => openCard(d.label)}
-                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCard(d.label); } }}
-                 className="card"
-                 style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--line, #e3e8f2)', borderLeft: '4px solid ' + accent(d.color), padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6, background: '#fff' }}>
-              <div style={{ fontWeight: 600, fontSize: 15, wordBreak: 'break-word' }}>{d.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>
-                {d.count > 0 ? (d.count + ' 件') : '議事録なし'}
-                {d.lastDate ? ' ・ 最終 ' + d.lastDate : ''}
-              </div>
-              {!d.inMaster && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }} onClick={(e) => e.stopPropagation()}>
-                  <span style={{ fontSize: 10, color: 'var(--ink5, #9aa4b8)' }}>マスタ未登録</span>
-                  {isDaihyo && (
-                    <button onClick={(e) => { e.stopPropagation(); openDialog(d); }}
-                            style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--indigo)', color: 'var(--indigo)', background: 'transparent', cursor: 'pointer' }}>
-                      マスタへ追加
-                    </button>
-                  )}
-                </div>
+        <DeptCardGrid departments={departments} onOpen={openCard}
+          renderExtra={(d) => !d.inMaster ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }} onClick={(e) => e.stopPropagation()}>
+              <span style={{ fontSize: 10, color: 'var(--ink5, #9aa4b8)' }}>マスタ未登録</span>
+              {isDaihyo && (
+                <button onClick={(e) => { e.stopPropagation(); openDialog(d); }}
+                        style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--indigo)', color: 'var(--indigo)', background: 'transparent', cursor: 'pointer' }}>
+                  マスタへ追加
+                </button>
               )}
             </div>
-          ))}
-        </div>
+          ) : null} />
       )}
 
       {dialogDept && (
-        <div onClick={closeDialog}
-             style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()}
-               style={{ background: '#fff', borderRadius: 14, padding: '22px 22px 18px', width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>部署をマスタへ追加</div>
-
-            <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>部署名</label>
-            <input value={formName} onChange={e => setFormName(e.target.value)} disabled={submitting}
-                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14, margin: '4px 0 12px' }} />
-
-            {sim.exactDup && (
-              <div style={{ fontSize: 12, color: 'var(--coral)', margin: '-6px 0 12px' }}>
-                「{sim.exactDup}」が既に存在します。 表記を寄せたい場合は別名表 (MINUTES_DEPT_ALIASES) の利用を検討してください。
-              </div>
-            )}
-            {!sim.exactDup && sim.similar.length > 0 && (
-              <div style={{ margin: '-6px 0 12px' }}>
-                <div style={{ fontSize: 11, color: 'var(--amber, #b45309)', marginBottom: 4 }}>似た部署があります（重複にご注意）:</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {sim.similar.map(n => (
-                    <button key={n} type="button" onClick={() => setFormName(n)} disabled={submitting}
-                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, border: '1px solid var(--line, #e3e8f2)', background: '#fff', color: 'var(--ink3, #6b7689)', cursor: 'pointer' }}>{n}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>略称 (任意)</label>
-            <input value={formAbbr} onChange={e => setFormAbbr(e.target.value)} disabled={submitting} placeholder="例: HQ"
-                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14, margin: '4px 0 12px' }} />
-
-            <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>カラー</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 16px' }}>
-              {COLORS.map(c => (
-                <button key={c} onClick={() => setFormColor(c)} disabled={submitting} title={c}
-                        style={{ width: 28, height: 28, borderRadius: '50%', background: accent(c), cursor: 'pointer', padding: 0,
-                                 border: formColor === c ? '3px solid var(--ink, #1a2233)' : '2px solid #fff',
-                                 outline: formColor === c ? '1px solid var(--line, #e3e8f2)' : 'none' }} />
-              ))}
-            </div>
-
-            {formErr && <div style={{ color: 'var(--coral)', fontSize: 12, marginBottom: 10 }}>{formErr}</div>}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={closeDialog} disabled={submitting}
-                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', background: '#fff', color: 'var(--ink3, #6b7689)', cursor: 'pointer', fontSize: 13 }}>キャンセル</button>
-              <button onClick={submitDialog} disabled={submitting || !!sim.exactDup}
-                      style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--indigo)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                {submitting ? '追加中…' : 'マスタへ追加'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeptMasterDialog
+          initial={{ label: dialogDept.label, abbr: '', color: 'slate' }}
+          masterNames={masterNames}
+          onClose={closeDialog}
+          onSubmit={({ name, abbr, color }) => Promise.resolve()
+            .then(() => window.postData('minutesPromoteDept', { name: name, abbr: abbr, color: color }))
+            .then(() => { try { window.invalidateCache && window.invalidateCache('listMinutesDepartments'); } catch (e) {} setDialogDept(null); load(); })} />
       )}
     </div>
   );
 }
+
+// ===========================================================================
+// FE-4: 共有プリミティブ — 部署カードグリッド / スコープバナー / マスタ追加ダイアログ。
+//   MinutesIndexView から抽出 (additive)。 部署管理/メンバー管理/マイページが再利用する。
+//   議事録 (gold-standard) の挙動は不変 — これらはオプションで消費される純粋追加コンポーネント。
+// ===========================================================================
+
+// 部署カードグリッド。 departments=[{key,label,color,count,lastDate,inMaster,...}]。
+//   onOpen(label) でカードを開く。 renderExtra(d) で各カード末尾に追加 UI (例: マスタへ追加導線) を差し込む。
+window.DeptCardGrid = function DeptCardGrid({ departments, onOpen, renderExtra }) {
+  const accent = (c) => 'var(--' + (c || 'indigo') + ', #64748b)';
+  const list = Array.isArray(departments) ? departments : [];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+      {list.map(d => (
+        <div key={d.key} role="button" tabIndex={0}
+             onClick={() => onOpen && onOpen(d.label)}
+             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(d.label); } }}
+             className="card"
+             style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--line, #e3e8f2)', borderLeft: '4px solid ' + accent(d.color), padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6, background: '#fff' }}>
+          <div style={{ fontWeight: 600, fontSize: 15, wordBreak: 'break-word' }}>{d.label}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>
+            {d.count > 0 ? (d.count + ' 件') : '議事録なし'}
+            {d.lastDate ? ' ・ 最終 ' + d.lastDate : ''}
+          </div>
+          {renderExtra ? renderExtra(d) : null}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// スコープバナー。 canSeeAll=false のとき「自部署のみ表示しています」を表示。 count は任意 (件数表示)。
+window.ScopeBanner = function ScopeBanner({ canSeeAll, count }) {
+  if (canSeeAll !== false) return null;
+  return (
+    <span style={{ fontSize: 11, color: 'var(--ink4, #7a869c)', marginLeft: 'auto' }}>
+      自部署のみ表示しています{(typeof count === 'number') ? ` (${count}件)` : ''}
+    </span>
+  );
+};
+
+// マスタ追加/昇格ダイアログ。 initial={label,abbr,color} で初期値、 masterNames で既存マスタ名 (重複/類似判定)。
+//   onSubmit({name,abbr,color}) -> Promise を呼び、 注入されたアクション (minutesPromoteDept / createDepartment) に委譲。
+//   exactDup のとき送信ボタンを無効化。 onClose() でキャンセル。
+window.DeptMasterDialog = function DeptMasterDialog({ initial, masterNames, onSubmit, onClose }) {
+  const init = initial || {};
+  const [formName, setFormName] = useState(init.label || init.name || '');
+  const [formAbbr, setFormAbbr] = useState(init.abbr || '');
+  const [formColor, setFormColor] = useState(init.color || 'slate');
+  const [submitting, setSubmitting] = useState(false);
+  const [formErr, setFormErr] = useState('');
+
+  const COLORS = ['indigo', 'coral', 'teal', 'violet', 'amber', 'pink', 'green', 'slate'];
+  const accent = (c) => 'var(--' + (c || 'indigo') + ', #64748b)';
+  const sim = React.useMemo(() => window.deptSimilar(formName, masterNames || []), [formName, masterNames]);
+
+  const close = () => { if (!submitting) { onClose && onClose(); } };
+  const submit = () => {
+    const name = (formName || '').trim();
+    if (!name) { setFormErr('部署名を入力してください'); return; }
+    if (sim.exactDup) { setFormErr('「' + sim.exactDup + '」が既に存在します（表記ゆれの可能性）'); return; }
+    setSubmitting(true); setFormErr('');
+    Promise.resolve()
+      .then(() => onSubmit && onSubmit({ name: name, abbr: (formAbbr || '').trim(), color: formColor }))
+      .catch(e => { setFormErr(String(e && (e.message || e))); throw e; })
+      .then(() => { setSubmitting(false); }, () => { setSubmitting(false); });
+  };
+
+  return (
+    <div onClick={close}
+         style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()}
+           style={{ background: '#fff', borderRadius: 14, padding: '22px 22px 18px', width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>部署をマスタへ追加</div>
+
+        <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>部署名</label>
+        <input value={formName} onChange={e => setFormName(e.target.value)} disabled={submitting}
+               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14, margin: '4px 0 12px' }} />
+
+        {sim.exactDup && (
+          <div style={{ fontSize: 12, color: 'var(--coral)', margin: '-6px 0 12px' }}>
+            「{sim.exactDup}」が既に存在します。 表記を寄せたい場合は別名表 (MINUTES_DEPT_ALIASES) の利用を検討してください。
+          </div>
+        )}
+        {!sim.exactDup && sim.similar.length > 0 && (
+          <div style={{ margin: '-6px 0 12px' }}>
+            <div style={{ fontSize: 11, color: 'var(--amber, #b45309)', marginBottom: 4 }}>似た部署があります（重複にご注意）:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {sim.similar.map(n => (
+                <button key={n} type="button" onClick={() => setFormName(n)} disabled={submitting}
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, border: '1px solid var(--line, #e3e8f2)', background: '#fff', color: 'var(--ink3, #6b7689)', cursor: 'pointer' }}>{n}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>略称 (任意)</label>
+        <input value={formAbbr} onChange={e => setFormAbbr(e.target.value)} disabled={submitting} placeholder="例: HQ"
+               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', fontSize: 14, margin: '4px 0 12px' }} />
+
+        <label style={{ fontSize: 12, color: 'var(--ink3, #6b7689)' }}>カラー</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 16px' }}>
+          {COLORS.map(c => (
+            <button key={c} onClick={() => setFormColor(c)} disabled={submitting} title={c}
+                    style={{ width: 28, height: 28, borderRadius: '50%', background: accent(c), cursor: 'pointer', padding: 0,
+                             border: formColor === c ? '3px solid var(--ink, #1a2233)' : '2px solid #fff',
+                             outline: formColor === c ? '1px solid var(--line, #e3e8f2)' : 'none' }} />
+          ))}
+        </div>
+
+        {formErr && <div style={{ color: 'var(--coral)', fontSize: 12, marginBottom: 10 }}>{formErr}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={close} disabled={submitting}
+                  style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--line, #e3e8f2)', background: '#fff', color: 'var(--ink3, #6b7689)', cursor: 'pointer', fontSize: 13 }}>キャンセル</button>
+          <button onClick={submit} disabled={submitting || !!sim.exactDup}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--indigo)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {submitting ? '追加中…' : 'マスタへ追加'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // 部署別ページ。 listMinutes を dept 指定で取得し、 日付降順で一覧。 全文検索 + 期間フィルタ (#拡張)。
 function MinutesDeptView({ dept, onBack }) {
@@ -35930,6 +36487,95 @@ function MinutesDeptView({ dept, onBack }) {
     </div>
   );
 }
+// (出欠・連絡) 会議ごとの参加者ロスター管理。 listMinutesMeetings で会議一覧 + ロスターを取得し、
+//   AttendeeRosterEditor で出欠/連絡日を編集 → updateMinutesRoster で保存。 役割スコープはサーバが担保。
+function MinutesAttendanceView() {
+  const [meetings, setMeetings] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [canSeeAll, setCanSeeAll] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [openId, setOpenId] = useState('');
+  const [draft, setDraft] = useState([]);     // 編集中ロスター
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const load = React.useCallback(() => {
+    setLoading(true); setErr('');
+    Promise.all([
+      window.fetchData('listMinutesMeetings'),
+      window.fetchData('getMembersBundle').catch(() => ({ members: [] })),
+    ]).then(([res, b]) => {
+      res = res || {};
+      setMeetings(Array.isArray(res.meetings) ? res.meetings : []);
+      setCanSeeAll(res.canSeeAll !== false);
+      setMembers(Array.isArray(b && b.members) ? b.members : []);
+    }).catch(e => setErr(String(e && (e.message || e)))).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const openEdit = (m) => {
+    setMsg(''); setOpenId(m.intakeId);
+    setDraft((m.roster || []).map(r => ({ memberId: r.memberId, name: r.name, external: r.external, attendance: r.attendance, contactedAt: r.contactedAt })));
+  };
+  const closeEdit = () => { if (!saving) { setOpenId(''); setDraft([]); } };
+  const save = (m) => {
+    setSaving(true); setMsg('');
+    window.postData('updateMinutesRoster', { intakeId: m.intakeId, roster: draft })
+      .then(res => {
+        const ok = res && (res.ok || (res.data && res.data.ok));
+        if (ok) { setMsg('✅ 保存しました'); setOpenId(''); setDraft([]); load(); }
+        else setMsg('⚠️ 保存に失敗しました: ' + JSON.stringify(res));
+      })
+      .catch(e => setMsg('⚠️ エラー: ' + (e && e.message || e)))
+      .finally(() => setSaving(false));
+  };
+
+  const summarize = (roster) => {
+    const present = (roster || []).filter(r => r.attendance === 'present').length;
+    const absent = (roster || []).filter(r => r.attendance === 'absent').length;
+    return (roster || []).length + '名（出席' + present + ' / 欠席' + absent + '）';
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <button className="jb-btn" onClick={load} disabled={loading}>{loading ? '更新中' : '再読込'}</button>
+        {!loading && !err && <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>{meetings.length} 会議</span>}
+        <ScopeBanner canSeeAll={canSeeAll} />
+      </div>
+      {err && <div className="card" style={{ borderColor: 'var(--coral)', color: 'var(--coral)' }}>読み込みに失敗しました: {err}</div>}
+      {loading && <div className="empty">読込中…</div>}
+      {!loading && !err && meetings.length === 0 && <div className="empty">録音投稿された会議がまだありません。「録音を投稿」から会議を作成すると、ここで出欠・連絡を管理できます。</div>}
+      {msg && <div style={{ fontSize: 13, marginBottom: 10 }}>{msg}</div>}
+      {!loading && !err && meetings.map(m => (
+        <div key={m.intakeId} className="card" style={{ padding: '12px 14px', marginBottom: 10, border: '1px solid var(--line, #e3e8f2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{m.meetingName || '(会議名なし)'}</div>
+            <span style={{ fontSize: 11, color: 'var(--ink4, #7a869c)' }}>{m.dept}{m.meetingDate ? ' ・ ' + m.meetingDate : ''}{m.meetingType ? ' ・ ' + m.meetingType : ''}</span>
+            <span style={{ fontSize: 11, color: 'var(--ink4, #7a869c)', marginLeft: 'auto' }}>{summarize(m.roster)}</span>
+            {openId === m.intakeId
+              ? <button className="jb-btn" onClick={closeEdit} disabled={saving} style={{ fontSize: 12, padding: '4px 10px' }}>閉じる</button>
+              : <button className="jb-btn" onClick={() => openEdit(m)} style={{ fontSize: 12, padding: '4px 10px' }}>出欠・連絡を編集</button>}
+          </div>
+          {openId === m.intakeId && (
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--line, #eef1f6)', paddingTop: 12 }}>
+              <AttendeeRosterEditor dept={m.dept} members={members} value={draft} onChange={setDraft} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button onClick={() => save(m)} disabled={saving}
+                        style={{ background: 'var(--indigo)', color: '#fff', border: 0, padding: '8px 16px', borderRadius: 8, fontWeight: 600, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                  {saving ? '保存中…' : '保存する'}
+                </button>
+                <button className="jb-btn" onClick={closeEdit} disabled={saving}>キャンセル</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // 1on1・面談タブ。 メンバーを選び、 既存の listOneOnOnes を呼ぶ (公開範囲: 本人/担当マネージャー/代表 はサーバが担保)。
 //   D導線: 「メンバー管理で開く」で既存の編集画面へ遷移。
 function MinutesOneOnOneView() {
@@ -38113,6 +38759,8 @@ function AuthGate(){
     window.setStoredMemberId('');
     window.setStoredToken('');
     window.currentUser = null;
+    // identity を跨いだスコープデータ漏れを防ぐためキャッシュを全クリア
+    try { if (window._dataCache) window._dataCache.clear(); if (window._inflightRequests) window._inflightRequests.clear(); } catch (e) {}
     setUser(null);
     setState('signin');
   }
