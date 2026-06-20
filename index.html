@@ -23699,7 +23699,8 @@ function PageDepartments(){
 
   // メンバーごとの副所属を計算 (兼任)
   function getSubRolesFor(memberId) {
-    return memberRoles.filter(r => r.memberId === memberId);
+    // (fix) 現所属のみ: ended(退部済み)行は除外。 status 未提供の古い応答は従来どおり表示(後方互換)。
+    return memberRoles.filter(r => r.memberId === memberId && r.status !== 'ended');
   }
 
   // ========== (member-mgmt #1) 一括選択 + バッチアクション ==========
@@ -23826,6 +23827,7 @@ function PageDepartments(){
       if (pk) { const b = touch(pk); if (!seen[pk].has(m.id)) { seen[pk].add(m.id); b.members.push(m); b.primaryCount += 1; } }
     });
     memberRoles.forEach(r => {
+      if (r.status === 'ended') return;   // (fix) 退部済み(ended)は部署メンバー数に数えない
       const m = members.find(x => x.id === r.memberId);
       if (!m || !m.isActive) return;
       const sk = canon(r.deptName);
@@ -24467,7 +24469,7 @@ function PageDepartments(){
           onCancel={()=>{setModalMode(null); setEditingM(null);}}
           deptList={deptList}
           departments={masterRows}
-          existingSubRoles={editingM ? memberRoles.filter(r => r.memberId === editingM.id) : []}
+          existingSubRoles={editingM ? memberRoles.filter(r => r.memberId === editingM.id && r.status !== 'ended') : []}
         />
       )}
 
