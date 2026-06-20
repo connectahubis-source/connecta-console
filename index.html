@@ -19490,116 +19490,108 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
 
   const [name, setName] = useState(init.name || "");
   const [email, setEmail] = useState(init.email || "");
-  // (FE-9) 主所属は DeptID で保持・送信 (raw name === を廃止)。 init.dept は名前キャッシュなので
-  //   canon マッチでマスタ行の DeptID に解決。 init.deptId があれば優先。
+  // 部署解決は DeptID で行う (raw name === を廃止)。 init.dept は名前キャッシュなので canon マッチで解決。
   const canonOf = (s) => (window.deptCanon ? window.deptCanon(s || '') : String(s || '')).trim();
-  const resolveInitDeptId = () => {
-    if (init.deptId != null && init.deptId !== '') {
-      // 既に DeptID が来ている場合はそのまま (マスタに存在する前提)
-      if (safeDepts.some(d => String(d.id) === String(init.deptId))) return String(init.deptId);
-    }
-    if (init.dept) {
-      const k = canonOf(init.dept);
-      const hit = safeDepts.find(d => canonOf(d.name) === k);
-      if (hit) return String(hit.id);
-    }
-    return safeDepts[0] ? String(safeDepts[0].id) : '';
-  };
-  const [deptId, setDeptId] = useState(resolveInitDeptId());
-  // 選択中の主所属名 (DeptID から逆引き) — 兼任の重複判定 / 表示用キャッシュに使用。
-  const selectedDeptName = React.useMemo(() => {
-    const d = safeDepts.find(x => String(x.id) === String(deptId));
-    return d ? d.name : '';
-  }, [safeDepts, deptId]);
   const [title, setTitle] = useState(init.title || "メンバー");
-  const [role, setRole] = useState(init.role || "メンバー");
   const [initial, setInitial] = useState(init.initial || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // 副所属管理 (兼任)
-  // 既存: {id, deptId, deptName, role, isExisting: true}
-  // 新規: {tempId, deptId, deptName, role, isNew: true}
-  const initialSubRoles = (existingSubRoles || []).map(r => ({
-    ...r,
-    isExisting: true,
-  }));
-  const [subRoles, setSubRoles] = useState(initialSubRoles);
-
-  function addSubRole() {
-    if (safeDepts.length === 0) {
-      setError('副所属を追加するには、まず部署を作成してください');
-      return;
+  // (affiliation-flat) 主所属/兼任 の二分割を廃止。 全所属を等価な 1 本のフラットリストで編集する。
+  //   行: { key, roleId(既存 MemberRoles 行のみ. 代表窓口アンカーは null), deptId, role }
+  //   1 行を「代表窓口」(anchor) に指定 — これが Members.部署 キャッシュ (fields.dept/role) に着地する。
+  //   これは階層ではなく単なる表示アンカー。 残りの行は MemberRoles として createMemberRole/deleteMemberRole で CRUD。
+  const buildInitialAffs = () => {
+    const rows = [];
+    const seen = new Set();
+    // アンカー候補: init の主所属 (member 本体キャッシュ)。 DeptID を canon マッチで解決。
+    let anchorDeptId = '';
+    if (init.deptId != null && init.deptId !== '' && safeDepts.some(d => String(d.id) === String(init.deptId))) {
+      anchorDeptId = String(init.deptId);
+    } else if (init.dept) {
+      const k = canonOf(init.dept);
+      const hit = safeDepts.find(d => canonOf(d.name) === k);
+      if (hit) anchorDeptId = String(hit.id);
     }
-    // 主所属と同じ部署はデフォルトで除外 (DeptID で比較)
-    const available = safeDepts.filter(d => String(d.id) !== String(deptId) && !subRoles.some(r => String(r.deptId) === String(d.id)));
-    const firstDept = available[0] || safeDepts[0];
-    setSubRoles(prev => [...prev, {
-      tempId: `temp-${Date.now()}-${Math.random()}`,
-      deptId: firstDept.id,
-      deptName: firstDept.name,
-      role: 'メンバー',
-      isNew: true,
-    }]);
-  }
+    if (anchorDeptId) {
+      rows.push({ key: `anchor-${anchorDeptId}`, roleId: null, deptId: anchorDeptId, role: init.role || 'メンバー' });
+      seen.add(anchorDeptId);
+    }
+    // 既存 MemberRoles (旧 兼任) を等価行として追加。 アンカーと同 DeptID は重複なのでスキップ。
+    (existingSubRoles || []).forEach(r => {
+      const did = String(r.deptId);
+      if (seen.has(did)) return;
+      seen.add(did);
+      rows.push({ key: r.id ? `role-${r.id}` : `role-${did}`, roleId: r.id || null, deptId: did, role: r.role || 'メンバー' });
+    });
+    // 何もなければ先頭部署で 1 行用意 (最低 1 所属が必須)。
+    if (rows.length === 0 && safeDepts[0]) {
+      rows.push({ key: `new-${Date.now()}`, roleId: null, deptId: String(safeDepts[0].id), role: 'メンバー' });
+    }
+    return rows;
+  };
+  const initialAffs = React.useMemo(buildInitialAffs, []);
+  const [affs, setAffs] = useState(initialAffs);
+  // 代表窓口 (anchor) の key。 既定はアンカー行 (なければ先頭)。
+  const [anchorKey, setAnchorKey] = useState(() => {
+    const a = initialAffs.find(r => r.key.startsWith('anchor-'));
+    return (a || initialAffs[0] || {}).key || '';
+  });
 
-  function updateSubRole(idx, field, value) {
-    setSubRoles(prev => prev.map((r, i) => {
-      if (i !== idx) return r;
-      const updated = {...r, [field]: value};
-      // deptId が変わった時は deptName も同期
-      if (field === 'deptId') {
-        const d = safeDepts.find(x => x.id === value);
-        updated.deptName = d ? d.name : '';
-      }
-      return updated;
-    }));
+  function addAff() {
+    if (safeDepts.length === 0) { setError('所属を追加するには、まず部署を作成してください'); return; }
+    const used = new Set(affs.map(r => String(r.deptId)));
+    const firstDept = safeDepts.find(d => !used.has(String(d.id))) || safeDepts[0];
+    const key = `new-${Date.now()}-${Math.random()}`;
+    setAffs(prev => [...prev, { key, roleId: null, deptId: String(firstDept.id), role: 'メンバー' }]);
   }
-
-  function removeSubRole(idx) {
-    setSubRoles(prev => prev.filter((_, i) => i !== idx));
+  function updateAff(key, field, value) {
+    setAffs(prev => prev.map(r => r.key === key ? { ...r, [field]: value } : r));
+  }
+  function removeAff(key) {
+    setAffs(prev => {
+      const next = prev.filter(r => r.key !== key);
+      // 代表窓口を消したら先頭へ付け替え。
+      if (key === anchorKey && next[0]) setAnchorKey(next[0].key);
+      return next;
+    });
   }
 
   async function handleSubmit() {
     if (!name.trim()) { setError("氏名は必須です"); return; }
     if (!email.trim()) { setError("メールは必須です"); return; }
-    if (!deptId) { setError("主所属の部署を選択してください"); return; }
-    // 副所属の重複チェック (DeptID で比較)
-    const deptIds = subRoles.map(r => String(r.deptId));
-    if (new Set(deptIds).size !== deptIds.length) {
-      setError('同じ部署を兼任に2回以上指定することはできません');
-      return;
-    }
-    // 副所属が主所属と同じでないかチェック (DeptID で比較)
-    const conflictDept = subRoles.find(r => String(r.deptId) === String(deptId));
-    if (conflictDept) {
-      setError(`兼任「${conflictDept.deptName || selectedDeptName}」は主所属と同じです。削除してください`);
-      return;
-    }
+    if (affs.length === 0) { setError("所属を1つ以上指定してください"); return; }
+    if (affs.some(r => !r.deptId)) { setError("各所属の部署を選択してください"); return; }
+    // 同一部署の重複は不可 (DeptID で比較)。
+    const ids = affs.map(r => String(r.deptId));
+    if (new Set(ids).size !== ids.length) { setError('同じ部署を2回以上指定することはできません'); return; }
+    // 代表窓口 (anchor) 行を確定。 見つからなければ先頭。
+    const anchor = affs.find(r => r.key === anchorKey) || affs[0];
+    const anchorDept = safeDepts.find(d => String(d.id) === String(anchor.deptId));
+    if (!anchorDept) { setError('代表窓口の部署を選択してください'); return; }
     setSaving(true);
     setError(null);
     try {
-      // (FE-9) 副所属の差分を計算。 idempotent/再実行可能にするため、 既に存在する DeptID への
-      //   toCreate は除外 (二重作成防止) — 同じ保存を再試行しても重複 MemberRoles を生まない。
-      const existingDeptIds = new Set(initialSubRoles.map(r => String(r.deptId)));
-      const toCreate = subRoles
-        .filter(r => r.isNew && !existingDeptIds.has(String(r.deptId)))
-        .map(r => ({ deptId: r.deptId, role: r.role, note: r.note || '' }));
-      const subRolesPayload = {
-        toCreate,
-        toDelete: initialSubRoles
-          .filter(orig => !subRoles.some(curr => curr.id === orig.id))
-          .map(r => r.id),
-      };
-      // (FE-9) 統一作成パス (registerMember/updateMember, BE-6) に DeptID を送信 (raw name は送らない)。
-      //   主所属は常に MemberRoles に着地する。 dept(名前) は denormalize キャッシュとして併送し、
-      //   表示用に残す (サーバは DeptID から再解決)。
+      // (affiliation-flat) アンカー以外の所属を MemberRoles 差分へ畳み込む。
+      //   toCreate: roleId が無い (= 新規) 非アンカー行。 BE が dedupe-guard するため二重 add も安全。
+      //   toDelete: 既存 MemberRoles のうち現在のリストに残っていない roleId。
+      const nonAnchor = affs.filter(r => r !== anchor);
+      const keptRoleIds = new Set(affs.filter(r => r.roleId).map(r => String(r.roleId)));
+      const toCreate = nonAnchor
+        .filter(r => !r.roleId)
+        .map(r => ({ deptId: r.deptId, role: r.role || 'メンバー', note: '' }));
+      const toDelete = (existingSubRoles || [])
+        .filter(orig => orig.id && !keptRoleIds.has(String(orig.id)))
+        .map(orig => orig.id);
+      const subRolesPayload = { toCreate, toDelete };
+      // 統一作成パス (registerMember/updateMember) に 代表窓口 の DeptID + role を送信。
+      //   dept(名前) は denormalize キャッシュとして併送 (サーバは DeptID から再解決)。
       await onSave({
         name: name.trim(),
         email: email.trim(),
-        deptId: deptId,
-        dept: selectedDeptName,
-        title, role,
+        deptId: String(anchor.deptId),
+        dept: anchorDept.name,
+        title, role: anchor.role || 'メンバー',
         initial: initial.trim(),
       }, subRolesPayload);
     } catch (err) {
@@ -19634,76 +19626,56 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
             <div className="field-hint">在籍中メンバーで重複不可、ログイン時にこのIDで識別</div>
           </div>
 
-          {/* 主所属セクション */}
-          <div style={{borderTop:'1px solid var(--line)',paddingTop:12}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--ink3)',letterSpacing:'.05em',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-              <Icon n="star" s={12}/> 主所属 (1つ必須)
-            </div>
-            <div className="grid-2" style={{gap:14}}>
-              <div className="field">
-                <label className="field-label">部署 <span className="field-req">*</span></label>
-                <div className="select-wrap">
-                  {/* (FE-9) DeptID キーの <select> (value={d.id})。 マスタ行 (safeDepts) から id->name を表示し、
-                      submit は deptId。 マスタが空なら選択肢なし (フォールバック生成は廃止)。 */}
-                  <select className="input select" value={deptId} onChange={e=>setDeptId(e.target.value)}>
-                    {safeDepts.length === 0 && <option value="">部署を作成してください</option>}
-                    {safeDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="field">
-                <label className="field-label">役職 (表示用)</label>
-                <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="例: 代表 / 担当 / メンバー"/>
-                <div className="field-hint">自由記述、表示用のラベル</div>
-              </div>
-            </div>
-            <div className="field">
-              <label className="field-label">ロール (権限) <span className="field-req">*</span></label>
-              <div className="select-wrap">
-                <select className="input select" value={role} onChange={e=>setRole(e.target.value)}>
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div className="field-hint">代表 ＞ 副代表 ＞ マネージャー ＞ アシマネ ＞ メンバー の順で権限が高い</div>
-            </div>
+          {/* 役職 (表示用ラベル) — 自由記述。 権限は各所属のロールで決まる。 */}
+          <div className="field">
+            <label className="field-label">役職 (表示用)</label>
+            <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="例: 代表 / 担当 / メンバー"/>
+            <div className="field-hint">自由記述の表示ラベル。 権限は下の各所属のロールで決まります。</div>
           </div>
 
-          {/* 兼任セクション */}
+          {/* (affiliation-flat) 所属セクション — 主所属/兼任 の二分割を廃し、 全所属を等価なフラットリストで編集。
+              各行 = 部署 + ロール。 1 行を「代表窓口」に指定 (Members.部署 キャッシュのアンカー / 階層ではない)。 */}
           <div style={{borderTop:'1px solid var(--line)',paddingTop:12}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--ink3)',letterSpacing:'.05em',display:'flex',alignItems:'center',gap:6}}>
-                <Icon n="layers" s={12}/> 兼任 (副所属) {subRoles.length > 0 && <span style={{color:'var(--ink5)'}}>({subRoles.length})</span>}
+                <Icon n="layers" s={12}/> 所属 (1つ以上必須) {affs.length > 0 && <span style={{color:'var(--ink5)'}}>({affs.length})</span>}
               </div>
-              <button className="btn btn-soft btn-sm" onClick={addSubRole} disabled={safeDepts.length === 0}>
-                <Icon n="plus" s={11}/> 兼任を追加
+              <button className="btn btn-soft btn-sm" onClick={addAff} disabled={safeDepts.length === 0}>
+                <Icon n="plus" s={11}/> 所属を追加
               </button>
             </div>
-            {subRoles.length === 0 ? (
+            {safeDepts.length === 0 ? (
               <div style={{padding:14,background:'var(--bg2)',borderRadius:6,fontSize:11.5,color:'var(--ink5)',textAlign:'center',lineHeight:1.6}}>
-                兼任なし。複数部署で異なるロールを持つ場合は「兼任を追加」をクリック。
+                部署マスタが空です。まず部署を作成してください。
               </div>
             ) : (
               <div className="stack" style={{gap:8}}>
-                {subRoles.map((r, idx) => {
-                  const d = safeDepts.find(x => x.id === r.deptId);
+                {affs.map((r) => {
+                  const d = safeDepts.find(x => String(x.id) === String(r.deptId));
                   const accent = d ? d.color : 'ink';
+                  const isAnchor = r.key === anchorKey;
                   return (
-                    <div key={r.id || r.tempId} style={{display:'flex',gap:8,alignItems:'center',padding:8,background:'var(--bg2)',borderRadius:6,borderLeft:`3px solid var(--${accent})`}}>
+                    <div key={r.key} style={{display:'flex',gap:8,alignItems:'center',padding:8,background:'var(--bg2)',borderRadius:6,borderLeft:`3px solid var(--${accent})`}}>
+                      <label title="代表窓口に指定 (Members 表示の部署アンカー)" style={{display:'flex',alignItems:'center',gap:4,fontSize:10.5,color: isAnchor ? 'var(--indigo)' : 'var(--ink5)',whiteSpace:'nowrap',cursor:'pointer',fontWeight: isAnchor ? 700 : 400}}>
+                        <input type="radio" name="aff-anchor" checked={isAnchor} onChange={()=>setAnchorKey(r.key)} aria-label="代表窓口に指定"/>
+                        代表窓口
+                      </label>
                       <div className="select-wrap" style={{flex:2,marginBottom:0}}>
                         <select className="input select" style={{padding:'6px 24px 6px 8px',fontSize:12,height:32}}
-                          value={r.deptId}
-                          onChange={e=>updateSubRole(idx, 'deptId', e.target.value)}>
-                          {safeDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                          value={String(r.deptId)}
+                          onChange={e=>updateAff(r.key, 'deptId', e.target.value)}>
+                          {safeDepts.map(dd => <option key={dd.id} value={dd.id}>{dd.name}</option>)}
                         </select>
                       </div>
                       <div className="select-wrap" style={{flex:1,marginBottom:0}}>
                         <select className="input select" style={{padding:'6px 24px 6px 8px',fontSize:12,height:32}}
                           value={r.role}
-                          onChange={e=>updateSubRole(idx, 'role', e.target.value)}>
+                          onChange={e=>updateAff(r.key, 'role', e.target.value)}>
                           {ROLES.map(role => <option key={role} value={role}>{role}</option>)}
                         </select>
                       </div>
-                      <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>removeSubRole(idx)} title="削除" style={{color:'var(--coral)'}}>
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={()=>removeAff(r.key)} title="削除"
+                        disabled={affs.length <= 1} style={{color: affs.length <= 1 ? 'var(--ink6)' : 'var(--coral)'}}>
                         <Icon n="x" s={11}/>
                       </button>
                     </div>
@@ -19712,7 +19684,7 @@ function MemberModal({mode, initialValues, onSave, onCancel, deptList, departmen
               </div>
             )}
             <div className="field-hint" style={{marginTop:6}}>
-              ※ 最高ロールが権限判定に使われます。例: 主所属がメンバーでも、IFT班マネージャーを兼任していれば「マネージャー」相当の権限。
+              ※ 各所属はフラット (対等) です。権限は最も高いロールで判定されます。「代表窓口」はメンバー一覧での代表表示に使う 1 部署で、上下関係ではありません。
             </div>
           </div>
         </div>
@@ -19860,7 +19832,7 @@ function MemberChangeRequestModal({ member, depts, onClose, onSubmitted, onDepts
                   <div className="select-wrap">
                     <select className="input select" value={beforeDept} onChange={e => setBeforeDept(e.target.value)}>
                       <option value="">選択してください</option>
-                      {affs.map(a => <option key={a.deptId} value={a.deptId}>{a.deptName}{a.isPrimary ? '（主所属）' : ''}</option>)}
+                      {affs.map(a => <option key={a.deptId} value={a.deptId}>{a.deptName}{a.isPrimary ? '（代表窓口）' : ''}</option>)}
                     </select>
                   </div>
                 </div>
@@ -19929,7 +19901,7 @@ function MemberChangeRequestModal({ member, depts, onClose, onSubmitted, onDepts
                   {leaveOptions.map(a => <option key={a.deptId} value={a.deptId}>{a.deptName}</option>)}
                 </select>
               </div>
-              {leaveOptions.length === 0 && <p style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 6 }}>退部できる兼任部署がありません（主所属は退部できません。部署変更か完全退会を使用）。</p>}
+              {leaveOptions.length === 0 && <p style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 6 }}>退部できる所属がありません（代表窓口の部署は退部できません。部署変更か完全退会を使用）。</p>}
             </div>
           )}
 
@@ -23080,7 +23052,7 @@ function RecruitActionPanel({ app, appId, depts, interviewers, settings, desired
     };
     body = (
       <div>
-        <div style={{ fontSize: 13, color: 'var(--ink3)', marginBottom: 10 }}>最終的な合否を判断してください。採用する場合は<b>最終決定部署</b>を選びます（この部署が主所属として 部署管理 / メンバー管理 に反映されます）。</div>
+        <div style={{ fontSize: 13, color: 'var(--ink3)', marginBottom: 10 }}>最終的な合否を判断してください。採用する場合は<b>最終決定部署</b>を選びます（この部署が初期の所属（代表窓口）として 部署管理 / メンバー管理 に反映されます）。</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 10, marginBottom: 10 }}>
           <div>
             <label className="field-label">最終決定部署 <span style={{ color: 'var(--coral)' }}>*</span></label>
@@ -24387,7 +24359,7 @@ function PageDepartments(){
                   onChange={toggleSelectAll} aria-label="すべて選択"/>
               </th>
               <th style={{width:32}}></th>
-              <th>メンバー</th><th>部署</th><th>役職</th><th>ロール</th><th>入会日</th><th>状態</th><th>活動状態</th><th style={{width:32}} title="要フォロー候補">要</th><th></th>
+              <th>メンバー</th><th>部署</th><th>役割</th><th>入会日</th><th>状態</th><th>活動状態</th><th style={{width:32}} title="要フォロー候補">要</th><th></th>
             </tr></thead>
             <tbody>
               {filtered.map(m => {
@@ -24405,29 +24377,42 @@ function PageDepartments(){
                     <div style={{fontSize:11,color:'var(--ink4)'}}>{m.email}</div>
                   </td>
                   <td data-label="部署">
-                    {/* (affiliation-flat) 主所属/兼任 の二分割を廃し、 全所属を等価な badge でフラット表示。 */}
-                    <div style={{display:'flex',flexWrap:'wrap',gap:3,alignItems:'center'}}>
-                      <span className={`badge badge-${m.accent}`} title={m.dept}>{m.dept}</span>
-                      {subRoles.map(r => {
+                    {/* (affiliation-flat) 全所属を等価な badge でフラット表示。 代表窓口 (m.dept) を先頭に、
+                        重複部署 (canon 一致) は 1 回だけ表示 (backend dedupe 済みだが FE でも防御的に畳む)。 */}
+                    {(() => {
+                      const canon = (s) => (window.deptCanon ? window.deptCanon(s || '') : String(s || '')).trim();
+                      const seen = new Set();
+                      const badges = [];
+                      const anchorKey = canon(m.dept);
+                      if (m.dept) { seen.add(anchorKey); badges.push({ key: 'anchor', name: m.dept, accent: m.accent, anchor: true, role: m.role }); }
+                      subRoles.forEach(r => {
+                        const k = canon(r.deptName);
+                        if (!r.deptName || seen.has(k)) return;
+                        seen.add(k);
                         const dept = masterRows.find(d => d.id === r.deptId);
-                        const accent = dept ? dept.color : 'ink';
-                        return (
-                          <span key={r.id}
-                            className={`badge badge-${accent}`}
-                            title={`${r.deptName} (${r.role})`}>
-                            {r.deptName}
-                          </span>
-                        );
-                      })}
-                    </div>
+                        badges.push({ key: r.id, name: r.deptName, accent: dept ? dept.color : 'ink', anchor: false, role: r.role });
+                      });
+                      return (
+                        <div style={{display:'flex',flexWrap:'wrap',gap:3,alignItems:'center'}}>
+                          {badges.map(b => (
+                            <span key={b.key} className={`badge badge-${b.accent}`} title={`${b.name} (${b.role || 'メンバー'})${b.anchor ? ' · 代表窓口' : ''}`}>
+                              {b.anchor && <span title="代表窓口" style={{marginRight:3,opacity:0.85}}>◎</span>}{b.name}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </td>
-                  <td data-label="役職" style={{fontSize:12,fontWeight:500}}>{m.title}</td>
-                  {/* (member-mgmt) ロールを Quest Glow の tier バッジ (gold/silver/bronze/diamond) で視覚化。未定義ロールは従来の色バッジへフォールバック。 */}
-                  <td data-label="ロール">{ROLE_TIER[m.role]
+                  {/* (affiliation-flat) 役職(表示ラベル) と ロール(権限) を 1 列「役割」に統合。
+                      ロールは Quest Glow tier バッジで視覚化。 役職(title) が ロールと異なる自由記述のときのみ控えめに併記。 */}
+                  <td data-label="役割">
+                    {ROLE_TIER[m.role]
                       ? <span className={`badge badge-tier t-${ROLE_TIER[m.role]}`}>{m.role}</span>
-                      : <span className={clsx("badge",
-                          m.role==="編集者"?"badge-teal"
-                          : "badge-ink")}>{m.role}</span>}</td>
+                      : <span className={clsx("badge", m.role==="編集者"?"badge-teal":"badge-ink")}>{m.role}</span>}
+                    {m.title && m.title !== m.role && m.title !== 'メンバー' && (
+                      <div style={{fontSize:11,color:'var(--ink5)',marginTop:2}}>{m.title}</div>
+                    )}
+                  </td>
                   <td data-label="入会日" className="mono" style={{fontSize:11,color:'var(--ink4)'}}>
                     {m.joinedAt || '—'}
                     {isNewMember(m) && <span className="badge badge-green" style={{marginLeft:6,fontSize:9,padding:'1px 5px'}} title="入会30日以内">NEW</span>}
