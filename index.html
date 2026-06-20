@@ -267,10 +267,57 @@
   --sans:'Inter Tight','Zen Kaku Gothic New','Noto Sans JP',system-ui,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,monospace;
 }
+/* ════════════════════════════════════════════════════════════════════════
+   QUEST GLOW — light "noon" token layer (ADDITIVE; reversible).
+   Re-tints reward family + rounds radii. Pure tokens, no selectors,
+   no !important. Trailing :root wins for the overridden radii (--r etc).
+   ════════════════════════════════════════════════════════════════════════ */
+:root{
+  /* ── XP / energy ramp (warm; the "reward" family) ─────────── */
+  --xp:        #FF7A1A;   /* signature energy orange — FILL only (rings, CTA, rails) */
+  --xp-deep:   #E25E00;   /* darker fill (pressed / gradient end) */
+  --xp-ink:    #B24500;   /* TEXT-on-light variant — 4.9:1 on white (AA normal) */
+  --xp-soft:   #FFF1E6;   /* tinted reward surface */
+  --xp-line:   #FFD9BD;   /* tinted reward border */
+  --xp-glow:   rgba(255,122,26,0.40);
+
+  --grape:     #6B45E0;   /* "rare / streak" secondary (FILL) */
+  --grape-ink: #5733C4;   /* text-on-light (5.6:1 on white) */
+  --grape-soft:#F0ECFF;
+  --pinkpop:   #E63B7A;   /* celebration confetti / combo (FILL) */
+  --mint:      #12B886;   /* "complete!" success — TEXT-safe (3.6:1 large) */
+  --mint-ink:  #0B7A57;   /* text-on-light (4.7:1 on white) */
+  --mint-soft: #E2FBF1;
+
+  /* ── Tier ramp (always dark-ink-on-tinted-bg, never white-on-metal) ───── */
+  --tier-bronze:#B06B3F; --tier-bronze-bg:#F6E7DC; --tier-bronze-ink:#8A4E27;
+  --tier-silver:#8A98A8; --tier-silver-bg:#EDF1F6; --tier-silver-ink:#56636F;
+  --tier-gold:  #C98A0A; --tier-gold-bg:  #FCF1D2; --tier-gold-ink:  #8A5E00;
+  --tier-diamond:#1E9FBF;--tier-diamond-bg:#E0F6FC;--tier-diamond-ink:#0B6A82;
+
+  /* ── Reusable gradients (FILLS only; never under body text) ───────────── */
+  --grad-hero:  linear-gradient(120deg,#005BAC 0%,#2273C4 44%,#6B45E0 100%);
+  --grad-xp:    linear-gradient(90deg,#FF7A1A 0%,#E63B7A 100%);
+  --grad-level: linear-gradient(135deg,#C98A0A 0%,#FF7A1A 58%,#E63B7A 100%);
+  --grad-mint:  linear-gradient(90deg,#12B886 0%,#1E9FBF 100%);
+  --grad-sheen: linear-gradient(115deg,transparent 0%,rgba(255,255,255,.55) 50%,transparent 100%);
+
+  /* ── Additive reward shadows (alongside existing --sh-*) ──────────────── */
+  --sh-pop:  0 10px 24px -8px rgba(255,122,26,.30),0 2px 6px rgba(20,30,60,.06);
+  --sh-lift: 0 14px 30px -10px rgba(0,63,115,.20),0 3px 8px rgba(20,30,60,.07);
+  --ring-track:#EBF1F8;   /* progress-ring empty track (light) */
+
+  /* ── Motion tokens (one language) ────────────────────────────────────── */
+  --ease-spring:cubic-bezier(.34,1.56,.64,1); /* press / chips — gentle overshoot */
+  --ease-out:   cubic-bezier(.22,1,.36,1);    /* entrances / fills / lifts */
+
+  /* ── Friendlier geometry (OVERRIDE existing radii above) ─────────────── */
+  --r:14px; --rs:12px; --rx:20px; --rr:10px;
+}
 html{scroll-behavior:smooth}
 body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:13.5px;line-height:1.55;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01";letter-spacing:-0.005em}
-/* (Phase 1.5) 横スクロール抑止 + 可変タイポ */
-html,body{ overflow-x:hidden; }
+/* (Phase 1.5) 横スクロール抑止 + 可変タイポ。 overflow-x:clip は overflow:hidden と違いスクロールコンテナを作らないため、 sticky なサイドバー/トップバーが固定されたまま機能する */
+html,body{ overflow-x:clip; }
 img,svg,video,table{ max-width:100%; }
 body{ font-size:clamp(13px, 0.5vw + 12px, 14px); }
 button,input,textarea,select{font-family:inherit;color:inherit}
@@ -366,6 +413,16 @@ svg{display:block}
 :root[data-theme="night"] .nav-sub a{color:var(--ink3)}
 :root[data-theme="night"] .nav-sub a:hover{background:var(--bg3);color:var(--ink)}
 :root[data-theme="night"] .nav-sub a.active{background:rgba(56,189,248,0.12);color:var(--jb-blue)}
+/* (ITEM1) 部署アコーディオン — caret はクリック領域を確保、サブリストはスクロール */
+.dept-caret{cursor:pointer;padding:0 2px;border-radius:6px}
+.dept-caret:hover{opacity:.9}
+#dept-sub{max-height:300px;overflow-y:auto}
+#dept-sub .nav-sub-row{display:flex;align-items:center;gap:2px;justify-content:space-between}
+#dept-sub .nav-sub-row > a:first-child{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#dept-sub a.nav-sub-min{flex:0 0 auto;margin-left:auto;font-size:10px;color:var(--ink4,#9aa4ad);padding:3px 6px;border-radius:6px;text-decoration:none}
+#dept-sub a.nav-sub-min:hover{background:rgba(15,138,122,.1);color:#0f8a7a}
+#dept-sub .nav-sub-empty{font-size:11px;color:var(--ink4,#9aa4ad);padding:5px 10px}
+:root[data-theme="night"] #dept-sub a.nav-sub-min:hover{background:var(--bg3);color:var(--jb-blue)}
 /* (P6y) 問い合わせCRM デザイン: 紺青→青→teal の光沢グラデーションを signature に。
    光沢 = 上端ハイライト(inset) + 斜めの光筋(::after)。動きは1pxの持ち上がりのみ */
 :root{--ibx-blue-deep:#1d4f8f;--ibx-blue:#2273c4;--ibx-teal:#0f8a7a;--ibx-sky:#eef5fb;--ibx-line:#dfe6ee}
@@ -467,6 +524,10 @@ svg{display:block}
   80% { transform: rotate(5deg); }
   100% { transform: rotate(0); }
 }
+/* (global-recording) ヘッダー録音インジケータの点滅 */
+@keyframes recPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+.rec-hdr-label-full { }
+@media (max-width: 720px) { .rec-hdr-label-full { display: none !important; } }
 /* (Phase 17.S-fix) サイドバー ダークモード */
 :root[data-theme="night"] .sidebar{background:var(--bg2);border-right-color:var(--line2)}
 :root[data-theme="night"] .nav-item{color:var(--ink2)}
@@ -948,6 +1009,37 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   --teal-50:       #0F2A2A;
   --pink:          #F472B6;
   --pink-50:       #2E1622;
+}
+/* ════════════════════════════════════════════════════════════════════════
+   QUEST GLOW — night token layer (ADDITIVE; reversible).
+   glow-as-state-signal model: surfaces stay near-navy, reward hues lift for
+   AA on #0D1F33; glow is box-shadow ON TOP of an already-legible solid.
+   ════════════════════════════════════════════════════════════════════════ */
+:root[data-theme="night"]{
+  --xp:        #FF9A4D;   /* lifted for AA on #0D1F33 */
+  --xp-deep:   #FF7A1A;
+  --xp-ink:    #FFB27A;   /* text-on-dark (7.1:1 on #0D1F33) */
+  --xp-soft:   #2A1B0E;
+  --xp-line:   rgba(255,154,77,0.30);
+  --xp-glow:   rgba(255,154,77,0.50);
+
+  --grape:     #A78BFA; --grape-ink:#C4B0FF; --grape-soft:#241B3A;
+  --pinkpop:   #FF6FA3;
+  --mint:      #2BE0A0; --mint-ink:#5FE9BE; --mint-soft:#0F2E22;
+
+  --tier-bronze:#D98E63; --tier-bronze-bg:#2A1C12; --tier-bronze-ink:#E8B48C;
+  --tier-silver:#B6C2D1; --tier-silver-bg:#1A2230; --tier-silver-ink:#C9D3DF;
+  --tier-gold:  #FBC93B; --tier-gold-bg:  #2A2410; --tier-gold-ink:  #F6D469;
+  --tier-diamond:#5FD8F2;--tier-diamond-bg:#0E2A30;--tier-diamond-ink:#8CE6F8;
+
+  --grad-hero:  linear-gradient(120deg,#0D3A66 0%,#1F5FA0 44%,#5B43C9 100%);
+  --grad-xp:    linear-gradient(90deg,#FF9A4D 0%,#FF6FA3 100%);
+  --grad-level: linear-gradient(135deg,#FBC93B 0%,#FF9A4D 58%,#FF6FA3 100%);
+  --grad-mint:  linear-gradient(90deg,#2BE0A0 0%,#5FD8F2 100%);
+
+  --sh-pop:  0 12px 28px -8px rgba(255,154,77,.30),0 2px 8px rgba(0,0,0,.5);
+  --sh-lift: 0 16px 34px -10px rgba(0,0,0,.55),0 3px 10px rgba(0,0,0,.4);
+  --ring-track:rgba(140,203,255,0.16);
 }
 /* (Phase 1.1) backdrop-filter 非対応ブラウザ向け フォールバック: 不透明度を上げて可読性を担保 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
@@ -1935,6 +2027,202 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   .glass-scrim{ background:rgba(13,31,51,0.6) }
 }
+
+/* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  QUEST GLOW — component restyle layer (ADDITIVE / reversible).          ║
+   ║  Appended LAST in the primary <style>, AFTER every glass re-declaration ║
+   ║  (.card/.chip/.topbar/.sidebar/.nav-item) so same-specificity wins      ║
+   ║  WITHOUT !important. Modals (.confirm-modal/.glass-scrim/.glass-modal)  ║
+   ║  intentionally keep their glass scrim.                                  ║
+   ║  Reverse the whole reskin by deleting from this banner to </style>.     ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+/* ── Opaque surfaces (drop backdrop-filter) — the combined contrast+perf win ─ */
+.card{
+  position:relative;
+  background:var(--white);                 /* opaque — no frost */
+  -webkit-backdrop-filter:none; backdrop-filter:none;
+  border:1px solid var(--line);
+  border-radius:var(--rx);                 /* 20px */
+  box-shadow:var(--sh-sm);
+  transition:transform .18s var(--ease-out),box-shadow .18s,border-color .18s;
+}
+.card:hover{ transform:translateY(-2px); box-shadow:var(--sh-lift); border-color:var(--line2); }
+/* opt-in reward card: className="card card--quest" where progress is shown */
+.card--quest{ overflow:hidden; }
+.card--quest::before{                       /* thin energy rail, left edge */
+  content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:var(--grad-xp);border-radius:var(--rx) 0 0 var(--rx);
+}
+
+.chip{
+  background:var(--bg2); color:var(--ink2); border:1px solid var(--line);
+  -webkit-backdrop-filter:none; backdrop-filter:none;   /* opaque, crisp */
+  border-radius:999px; font-weight:600;
+  transition:transform .12s var(--ease-spring),box-shadow .12s,background .12s,color .12s;
+}
+.chip:hover{ transform:translateY(-1px) scale(1.03); box-shadow:var(--sh-sm); }
+.chip:active{ transform:scale(.96); }
+.chip.on{ background:var(--xp-soft); color:var(--xp-ink); border-color:var(--xp-line); }
+.chip--mint{ background:var(--mint-soft); color:var(--mint-ink); border-color:transparent; }
+
+.topbar{
+  background:var(--white);                 /* opaque (perf + contrast) */
+  -webkit-backdrop-filter:none; backdrop-filter:none;
+  border-bottom:1px solid var(--line);
+}
+/* streak counter slot, rendered in topbar */
+.tb-streak{ display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;
+  border-radius:99px;background:var(--xp-soft);color:var(--xp-ink);font-weight:700;font-size:12px; }
+
+.sidebar{
+  background:var(--bg2);                    /* opaque */
+  -webkit-backdrop-filter:none; backdrop-filter:none;
+  border-right:1px solid var(--line);
+}
+/* level meter pinned at sidebar bottom — the always-visible "you" */
+.side-level{ margin-top:auto;padding:12px;border-radius:16px;
+  background:linear-gradient(135deg,var(--indigo-50),var(--xp-soft));
+  border:1px solid var(--line); }
+
+/* ── Buttons: hard "sticker" press + signature quest CTA ─────────────────── */
+.btn{ border-radius:12px; transition:transform .12s,box-shadow .15s,background .15s; }
+.btn:active{ transform:translateY(1px) scale(.985); }     /* tactile press everywhere */
+
+/* navy primary keeps brand + gains the bold-editorial "sticker" shadow */
+.btn-pri,.btn-indigo,.jb-btn-primary{ box-shadow:0 2px 0 0 var(--indigo-700,#003F73); }
+.btn-pri:hover,.btn-indigo:hover,.jb-btn-primary:hover{ transform:translateY(-1px); box-shadow:0 4px 0 0 var(--indigo-700,#003F73); }
+.btn-pri:active,.btn-indigo:active,.jb-btn-primary:active{ transform:translateY(2px); box-shadow:0 0 0 0 var(--indigo-700,#003F73); }
+
+/* signature reward CTA — warm gradient + one-shot sheen sweep on hover */
+.btn-quest{
+  background:var(--grad-xp); color:#fff; border:none; font-weight:700;
+  box-shadow:var(--sh-pop); position:relative; overflow:hidden; text-shadow:0 1px 1px rgba(0,0,0,.18);
+}
+.btn-quest::after{ content:"";position:absolute;inset:0;background:var(--grad-sheen);
+  transform:translateX(-120%);transition:transform .55s ease; }
+.btn-quest:hover::after{ transform:translateX(120%); }
+.btn-quest:hover{ filter:brightness(1.04); box-shadow:0 12px 28px -8px var(--xp-glow); }
+
+.jb-btn{ border-radius:12px; transition:background .15s,color .15s,transform .12s,box-shadow .15s; }
+.jb-btn:active{ transform:translateY(1px) scale(.985); }
+
+/* ── Badge: keep families; ADD tier system (dark-ink-on-tint) ────────────── */
+.badge{ border-radius:999px; font-weight:700; letter-spacing:.01em; }
+/* tier badge: colored dot + tinted bg + dark-ink label + (optional) emoji child */
+.badge-tier{ gap:4px; padding-left:7px; border:none; position:relative; }
+.badge-tier::before{ content:"";width:10px;height:10px;border-radius:50%;flex:none;
+  box-shadow:0 0 0 2px rgba(255,255,255,.6) inset; }
+.badge-tier.t-bronze { background:var(--tier-bronze-bg);  color:var(--tier-bronze-ink); }
+.badge-tier.t-bronze::before { background:var(--tier-bronze); }
+.badge-tier.t-silver { background:var(--tier-silver-bg);  color:var(--tier-silver-ink); }
+.badge-tier.t-silver::before { background:var(--tier-silver); }
+.badge-tier.t-gold   { background:var(--tier-gold-bg);    color:var(--tier-gold-ink); }
+.badge-tier.t-gold::before   { background:var(--tier-gold); }
+.badge-tier.t-diamond{ background:var(--tier-diamond-bg); color:var(--tier-diamond-ink); }
+.badge-tier.t-diamond::before{ background:var(--tier-diamond); }
+/* celebratory "LV UP" / "NEW" pill (fill, white >=14px bold) */
+.badge-pop{ background:var(--grad-level); color:#fff; border:none;
+  text-shadow:0 1px 1px rgba(0,0,0,.18); box-shadow:var(--sh-pop); }
+/* "live / now" — glow only on dark (state signal), breathing dot */
+.badge--live .badge-dot{ animation:q-pulse 1.8s ease-in-out infinite; }
+:root[data-theme="night"] .badge--live{ box-shadow:0 0 12px -3px currentColor; }
+
+/* ── nav-item: satisfying active rail (chrome stays navy) ────────────────── */
+.nav-item{ border-radius:12px; transition:background .14s,color .14s,transform .12s; }
+.nav-item:hover{ transform:translateX(2px); }
+/* active keeps the brand navy tint (chrome = navy, not reward-warm) */
+.nav-item.active{ background:var(--indigo-50); color:var(--indigo-700); font-weight:700; }
+.nav-item.active::before{                       /* growing accent rail (warm = "where you are") */
+  content:"";position:absolute;left:-2px;top:50%;transform:translateY(-50%);
+  width:3px;height:60%;border-radius:99px;background:var(--grad-xp);
+  animation:nav-rail .22s var(--ease-out);
+}
+@keyframes nav-rail{ from{height:0;opacity:0} to{height:60%;opacity:1} }
+.nav-item.active .n-badge{ background:var(--grad-xp); color:#fff; border:none; }
+
+/* ── jb-cover: gradient hero header (biggest mood-setter) ─────────────────── */
+.jb-cover{
+  position:relative; border-image:none; border-bottom:none;
+  padding:30px 28px 38px; border-radius:24px; margin-bottom:40px; overflow:hidden;
+  background:var(--grad-hero); box-shadow:var(--sh-lift); color:#fff;
+}
+.jb-cover::after{                              /* soft confetti-dot texture (static, decorative) */
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background:
+    radial-gradient(circle at 18% 30%,rgba(255,255,255,.32) 0 2px,transparent 3px),
+    radial-gradient(circle at 82% 22%,rgba(255,255,255,.24) 0 2px,transparent 3px),
+    radial-gradient(circle at 66% 78%,rgba(255,255,255,.20) 0 2px,transparent 3px);
+}
+.jb-cover-title{ color:#fff; }
+.jb-cover-subtitle{ color:rgba(255,255,255,.85); }
+.jb-cover-meta{ color:rgba(255,255,255,.82); }
+.jb-cover-meta-num{ color:#fff; text-shadow:0 2px 10px rgba(0,0,0,.18); }
+
+/* ── tbl: scannable rows + a RESTRAINED warm hover bar (no per-row decoration) ─ */
+.tbl tbody tr{ position:relative; transition:background .14s var(--ease-out); }
+.tbl tbody tr::before{ content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--grad-xp);opacity:0;transition:opacity .14s; }
+.tbl tbody tr:hover{ background:var(--xp-soft); }
+.tbl tbody tr:hover::before{ opacity:1; }
+/* opt-in inline activity bar for member rosters (NOT global) */
+.row-xp{ display:inline-block;width:74px;height:8px;border-radius:99px;background:var(--ring-track);
+  overflow:hidden;vertical-align:middle; }
+.row-xp > i{ display:block;height:100%;border-radius:99px;background:var(--grad-xp);width:var(--p,0%); }
+
+/* ── MiniStat / jb-stat: ring-ified, tabular value, warm top-rail ─────────── */
+.jb-stat-value{ font-variant-numeric:tabular-nums; }
+.jb-stat::before{ background:var(--grad-xp); }            /* warm top-rail accent */
+
+/* ── QuestRing (Tier 2 primitive) ────────────────────────────────────────── */
+.quest-ring{ position:relative;display:inline-grid;place-items:center; }
+.quest-ring svg{ position:absolute;inset:0; }
+/* glow as a STATE SIGNAL — present only on dark, brighter as --p climbs (neon graft) */
+:root[data-theme="night"] .quest-ring svg{
+  filter:drop-shadow(0 0 calc(2px + var(--p)*0.06px) var(--xp-glow));
+}
+.quest-ring-cap{ display:grid;place-items:center;text-align:center;line-height:1; }
+.qr-num{ font-family:var(--mono);font-weight:800;font-size:15px;color:var(--ink); }
+.qr-num i{ font-style:normal;font-size:9px;color:var(--ink4);margin-left:1px; }
+.qr-sub{ font-size:8.5px;color:var(--ink4);margin-top:1px; }
+.sr-only{ position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0; }
+
+/* ── xp-bar: "progress to next rank" (hero shimmer is single-instance only) ─ */
+.xp-bar{ height:10px;border-radius:99px;background:var(--ring-track);overflow:hidden;position:relative; }
+.xp-bar > i{ display:block;height:100%;border-radius:99px;background:var(--grad-xp);
+  width:var(--p,0%);transition:width .9s var(--ease-out); }
+.xp-bar--hero > i::after{ content:"";position:absolute;inset:0;background:var(--grad-sheen);
+  animation:xp-shimmer 2.4s linear infinite; }   /* ONLY on the single hero bar */
+@keyframes xp-shimmer{ from{transform:translateX(-100%)} to{transform:translateX(100%)} }
+
+/* ── q-empty: encouraging microcopy as a component ───────────────────────── */
+.q-empty{ text-align:center;padding:40px 20px;color:var(--ink3); }
+.q-empty .q-dot{ width:44px;height:44px;border-radius:50%;margin:0 auto 12px;background:var(--xp-soft);
+  display:grid;place-items:center;font-size:22px; }
+.q-empty .q-msg{ font-weight:600;color:var(--ink2);margin-bottom:14px; }
+
+/* ── confetti (questBurst helper nodes) ──────────────────────────────────── */
+.confetti{ position:absolute;width:8px;height:8px;border-radius:2px;pointer-events:none;
+  will-change:transform,opacity; }
+
+/* ── Signature keyframes ─────────────────────────────────────────────────── */
+@keyframes q-pulse{ 0%,100%{box-shadow:0 0 0 0 currentColor;opacity:1} 50%{box-shadow:0 0 0 5px transparent;opacity:.55} }
+@keyframes q-pop{ 0%{transform:scale(.8)} 60%{transform:scale(1.08)} 100%{transform:scale(1)} }
+
+/* ── Focus-visible: high-contrast warm ring on a bg-gap (WCAG 2.4.13) ─────── */
+:where(.btn,.jb-btn,.chip,.nav-item,a,button,[tabindex]):focus-visible{
+  outline:2.5px solid var(--xp); outline-offset:2px; border-radius:inherit;
+}
+
+/* ── Reduced-motion: NEW selectors only (extends the blocks above, no dup) ── */
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important; }
+  .xp-bar--hero > i::after{ display:none; }    /* kill shimmer loop */
+  .btn-quest::after{ display:none; }            /* kill sheen sweep */
+  .card:hover{ transform:none; }
+  .quest-ring circle{ transition:none; }        /* ring shows final value instantly */
+}
 </style>
 <script>
 /* (Runtime Error Overlay) window エラー / 未処理 Promise を捕捉し、画面隅にバッジ表示。
@@ -2185,7 +2473,9 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
       <a href="#applications" class="nav-item" data-nav="applications"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>申込・決済</a>
       <a href="#paypay" class="nav-item" data-nav="paypay"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a3 3 0 0 1 0 6H9V8zm0 6v4"/></svg>PayPay 決済管理</a>
       <a href="#coupons" class="nav-item" data-nav="coupons"><svg class="ic" viewBox="0 0 24 24"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>クーポン管理</a>
-      <a href="#departments" class="nav-item" data-nav="departments"><svg class="ic" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>部署 / チーム</a>
+      <a href="#departments" class="nav-item" data-nav="departments"><svg class="ic" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>部署 / チーム<span class="inbox-caret dept-caret" id="dept-caret" role="button" tabindex="0" aria-label="部署一覧を展開">▸</span></a>
+      <!-- (ITEM1) 部署アコーディオン: listScopedDepartments を一度だけ取得し各部署ページへ直リンク -->
+      <div class="nav-sub" id="dept-sub"></div>
       <a href="#weekly-eval" class="nav-item" data-nav="weekly-eval"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>統括</a>
       <a href="#leave-management" class="nav-item" data-nav="leave-management" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z"/><path d="M12 7v5l3 2"/></svg>休会・低稼働</a>
       <a href="#knowledge" class="nav-item" data-nav="knowledge"><svg class="ic" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>ナレッジ管理</a>
@@ -2349,6 +2639,8 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
     // トークンが無い(サインイン中/ログアウト済)ならリロードしない → 無限ループ防止
     if (!window.getStoredToken || !window.getStoredToken()) return;
     window.__authRedirecting = true;
+    // 永続キャッシュも消す (memberId クリア前に呼ぶ → 現在 mid のキーも掃除される)
+    try { if (window.clearPersistentCache) window.clearPersistentCache(); } catch (e) {}
     try { window.setStoredToken(''); window.setStoredMemberId(''); window.currentUser = null; } catch (e) {}
     try { if (window._dataCache) window._dataCache.clear(); if (window._inflightRequests) window._inflightRequests.clear(); } catch (e) {}
     try { if (window.toast) window.toast.error('セッションが切れました。再ログインしてください。'); } catch (e) {}
@@ -2389,6 +2681,17 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   window.hasRole = function(requiredRole) {
     const required = window.ROLE_RANK[requiredRole] || 0;
     return window.getMyRank() >= required;
+  };
+
+  // (oneonone-hr-split) 人事面談を扱える閲覧者か (人事 or 代表)。
+  //   サーバ user.isHr (getUserByMemberId_ が付与) を優先し、 allRoles の人事所属 / 代表ロールでも判定。
+  window.OO_isHrViewer = function() {
+    const u = window.currentUser;
+    if (!u) return false;
+    if (u.isHr || (u.member && u.member.isHr)) return true;
+    if (window.hasRole && window.hasRole('代表')) return true;
+    if (Array.isArray(u.allRoles) && u.allRoles.some(function(r){ return r && r.deptName === '人事'; })) return true;
+    return false;
   };
 
   /**
@@ -2535,9 +2838,15 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   // - 同じキーで同時リクエスト中なら、進行中の Promise を共有 (重複リクエスト防止)
   // - データ更新系 (createXxx/updateXxx/deleteXxx) では関連キーを invalidate
 
-  window._dataCache = new Map();   // key -> {data, expiresAt}
+  window._dataCache = new Map();   // key -> {data, expiresAt, fetchedAt}
   window._inflightRequests = new Map();   // key -> Promise (進行中リクエスト)
-  const CACHE_TTL_MS = 30000;   // 30秒
+  // (SWR stale-after-write 防止) 単調増加の無効化エポック。 invalidateCache で bump し、
+  // 進行中リクエストには発行時のエポックを刻む。 リクエスト発行後にエポックが進んだ key は
+  // 「無効化前に発行された = 古い可能性」 とみなし、 結果をキャッシュへ書き戻さない。
+  window._cacheEpoch = window._cacheEpoch || 0;
+  // (SWR) key -> Set<fn>。 fresh データ到着 / 楽観的 patch 時に購読者へ通知する。
+  window._dataListeners = window._dataListeners || new Map();
+  const CACHE_TTL_MS = 300000;   // 5分(以後は stale 扱い: 即返し + 裏で revalidate。 変更は invalidateCache + 変更通知で反映)
 
   /**
    * キャッシュキーを生成 (action + params のハッシュ)
@@ -2548,6 +2857,34 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
     try { mid = (window.getStoredMemberId && window.getStoredMemberId()) || ''; } catch (e) {}
     return mid + '|' + action + ':' + (params ? JSON.stringify(params) : '');
   }
+  // cross-block から参照できるよう公開 (useLiveData / optimisticMutate が利用)
+  window._cacheKey = _cacheKey;
+
+  // ============ SWR 購読 / 通知機構 ============
+  // 目的: キャッシュ更新 (fresh 到着 or 楽観的 patch) を mount 中の購読者へ通知し再描画させる。
+  // key 単位の listener + グローバル bump カウンタの二段構え (最小ストア)。
+  window._dataBump = window._dataBump || 0;
+  function _notifyUpdated(key) {
+    window._dataBump = (window._dataBump || 0) + 1;
+    const set = window._dataListeners.get(key);
+    if (set) {
+      // forEach 中の unsubscribe で集合が変化しても安全なよう複製してから回す
+      Array.from(set).forEach(function (fn) {
+        try { fn(window._dataCache.get(key)); } catch (e) {}
+      });
+    }
+  }
+  window._notifyUpdated = _notifyUpdated;
+  // subscribeData(action, params, cb) → unsubscribe()。 cb には最新の cache entry ({data,expiresAt,fetchedAt}|undefined) が渡る。
+  window.subscribeData = function (action, params, cb) {
+    const key = _cacheKey(action, params);
+    let set = window._dataListeners.get(key);
+    if (!set) { set = new Set(); window._dataListeners.set(key, set); }
+    set.add(cb);
+    return function unsubscribe() { try { set.delete(cb); } catch (e) {} };
+  };
+  // 後方互換エイリアス (spec の onDataUpdate 名)
+  window.onDataUpdate = window.subscribeData;
 
   /**
    * キャッシュ無効化。
@@ -2593,15 +2930,32 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   };
 
   window.invalidateCache = function(pattern) {
+    // どんな無効化でもエポックを 1 つ進める → 既に飛んでいる (無効化前発行の) リクエストの
+    // 書き戻しを _revalidate 側で無効化できる (stale-after-write 防止)。
+    window._cacheEpoch = (window._cacheEpoch || 0) + 1;
     if (!pattern) {
+      const _all = Array.from(window._dataCache.keys());
       window._dataCache.clear();
+      // 進行中リクエストも全て放棄 → 無効化後の呼び出しは新規 fetch を開始する (古い in-flight に相乗りしない)
+      try { if (window._inflightRequests) window._inflightRequests.clear(); } catch (e) {}
+      _all.forEach(function (k) { _notifyUpdated(k); });
+      _persistCacheSoon();
       return;
     }
+    // memberId| プレフィックスを跨いで前方一致できるよう、action 名で部分一致させる
+    const removed = [];
     for (const key of window._dataCache.keys()) {
-      if (key.startsWith(pattern)) {
+      // key 形式: "<mid>|<action>:<paramsJson>"。 pattern は action 名 (例 'listMembers')。
+      const afterPipe = key.indexOf('|') >= 0 ? key.slice(key.indexOf('|') + 1) : key;
+      if (key.startsWith(pattern) || afterPipe.startsWith(pattern)) {
         window._dataCache.delete(key);
+        // 同 key の進行中リクエストを放棄 → 直後の cold-miss 呼び出しが doomed な
+        // (無効化前発行の) promise に相乗りせず新規 fetch を始める。
+        try { if (window._inflightRequests) window._inflightRequests.delete(key); } catch (e) {}
+        removed.push(key);
       }
     }
+    if (removed.length) { removed.forEach(function (k) { _notifyUpdated(k); }); _persistCacheSoon(); }
   };
 
   /**
@@ -2619,7 +2973,10 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
       return;
     }
     // 'createMember' / 'updateMember' / 'deleteMember' → ['Member']
-    const m = action.match(/^(create|update|delete|restore|approve|reject)([A-Z]\w+)$/);
+    // cancel/postpone も対象 (cancelEvent/postponeEvent → Event → listEvents/getEvent/getDashboard を bust)。
+    // これらの呼出元は local state を楽観更新するのみで明示 invalidate を呼ばないため、
+    // ここで拾わないと他画面 (dashboard/event detail) が古い status を最大 5 分表示する。
+    const m = action.match(/^(create|update|delete|restore|approve|reject|cancel|postpone)([A-Z]\w+)$/);
     if (!m) return;
     const entity = m[2];
     // 単数→複数の単純変換 (Member → Members, Event → Events, etc.)
@@ -2633,6 +2990,8 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
     // ダッシュボードや関連ページのキャッシュもクリア
     window.invalidateCache('getDashboard');
   }
+  // cross-block / optimisticMutate から再利用できるよう公開
+  window._autoInvalidate = _autoInvalidate;
 
   /**
    * 明示的な部署/メンバー キャッシュ無効化ハブ。
@@ -2794,6 +3153,7 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
     'createKnowledgeItem', 'updateKnowledgeItem', 'archiveKnowledgeItem', 'restoreKnowledgeItem',
     'pinKnowledgeItem', 'submitKnowledgeFeedback', 'createKnowledgeCategory', 'updateKnowledgeCategory',
     'toggleKnowledgeCategoryActive', 'createKnowledgeFromOneOnOne',
+    'createOneOnOne', 'updateOneOnOne', 'deleteOneOnOne', 'shareHrInterviewToManager',
   ];
   // 読取専用なのにヒント正規表現へ偶発マッチするアクションの許可リスト (誤検知除外)。
   window.__READ_ALLOWLIST = window.__READ_ALLOWLIST || [
@@ -2803,37 +3163,18 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   // 書込っぽい動詞 (緩い補助判定)。 確実な登録簿で拾えない取り違えのヒント。
   window.__MUTATION_HINT_RE = /(^|\.)(create|update|delete|restore|approve|reject|save|recompute|refund|markPaid|setup|remove|cancel|confirm|change|send|publish|reorder|postpone|checkin|uncheckin)/i;
 
-  window.fetchData = async function fetchData(action, params = {}) {
-    if (window.__MUTATION_ACTIONS.indexOf(action) >= 0) {
-      console.warn('[fetchData] "' + action + '" は書込系アクションです。postData を使用してください (GET 経路では unknown action になります)。');
-    } else if (window.__READ_ALLOWLIST.indexOf(action) < 0 && window.__MUTATION_HINT_RE.test(action)) {
-      console.warn('[fetchData] "' + action + '" は書込系の可能性があります。読取専用でなければ postData を検討してください。');
-    }
-    if (window.CONFIG.USE_MOCK) {
-      await new Promise((r) => setTimeout(r, 50));
-      const data = window.MOCK ? window.MOCK[action] : null;
-      if (data === undefined) {
-        console.warn(`[mock] no data for action: ${action}`);
-      }
-      return data;
-    }
-
-    if (!window.CONFIG.GAS_API_URL) {
-      throw new Error('CONFIG.GAS_API_URL is not configured');
-    }
-
-    // ===== キャッシュチェック =====
-    const key = _cacheKey(action, params);
-    const cached = window._dataCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.data;
-    }
-
-    // ===== 進行中リクエストの共有 (デデュプ) =====
+  /**
+   * _revalidate — ネットワークから取得し、 キャッシュへ保存 + 購読者へ通知する。
+   * 進行中リクエスト (window._inflightRequests) を共有 (デデュプ)。
+   * fetchData の cold-miss / 裏 revalidate の両方から呼ばれる唯一のネットワーク経路。
+   * 返り値: data に解決する Promise (fetchData の resolve 契約と同一)。
+   */
+  function _revalidate(action, params, key) {
     if (window._inflightRequests.has(key)) {
       return window._inflightRequests.get(key);
     }
-
+    // このリクエスト発行時点のエポックを記録 → resolve 時に進んでいたら書き戻さない (stale-after-write 防止)
+    const epochAtIssue = window._cacheEpoch || 0;
     // memberId を自動付与 (信頼ベース認証)
     const memberId = window.getStoredMemberId();
     const url =
@@ -2855,11 +3196,22 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
         if (!json.ok) {
           throw new Error(_humanizeError(json.error));
         }
-        // キャッシュに保存
+        // このリクエストの発行後に無効化 (invalidateCache) が走っていたら、 取得値は
+        // 「無効化前のサーバ状態を写している可能性」 がある。 キャッシュへ書き戻すと
+        // stale-after-write になるため書き込みをスキップし、 呼び出し元にはネットワーク
+        // 取得値をそのまま返す (cold-miss caller は正しい fresh データを得る。 次回読取は再 fetch)。
+        if ((window._cacheEpoch || 0) !== epochAtIssue) {
+          return json.data;
+        }
+        // キャッシュに保存 (新形状 {data, expiresAt, fetchedAt})
+        const now = Date.now();
         window._dataCache.set(key, {
           data: json.data,
-          expiresAt: Date.now() + CACHE_TTL_MS,
+          expiresAt: now + CACHE_TTL_MS,
+          fetchedAt: now,
         });
+        _notifyUpdated(key);     // (SWR) fresh 到着 → 購読者を再描画
+        _persistCacheSoon();     // 永続キャッシュへ反映 (debounced)
         return json.data;
       } finally {
         window._inflightRequests.delete(key);
@@ -2868,6 +3220,46 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
 
     window._inflightRequests.set(key, promise);
     return promise;
+  }
+  window._revalidate = _revalidate;
+
+  window.fetchData = async function fetchData(action, params = {}, opts = {}) {
+    if (window.__MUTATION_ACTIONS.indexOf(action) >= 0) {
+      console.warn('[fetchData] "' + action + '" は書込系アクションです。postData を使用してください (GET 経路では unknown action になります)。');
+    } else if (window.__READ_ALLOWLIST.indexOf(action) < 0 && window.__MUTATION_HINT_RE.test(action)) {
+      console.warn('[fetchData] "' + action + '" は書込系の可能性があります。読取専用でなければ postData を検討してください。');
+    }
+    if (window.CONFIG.USE_MOCK) {
+      await new Promise((r) => setTimeout(r, 50));
+      const data = window.MOCK ? window.MOCK[action] : null;
+      if (data === undefined) {
+        console.warn(`[mock] no data for action: ${action}`);
+      }
+      return data;
+    }
+
+    if (!window.CONFIG.GAS_API_URL) {
+      throw new Error('CONFIG.GAS_API_URL is not configured');
+    }
+
+    // ===== キャッシュチェック (STALE-WHILE-REVALIDATE) =====
+    const key = _cacheKey(action, params);
+    const cached = window._dataCache.get(key);
+    if (cached) {
+      const fresh = cached.expiresAt > Date.now();
+      if (fresh) {
+        return cached.data;                  // (A) fresh ヒット → 従来通り即返し
+      }
+      // (B) stale ヒット: 即返し + 裏で revalidate (購読者は到着時に再描画)。
+      //     opts.swr === false で従来の「期限切れは待つ」挙動に戻せる (退避口)。
+      if (opts.swr !== false) {
+        _revalidate(action, params, key).catch(function () {});  // fire-and-forget
+        return cached.data;                  // スピナー無し・ネットワーク待ち無し
+      }
+    }
+
+    // (C) cold miss (キャッシュ皆無): ネットワークを待つ唯一の経路 (= 本物の初回ロード)
+    return _revalidate(action, params, key);
   };
 
   /**
@@ -2906,6 +3298,375 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
 
     return json.data;
   };
+
+  // ============================================================================
+  // 永続キャッシュ (リロードを跨いでも _dataCache を維持し、 リロード後スピナーを消す)
+  // ============================================================================
+  // 保存先: localStorage キー 'connecta.cache.v1.<memberId>' (memberId 別 → identity 漏れ防止)。
+  // 書込: debounced。 ハイドレート時は全 entry を stale 扱い → SWR が即返し + 裏で revalidate。
+  const CACHE_PERSIST_PREFIX = 'connecta.cache.v1.';
+  const CACHE_PERSIST_VERSION = 1;
+  const CACHE_MAX_ENTRY_BYTES = 256 * 1024;     // 1 entry 上限 (これを超える巨大 entry は永続化しない)
+  // 全体上限 (localStorage クォータ保護)。 サイズ計測は ser.length (UTF-16 code unit) で行うため、
+  // 日本語主体の payload では実バイト (UTF-8/UTF-16 記憶域) を過小評価する。 5MB クォータに対し
+  // 余裕を取るため 2MB に設定 (最悪でも setItem の try/catch でクォータ超過を吸収する)。
+  const CACHE_MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+  const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;  // ハイドレート時、 これより古い entry は破棄
+  // 永続化しない action (機微・揮発性)。 前方一致で判定。
+  // spec §6: 機微な単一レコード系 (決済・個人 PII・HR・保護者同意) は localStorage に at-rest 保存しない。
+  // memberId 別キー + ログアウト消去で cross-user read 漏れは無いが、 同一端末での at-rest 露出を避ける。
+  // 低リスクな一覧/ロスター系 (listMembers/getMembersBundle 等) は SWR の主目的なので保持する。
+  const CACHE_PERSIST_DENY = [
+    'whoami', 'authenticate', 'getChangeFeed', 'getUnreadNotificationCount',
+    // 決済・財務
+    'listPayments', 'listPaymentLinks', 'getRegistrationById', 'createPaymentLink',
+    // 個人 PII 単一レコード / HR / 募集応募者詳細 / 保護者同意 / 1on1
+    'getMemberDetail', 'getMemberActivityStatus', 'getRecruitDetailBundle', 'getRecruitConsoleBundle',
+    'getRecruitMessageDraft', 'getSurveyHrSummary', 'getGuardianConsentForm',
+    'admin.getInquiryDetail', 'listOneOnOnes',
+  ];
+
+  function _persistKeyForMember() {
+    let mid = '';
+    try { mid = (window.getStoredMemberId && window.getStoredMemberId()) || ''; } catch (e) {}
+    return mid ? (CACHE_PERSIST_PREFIX + mid) : '';
+  }
+  function _shouldPersistKey(key) {
+    // key 形状: "<mid>|<action>:<paramsJson>"。 action を取り出して deny 判定。
+    const afterPipe = key.indexOf('|') >= 0 ? key.slice(key.indexOf('|') + 1) : key;
+    for (let i = 0; i < CACHE_PERSIST_DENY.length; i++) {
+      if (afterPipe.indexOf(CACHE_PERSIST_DENY[i]) === 0) return false;
+    }
+    return true;
+  }
+
+  let _persistTimer = null;
+  function _persistCacheSoon() {
+    if (_persistTimer) return;          // debounce: 既に予約済みなら何もしない
+    _persistTimer = setTimeout(function () {
+      _persistTimer = null;
+      try { _persistCacheNow(); } catch (e) {}
+    }, 1000);
+  }
+  function _persistCacheNow() {
+    const storeKey = _persistKeyForMember();
+    if (!storeKey) return;              // 未ログイン → 永続化しない
+    let total = 0;
+    const out = {};
+    // MRU 優先: fetchedAt 新しい順に詰めて total 上限内に収める
+    const entries = [];
+    window._dataCache.forEach(function (entry, key) {
+      if (!entry || !_shouldPersistKey(key)) return;
+      entries.push([key, entry]);
+    });
+    entries.sort(function (a, b) { return (b[1].fetchedAt || 0) - (a[1].fetchedAt || 0); });
+    for (let i = 0; i < entries.length; i++) {
+      const key = entries[i][0], entry = entries[i][1];
+      let ser;
+      try { ser = JSON.stringify({ d: entry.data, e: entry.expiresAt, f: entry.fetchedAt }); } catch (e) { continue; }
+      const bytes = ser.length;
+      if (bytes > CACHE_MAX_ENTRY_BYTES) continue;     // 巨大 entry はスキップ
+      if (total + bytes > CACHE_MAX_TOTAL_BYTES) break; // 全体上限到達 → 以降は捨てる
+      out[key] = { d: entry.data, e: entry.expiresAt, f: entry.fetchedAt };
+      total += bytes;
+    }
+    try {
+      localStorage.setItem(storeKey, JSON.stringify({ v: CACHE_PERSIST_VERSION, t: Date.now(), m: out }));
+    } catch (e) {
+      // クォータ超過等 → 永続化を諦める (メモリキャッシュは生きている)
+      try { localStorage.removeItem(storeKey); } catch (e2) {}
+    }
+  }
+  window._persistCacheSoon = _persistCacheSoon;
+  window._persistCacheNow = _persistCacheNow;
+
+  // ハイドレート: boot 時に呼ぶ。 永続データを _dataCache へ載せる。
+  //   - 全 entry を stale 扱い (expiresAt を過去に) → SWR が即返し + 裏 revalidate。
+  //   - CACHE_MAX_AGE_MS より古い / バージョン不一致は破棄。
+  //   - memberId 別キーなので別 identity のデータは決して読まない。
+  window.hydrateCacheFromStorage = function () {
+    const storeKey = _persistKeyForMember();
+    if (!storeKey) return 0;
+    let raw;
+    try { raw = localStorage.getItem(storeKey); } catch (e) { return 0; }
+    if (!raw) return 0;
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { try { localStorage.removeItem(storeKey); } catch (e2) {} return 0; }
+    if (!parsed || parsed.v !== CACHE_PERSIST_VERSION || !parsed.m) {
+      try { localStorage.removeItem(storeKey); } catch (e) {}
+      return 0;
+    }
+    if (parsed.t && (Date.now() - parsed.t) > CACHE_MAX_AGE_MS) {
+      try { localStorage.removeItem(storeKey); } catch (e) {}
+      return 0;
+    }
+    let n = 0;
+    const stalePast = Date.now() - 1;   // 過去 → 必ず stale 扱いにして revalidate を促す
+    Object.keys(parsed.m).forEach(function (key) {
+      // 既にメモリ上に新しい entry があれば上書きしない
+      if (window._dataCache.has(key)) return;
+      const e = parsed.m[key];
+      if (!e || typeof e.d === 'undefined') return;
+      window._dataCache.set(key, { data: e.d, expiresAt: stalePast, fetchedAt: e.f || 0 });
+      n++;
+    });
+    return n;
+  };
+
+  // ログアウト / 認証切れ時に呼ぶ: 永続キャッシュも消す (identity 漏れ防止)。
+  //   引数 mid を渡せばその memberId のキーを、 省略時は現在の memberId のキーを消す。
+  //   さらに 'connecta.cache.v1.' プレフィックスの全キーを掃除して取りこぼしを無くす。
+  window.clearPersistentCache = function (mid) {
+    try {
+      if (mid) { localStorage.removeItem(CACHE_PERSIST_PREFIX + mid); }
+      const cur = _persistKeyForMember();
+      if (cur) localStorage.removeItem(cur);
+      // プレフィックス一致を全掃除 (別 identity の残骸も消す)
+      const toRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.indexOf(CACHE_PERSIST_PREFIX) === 0) toRemove.push(k);
+      }
+      toRemove.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    } catch (e) {}
+  };
+
+  // ============================================================================
+  // warmCache — ログイン / boot 直後に主要データセットを並列プリフェッチ (fire-and-forget)
+  // ============================================================================
+  window.warmCache = function () {
+    let mid = '';
+    try { mid = (window.getStoredMemberId && window.getStoredMemberId()) || ''; } catch (e) {}
+    const sets = [
+      ['getMembersBundle', {}],
+      ['listScopedDepartments', {}],
+      ['getDashboard', {}],
+      ['getChangeFeed', {}],
+      ['listEvents', {}],
+    ];
+    if (mid) sets.push(['getMemberDetail', { memberId: mid }]);
+    sets.forEach(function (pair) {
+      try { window.fetchData(pair[0], pair[1]).catch(function () {}); } catch (e) {}
+    });
+  };
+
+  // ============================================================================
+  // optimisticMutate — 募集管理 call() パターンの一般化
+  // ============================================================================
+  // _cacheApi: _dataCache の list 系 entry を直接編集するヘルパ群。 編集後に _notifyUpdated。
+  function _entryFor(action, params) {
+    const key = _cacheKey(action, params);
+    return { key: key, entry: window._dataCache.get(key) };
+  }
+  function _writeList(action, params, arr) {
+    const key = _cacheKey(action, params);
+    const prev = window._dataCache.get(key);
+    const now = Date.now();
+    window._dataCache.set(key, {
+      data: arr,
+      // 楽観値は常に即 stale 扱い (expiresAt を過去に) → 次回 fetchData で必ず裏 revalidate される。
+      // prev.expiresAt (未来) を継ぐと楽観値が fresh 扱いになり revalidate されず stale-after-write になる。
+      expiresAt: now - 1,
+      fetchedAt: (prev && prev.fetchedAt) || now,
+    });
+    _notifyUpdated(key);
+  }
+  const _cacheApi = {
+    getList: function (action, params) {
+      const e = window._dataCache.get(_cacheKey(action, params));
+      return e ? e.data : undefined;
+    },
+    setList: function (action, params, arr) { _writeList(action, params, arr); },
+    upsertItem: function (action, params, item, idFn) {
+      idFn = idFn || function (x) { return x && (x.id != null ? x.id : x._id); };
+      const cur = _cacheApi.getList(action, params);
+      if (!Array.isArray(cur)) return;           // list がキャッシュに無ければ何もしない (cold)
+      const id = idFn(item);
+      let found = false;
+      const next = cur.map(function (x) { if (idFn(x) === id) { found = true; return item; } return x; });
+      if (!found) next.unshift(item);
+      _writeList(action, params, next);
+    },
+    removeItem: function (action, params, id, idFn) {
+      idFn = idFn || function (x) { return x && (x.id != null ? x.id : x._id); };
+      const cur = _cacheApi.getList(action, params);
+      if (!Array.isArray(cur)) return;
+      _writeList(action, params, cur.filter(function (x) { return idFn(x) !== id; }));
+    },
+    patchEntry: function (action, params, patchFn) {
+      // list 以外 (bundle / get* 等) の data を差し替える汎用フック
+      const key = _cacheKey(action, params);
+      const prev = window._dataCache.get(key);
+      if (!prev) return;
+      let nextData;
+      try { nextData = patchFn(prev.data); } catch (e) { return; }
+      if (typeof nextData === 'undefined') return;
+      window._dataCache.set(key, { data: nextData, expiresAt: prev.expiresAt, fetchedAt: prev.fetchedAt });
+      _notifyUpdated(key);
+    },
+  };
+  window._cacheApi = _cacheApi;
+
+  // touchedKeys: [{action, params}] — patch が触る entry。 rollback のスナップショット対象。
+  function _snapshotCache(touchedKeys) {
+    const snap = [];
+    (touchedKeys || []).forEach(function (k) {
+      const key = _cacheKey(k.action, k.params);
+      const e = window._dataCache.get(key);
+      // 浅いクローンで十分 (entry オブジェクトを差し替えるため)
+      snap.push({ key: key, had: window._dataCache.has(key), entry: e ? { data: e.data, expiresAt: e.expiresAt, fetchedAt: e.fetchedAt } : null });
+    });
+    return snap;
+  }
+  function _restoreCache(snapshot) {
+    (snapshot || []).forEach(function (s) {
+      if (s.had && s.entry) { window._dataCache.set(s.key, s.entry); }
+      else { window._dataCache.delete(s.key); }
+      _notifyUpdated(s.key);
+    });
+  }
+
+  /**
+   * optimisticMutate(action, payload, opts)
+   *   opts.patch(cacheApi)  — 同期的に _dataCache を編集 (upsertItem/removeItem/setList/patchEntry)。 編集分は即購読者へ通知。
+   *     注: patch は純粋であること。 prev.data を in-place 変更すると _snapshotCache の浅いクローンが
+   *         汚染されロールバックが効かなくなる (_cacheApi の upsert/remove は新配列を作るので安全)。
+   *   opts.touchedKeys      — [{action, params}] patch が触る entry (rollback スナップショット & 成功時 revalidate 対象)。
+   *     patch が編集した key は必ず touchedKeys に含めること (含めないと失敗時にロールバックされない)。
+   *   opts.okMsg / opts.errMsg — トースト文言。
+   *   opts.revalidate !== false なら成功時に touchedKeys を裏 revalidate (既定 true)。
+   * 返り値: サーバ data に解決する Promise。 失敗時は patch をロールバックして再 throw。
+   * 募集管理 call() と同型: 即時反映 → 裏で postData → 成功は信頼 (revalidate)、 失敗はロールバック + トースト。
+   */
+  window.optimisticMutate = function (action, payload, opts) {
+    opts = opts || {};
+    const touched = opts.touchedKeys || [];
+    const snapshot = _snapshotCache(touched);
+    try { if (opts.patch) opts.patch(_cacheApi); } catch (e) {}
+    if (opts.okMsg && window.toast) window.toast.success(opts.okMsg);
+    return window.postData(action, payload || {})
+      .then(function (data) {
+        // 成功: postData 内で _autoInvalidate 済。 触れた list は裏で revalidate して真値へ収束。
+        if (opts.revalidate !== false) {
+          touched.forEach(function (k) {
+            try {
+              const key = _cacheKey(k.action, k.params);
+              // invalidate で消えていなければ revalidate、 消えていれば次回 fetchData が cold fetch
+              if (window._dataCache.has(key)) window._revalidate(k.action, k.params, key).catch(function () {});
+            } catch (e) {}
+          });
+        }
+        if (typeof opts.onSuccess === 'function') { try { opts.onSuccess(data); } catch (e) {} }
+        return data;
+      })
+      .catch(function (e) {
+        _restoreCache(snapshot);   // ROLLBACK: 楽観値を元へ戻し購読者へ通知
+        // 募集管理 call() と同型に「失敗時も真値を取り直す」: サーバ側はコミット済なのに
+        // クライアントがエラーを観測した (ネットワーク瞬断等) 場合、 スナップショットへ戻すだけだと
+        // 古い値が TTL まで固定されてしまう。 触れた key を invalidate して真値へ収束させる。
+        touched.forEach(function (k) {
+          try { window.invalidateCache(k.action); } catch (e2) {}
+        });
+        if (window.toast) window.toast.error((opts.errMsg || (e && e.message) || String(e)) + '（元に戻しました）');
+        if (typeof opts.onError === 'function') { try { opts.onError(e); } catch (e2) {} }
+        throw e;
+      });
+  };
+
+  // ============================================================================
+  // useLiveData — SWR 対応の React フック (キャッシュを同期読みし、 更新で再描画)
+  // ============================================================================
+  // 返り値 {data, loading, stale, refetch}。
+  //   - キャッシュが在れば loading=false で初回描画 (= マイクロタスクのスピナー点滅を排除)。
+  //   - fresh データ到着 / 楽観的 patch を subscribeData で受けて再描画。
+  //   - cold miss のときだけ loading=true (= 本物の初回ロードでのみスピナー)。
+  // React は CDN ロード後にしか存在しないため、 参照は呼び出し時 (描画時) に遅延解決する。
+  window.useLiveData = function useLiveData(action, params, opts) {
+    const R = window.React;
+    opts = opts || {};
+    const key = window._cacheKey(action, params);
+    const readEntry = function () { return window._dataCache.get(key); };
+    const initial = readEntry();
+    const stateRef = R.useState(function () {
+      return {
+        data: initial ? initial.data : (typeof opts.initialData !== 'undefined' ? opts.initialData : null),
+        loading: !initial,
+        stale: initial ? (initial.expiresAt <= Date.now()) : false,
+      };
+    });
+    const st = stateRef[0], setSt = stateRef[1];
+
+    const refetch = R.useCallback(function () {
+      try { window.invalidateCache && window.invalidateCache(action); } catch (e) {}
+      return window.fetchData(action, params).catch(function () {});
+    }, [key]);
+
+    R.useEffect(function () {
+      let alive = true;
+      // mount 時にキャッシュを再同期 (key が変わった直後の取りこぼし防止)
+      const e0 = readEntry();
+      if (e0) {
+        setSt({ data: e0.data, loading: false, stale: e0.expiresAt <= Date.now() });
+      } else {
+        setSt(function (prev) { return { data: prev.data, loading: true, stale: prev.stale }; });
+      }
+      const unsub = window.subscribeData(action, params, function (entry) {
+        if (!alive) return;
+        if (!entry) {
+          // キャッシュが invalidate された (書込後など)。 古い data は保持しつつ stale 表示にし、 真値を取り直す。
+          setSt(function (prev) { return { data: prev.data, loading: false, stale: true }; });
+          window.fetchData(action, params).then(function (d) {
+            if (alive) setSt(function (prev) { return { data: d, loading: false, stale: false }; });
+          }).catch(function () {});
+          return;
+        }
+        setSt({ data: entry.data, loading: false, stale: entry.expiresAt <= Date.now() });
+      });
+      window.fetchData(action, params)
+        .then(function (d) { if (alive) setSt(function (prev) { return { data: d, loading: false, stale: prev.stale }; }); })
+        .catch(function () { if (alive) setSt(function (prev) { return { data: prev.data, loading: false, stale: prev.stale }; }); });
+      return function () { alive = false; unsub(); };
+    }, [key]);
+
+    return { data: st.data, loading: st.loading, stale: st.stale, refetch: refetch };
+  };
+
+  // ============================================================================
+  // Skeleton — 初回コールドロード用の軽量プレースホルダ (任意採用)
+  // ============================================================================
+  window.Skeleton = function Skeleton(props) {
+    const R = window.React;
+    props = props || {};
+    const rows = props.rows || 3;
+    const h = props.height || 16;
+    const items = [];
+    for (let i = 0; i < rows; i++) {
+      items.push(R.createElement('div', {
+        key: i,
+        className: 'skeleton-bar',
+        style: {
+          height: h,
+          borderRadius: 6,
+          marginBottom: 10,
+          width: (i === rows - 1 ? '60%' : '100%'),
+          background: 'linear-gradient(90deg, var(--line2,#eee) 25%, var(--line,#f5f5f5) 37%, var(--line2,#eee) 63%)',
+          backgroundSize: '400% 100%',
+          animation: 'connecta-skeleton 1.4s ease infinite',
+        },
+      }));
+    }
+    return R.createElement('div', { className: 'skeleton', style: Object.assign({ padding: props.pad != null ? props.pad : 0 }, props.style || {}) }, items);
+  };
+  // keyframes を一度だけ注入 (CSS 不在でも動くよう自前で用意)
+  (function () {
+    try {
+      if (document.getElementById('connecta-skeleton-kf')) return;
+      const s = document.createElement('style');
+      s.id = 'connecta-skeleton-kf';
+      s.textContent = '@keyframes connecta-skeleton{0%{background-position:100% 50%}100%{background-position:0 50%}}';
+      (document.head || document.documentElement).appendChild(s);
+    } catch (e) {}
+  })();
 </script>
 
 <!-- ============================================================
@@ -2960,6 +3721,98 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
   }
   window.addEventListener('hashchange', __syncInboxSub__);
   document.addEventListener('DOMContentLoaded', __syncInboxSub__);
+
+  // (ITEM1) 部署 / チーム アコーディオン:
+  //   - caret クリックで開閉、状態は localStorage に保存 (既定は閉)
+  //   - 初回展開時に listScopedDepartments を一度だけ取得し各部署ページへ直リンクを生成
+  //   - 各行: 部署ページ (#dept?dept=...) + 小さな「議事録」リンク (&tab=minutes)
+  //   - fetch 失敗時も静かに無効化 (ナビは壊さない)
+  (function () {
+    var LS_KEY = 'cc_dept_nav_open';
+    var loaded = false, loading = false;
+    function sub()  { return document.getElementById('dept-sub'); }
+    function caret(){ return document.getElementById('dept-caret'); }
+    function isOpen(){ try { return localStorage.getItem(LS_KEY) === '1'; } catch (e) { return false; } }
+    function setOpen(v){ try { localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) {} }
+
+    function renderRows(arr) {
+      var box = sub(); if (!box) return;
+      var depts = (arr || []).filter(function (x) {
+        return x && x.inMaster !== false && (x.label || x.key);
+      });
+      if (!depts.length) {
+        box.innerHTML = '<div class="nav-sub-empty">部署がありません</div>';
+        return;
+      }
+      box.innerHTML = '';
+      depts.forEach(function (x) {
+        var name = String(x.label || x.key);
+        var enc  = encodeURIComponent(name);
+        var row = document.createElement('div');
+        row.className = 'nav-sub-row';
+        var a = document.createElement('a');
+        a.href = '#dept?dept=' + enc;
+        a.textContent = name;
+        a.title = name;
+        var mn = document.createElement('a');
+        mn.href = '#dept?dept=' + enc + '&tab=minutes';
+        mn.className = 'nav-sub-min';
+        mn.textContent = '議事録';
+        mn.title = name + ' の議事録';
+        row.appendChild(a);
+        row.appendChild(mn);
+        box.appendChild(row);
+      });
+    }
+
+    function ensureLoaded() {
+      if (loaded || loading) return;
+      if (typeof window.fetchData !== 'function') return;
+      loading = true;
+      var box = sub();
+      if (box && !box.innerHTML) box.innerHTML = '<div class="nav-sub-empty">読み込み中…</div>';
+      window.fetchData('listScopedDepartments').then(function (d) {
+        var arr = (d && Array.isArray(d.departments)) ? d.departments : (Array.isArray(d) ? d : []);
+        loaded = true; loading = false;
+        renderRows(arr);
+      }).catch(function () {
+        loading = false;
+        var b = sub();
+        if (b) b.innerHTML = '<div class="nav-sub-empty">読み込みに失敗しました</div>';
+      });
+    }
+
+    function applyOpen(open) {
+      var box = sub(), c = caret();
+      if (box) box.classList.toggle('open', open);
+      if (c)   c.classList.toggle('open', open);
+      if (open) ensureLoaded();
+    }
+
+    function toggle(e) {
+      // caret は #departments アンカー内にあるため、ナビ遷移を抑止して開閉のみ行う
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      var next = !isOpen();
+      setOpen(next);
+      applyOpen(next);
+    }
+
+    function init() {
+      var c = caret();
+      if (c) {
+        c.addEventListener('click', toggle);
+        c.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { toggle(e); }
+        });
+      }
+      applyOpen(isOpen());
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  })();
 
   // (P7a) 件数バッジの常時最新化: 問い合わせペジ以外に滞在中も60秒間隔で軽量取得。
   //   - 超軽量API (admin.listInquiriesLite: 3フィルドのみ) を使用
@@ -3038,6 +3891,191 @@ html.public-mode .main{width:100% !important;min-width:0 !important}
     }
     window.addEventListener('load', function(){ setTimeout(update, 1800); setTimeout(update, 5000); });
     document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') update(); });
+  })();
+
+  // ==========================================================================
+  // (変更検知通知) グローバル変更フィード ポーラー + バナー
+  //   - 60秒ごと + ウィンドウ focus(デバウンス) で getChangeFeed を取得。
+  //   - 5分キャッシュを回避するため window.fetchData は使わず直接 fetch する
+  //     (キャッシュ汚染なし。 他アクションの 5分キャッシュには一切触れない)。
+  //   - lastSeen(ISO) + 既読(閉じた)ID を localStorage に保持。
+  //   - 新着があれば固定の Liquid Glass バナーを表示: 詳細 / すべて更新 / 閉じる。
+  // ==========================================================================
+  (function(){
+    var LS_SEEN = 'connecta.changefeed.lastSeen';
+    var LS_DISMISSED = 'connecta.changefeed.dismissed';   // JSON 配列 (item.id)
+    var POLL_MS = 60000;
+    var lastFocusFetch = 0;
+    var inflight = false;
+    var bannerEl = null;
+    var lastItems = [];
+
+    function getSeen(){ try { return localStorage.getItem(LS_SEEN) || ''; } catch(e){ return ''; } }
+    function setSeen(iso){ try { if(iso) localStorage.setItem(LS_SEEN, iso); } catch(e){} }
+    function getDismissed(){ try { return JSON.parse(localStorage.getItem(LS_DISMISSED) || '[]'); } catch(e){ return []; } }
+    function setDismissed(arr){ try { localStorage.setItem(LS_DISMISSED, JSON.stringify(arr.slice(-200))); } catch(e){} }
+
+    function loggedIn(){
+      try { return !!(window.getStoredMemberId && window.getStoredMemberId() && window.getStoredToken && window.getStoredToken()); }
+      catch(e){ return false; }
+    }
+
+    // 5分キャッシュをバイパスして直接 fetch (fetchData の URL 構築を踏襲)。
+    function fetchChangeFeed(since){
+      var cfg = window.CONFIG || {};
+      if (cfg.USE_MOCK) return Promise.resolve({ items: [], serverTime: new Date().toISOString() });
+      if (!cfg.GAS_API_URL) return Promise.reject(new Error('no api url'));
+      var memberId = (window.getStoredMemberId && window.getStoredMemberId()) || '';
+      var token = (window.getStoredToken && window.getStoredToken()) || '';
+      var params = { token: token };
+      if (since) params.since = since;
+      var url = cfg.GAS_API_URL +
+        '?action=getChangeFeed' +
+        '&memberId=' + encodeURIComponent(memberId) +
+        '&params=' + encodeURIComponent(JSON.stringify(params));
+      return fetch(url, { method: 'GET' }).then(function(res){
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }).then(function(json){
+        if (!json || !json.ok) throw new Error((json && json.error) || 'change feed error');
+        return json.data || { items: [], serverTime: new Date().toISOString() };
+      });
+    }
+
+    function removeBanner(){ if (bannerEl && bannerEl.parentNode) bannerEl.parentNode.removeChild(bannerEl); bannerEl = null; }
+
+    // 「すべて更新」: 全キャッシュをクリアし、 現在ビューを再読込。
+    function bulkRefresh(serverTime){
+      setSeen(serverTime || new Date().toISOString());
+      removeBanner();
+      try { if (window.invalidateCache) window.invalidateCache(); } catch(e){}
+      // 明示的な「すべて更新」は永続キャッシュも消してリロードを真のコールドに (= 古い値を見せない)
+      try { if (window.clearPersistentCache) window.clearPersistentCache(); } catch(e){}
+      try { if (window.toast) window.toast.info('最新の情報に更新しています…'); } catch(e){}
+      // 最も確実な再読込 (現在のハッシュ/ビューを保持して全データ再取得)。
+      location.reload();
+    }
+
+    function renderBanner(items, serverTime){
+      removeBanner();
+      if (!items || !items.length) return;
+      var top = items.slice(0, 3);
+      var el = document.createElement('div');
+      el.setAttribute('role', 'status');
+      el.style.cssText = [
+        'position:fixed','left:50%','transform:translateX(-50%)','bottom:18px','z-index:9999',
+        'max-width:min(92vw,520px)','width:max-content','box-sizing:border-box',
+        'padding:12px 14px','border-radius:16px',
+        'background:var(--glass-bg-strong,rgba(255,255,255,0.92))',
+        'border:1px solid var(--glass-border,rgba(255,255,255,0.85))',
+        'box-shadow:var(--glass-shadow-lg,0 24px 60px -20px rgba(0,63,115,0.28))',
+        '-webkit-backdrop-filter:blur(var(--glass-blur,18px))','backdrop-filter:blur(var(--glass-blur,18px))',
+        'font-family:inherit','color:var(--text,#0a2235)','animation:cfSlideUp .25s ease'
+      ].join(';');
+
+      var title = document.createElement('div');
+      title.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;';
+      title.textContent = '🔔 新しい変更があります（' + items.length + '件）';
+      el.appendChild(title);
+
+      var list = document.createElement('div');
+      list.style.cssText = 'font-size:12.5px;line-height:1.5;opacity:.92;margin-bottom:10px;';
+      top.forEach(function(it){
+        var row = document.createElement('div');
+        row.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;';
+        row.textContent = '・' + (it.summary || '');
+        list.appendChild(row);
+      });
+      if (items.length > top.length) {
+        var more = document.createElement('div');
+        more.style.cssText = 'opacity:.7;';
+        more.textContent = '…ほか' + (items.length - top.length) + '件';
+        list.appendChild(more);
+      }
+      el.appendChild(list);
+
+      var actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
+      function mkBtn(label, primary){
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.style.cssText = [
+          'cursor:pointer','border-radius:10px','padding:7px 12px','font-size:12.5px','font-weight:600',
+          'border:1px solid ' + (primary ? 'transparent' : 'var(--glass-hair,rgba(0,91,172,0.18))'),
+          'background:' + (primary ? 'var(--accent,#005bac)' : 'rgba(255,255,255,0.55)'),
+          'color:' + (primary ? '#fff' : 'var(--text,#0a2235)')
+        ].join(';');
+        return b;
+      }
+
+      // 詳細: 先頭アイテムの link へ遷移。
+      var detailBtn = mkBtn('詳細', true);
+      detailBtn.onclick = function(){
+        var link = (top[0] && top[0].link) || '#';
+        // 既読扱い: lastSeen を serverTime まで進め、 表示中アイテムを dismissed に追加。
+        setSeen(serverTime || new Date().toISOString());
+        var dis = getDismissed();
+        items.forEach(function(it){ if (dis.indexOf(it.id) < 0) dis.push(it.id); });
+        setDismissed(dis);
+        removeBanner();
+        try { window.location.hash = String(link).replace(/^#/, ''); } catch(e){}
+      };
+      actions.appendChild(detailBtn);
+
+      // すべて更新: キャッシュ全クリア + リロード。
+      var refreshBtn = mkBtn('すべて更新', false);
+      refreshBtn.onclick = function(){ bulkRefresh(serverTime); };
+      actions.appendChild(refreshBtn);
+
+      // 閉じる: 表示中アイテムを既読化し lastSeen を進める (再表示しない)。
+      var closeBtn = mkBtn('閉じる', false);
+      closeBtn.onclick = function(){
+        setSeen(serverTime || new Date().toISOString());
+        var dis = getDismissed();
+        items.forEach(function(it){ if (dis.indexOf(it.id) < 0) dis.push(it.id); });
+        setDismissed(dis);
+        removeBanner();
+      };
+      actions.appendChild(closeBtn);
+
+      el.appendChild(actions);
+      document.body.appendChild(el);
+      bannerEl = el;
+    }
+
+    function poll(){
+      if (inflight) return;
+      if (!loggedIn()) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      inflight = true;
+      var seen = getSeen();
+      fetchChangeFeed(seen).then(function(data){
+        var serverTime = (data && data.serverTime) || new Date().toISOString();
+        // 初回 (lastSeen 未設定) は基準だけ確立し、 バナーは出さない (既存データで埋もれさせない)。
+        if (!seen) { setSeen(serverTime); inflight = false; return; }
+        var dismissed = getDismissed();
+        var items = ((data && data.items) || []).filter(function(it){ return dismissed.indexOf(it.id) < 0; });
+        lastItems = items;
+        if (items.length) renderBanner(items, serverTime);
+        inflight = false;
+      }).catch(function(){ inflight = false; });
+    }
+
+    // CSS keyframe (一度だけ注入)。
+    try {
+      var st = document.createElement('style');
+      st.textContent = '@keyframes cfSlideUp{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}';
+      document.head.appendChild(st);
+    } catch(e){}
+
+    window.__changeFeedPoll__ = poll;   // デバッグ/手動トリガ用
+    setInterval(poll, POLL_MS);
+    window.addEventListener('load', function(){ setTimeout(poll, 4000); });
+    // focus / 可視化復帰時 (5秒デバウンス)。
+    function onFocus(){ var now = Date.now(); if (now - lastFocusFetch < 5000) return; lastFocusFetch = now; poll(); }
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') onFocus(); });
   })();
 </script>
 
@@ -3846,6 +4884,200 @@ window.ErrorBanner = ErrorBanner;
 window.ToastContainer = ToastContainer;
 window.ConfirmDialogHost = ConfirmDialogHost;
 
+// ==================== GLOBAL RECORDING (global-recording) ====================
+// 録音をページのライフサイクルから切り離す window レベルのシングルトン。
+// MinutesUploadView / RecruitInterviewUpload に重複していた録音ロジック
+// (pickMime / start / pause / resume / stop / fmtTime) をここへ一本化。
+// React 非依存の素 JS。pub/sub で購読者 (ヘッダーウィジェット・各フォーム) へ通知。
+// 同時に 1 録音のみ。停止後 Blob はコントローラが保持し、起点フォームが takeBlob() で取得して投稿する。
+window.RecordingController = (function () {
+  var mr = null;            // MediaRecorder
+  var stream = null;        // MediaStream (停止時にトラック release)
+  var chunks = [];
+  var mimeType = '';
+  var startedAt = 0;        // performance.now() ベース
+  var accumMs = 0;          // 一時停止をまたいだ累積ミリ秒
+  var state = 'idle';       // idle | recording | paused | stopping | done | error
+  var blob = null;          // 停止後の最終 Blob
+  var meta = null;          // {context:'minutes'|'recruit', dept, appId, stage, label, returnHash}
+  var listeners = [];
+  var tick = null;          // 表示更新用 setInterval
+
+  function emit() {
+    var s = getState();
+    for (var i = 0; i < listeners.length; i++) {
+      try { listeners[i](s); } catch (e) {}
+    }
+  }
+  function clearTick() { if (tick) { clearInterval(tick); tick = null; } }
+  function elapsedMs() {
+    if (state === 'recording') return accumMs + (performance.now() - startedAt);
+    return accumMs;
+  }
+  function getState() {
+    return { state: state, elapsedMs: elapsedMs(), mimeType: mimeType,
+             meta: meta, hasBlob: !!blob, blobSize: blob ? blob.size : 0 };
+  }
+  function pickMime() {
+    if (typeof MediaRecorder === 'undefined') return null;
+    var cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+    for (var i = 0; i < cands.length; i++) {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cands[i])) return cands[i];
+    }
+    return '';
+  }
+  function releaseMic() {
+    if (stream) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} stream = null; }
+  }
+  // iOS PWA でバックグラウンド化等によりレコーダが落ちていたら done 扱いで Blob を確定 (取りこぼし防止)
+  function reconcile() {
+    if ((state === 'recording' || state === 'paused') && mr && mr.state === 'inactive') {
+      if (!blob && chunks.length) { try { blob = new Blob(chunks, { type: mimeType }); } catch (e) {} }
+      releaseMic(); clearTick(); state = 'done'; emit();
+    }
+  }
+  try { document.addEventListener('visibilitychange', reconcile); } catch (e) {}
+
+  return {
+    isSupported: function () {
+      return (typeof MediaRecorder !== 'undefined') &&
+             !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    },
+    getState: getState,
+    pickMime: pickMime,
+    // 経過 ms を mm:ss / h:mm:ss 文字列へ
+    fmtElapsed: function (ms) {
+      var s = Math.max(0, Math.floor((ms || 0) / 1000));
+      var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+      var p = function (n) { return String(n).padStart(2, '0'); };
+      return (h > 0 ? p(h) + ':' : '') + p(m) + ':' + p(sec);
+    },
+    subscribe: function (fn) {
+      listeners.push(fn);
+      try { fn(getState()); } catch (e) {}
+      return function () { listeners = listeners.filter(function (x) { return x !== fn; }); };
+    },
+    // start(ctx): 既に録音中/一時停止中なら拒否 (同時に1つだけ)
+    start: function (ctx) {
+      if (state === 'recording' || state === 'paused' || state === 'stopping') {
+        return Promise.reject(new Error('すでに別の録音が進行中です。先に停止してください。'));
+      }
+      var mime = pickMime();
+      if (mime === null) return Promise.reject(new Error('この端末は録音非対応です'));
+      return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+        stream = s;
+        var opt = { audioBitsPerSecond: 16000 };
+        if (mime) opt.mimeType = mime;
+        mr = new MediaRecorder(stream, opt);
+        chunks = []; mimeType = mime || 'audio/webm'; blob = null;
+        meta = ctx || {};
+        mr.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        mr.onstop = function () {
+          try { blob = new Blob(chunks, { type: mimeType }); } catch (e) { blob = null; }
+          releaseMic();
+          state = 'done'; clearTick(); emit();
+        };
+        accumMs = 0; startedAt = performance.now(); state = 'recording';
+        mr.start();
+        clearTick(); tick = setInterval(emit, 1000); emit();
+        return getState();
+      });
+    },
+    pause: function () {
+      if (mr && mr.state === 'recording' && typeof mr.pause === 'function') {
+        mr.pause(); accumMs += performance.now() - startedAt; state = 'paused';
+        clearTick(); emit();
+      }
+    },
+    resume: function () {
+      if (mr && mr.state === 'paused' && typeof mr.resume === 'function') {
+        mr.resume(); startedAt = performance.now(); state = 'recording';
+        clearTick(); tick = setInterval(emit, 1000); emit();
+      }
+    },
+    // -> 'done' は onstop 経由で確定 (非同期)。Blob は takeBlob() で取得
+    stop: function () {
+      if (mr && mr.state !== 'inactive') { state = 'stopping'; clearTick(); try { mr.stop(); } catch (e) {} emit(); }
+    },
+    // 停止後 Blob を取り出す。取り出したら状態を idle に戻す (consume)
+    takeBlob: function () {
+      var b = blob, m = mimeType, mt = meta;
+      blob = null; chunks = []; meta = null; state = 'idle'; mr = null; accumMs = 0; emit();
+      return b ? { blob: b, mimeType: m, meta: mt } : null;
+    },
+    // 録り直し / 破棄: マイク release + 全リセット
+    discard: function () {
+      try { if (mr && mr.state !== 'inactive') mr.stop(); } catch (e) {}
+      releaseMic();
+      mr = null; chunks = []; blob = null; meta = null;
+      state = 'idle'; accumMs = 0; clearTick(); emit();
+    }
+  };
+})();
+
+// (global-recording) 常時マウントされるヘッダー録音インジケータ。
+// App の安定兄弟 (<Comp/> のように nav で差し替わらない) として 1 回だけマウントし、
+// .topbar .tb-right (通知ベルの左) へ ReactDOM.createPortal で描画する。
+// コントローラを購読し、録音中/一時停止中/停止処理中/停止済み(未投稿) のときだけ表示。
+window.RecordingHeaderWidget = function RecordingHeaderWidget() {
+  var ctrl = window.RecordingController;
+  var ref = React.useState(ctrl ? ctrl.getState() : { state: 'idle' });
+  var st = ref[0], setSt = ref[1];
+  React.useEffect(function () {
+    if (!ctrl) return undefined;
+    return ctrl.subscribe(setSt);
+  }, []);
+  // フルリロードで Blob (メモリ常駐) が失われるため、録音中/未投稿のときは離脱を警告
+  React.useEffect(function () {
+    var active = st.state === 'recording' || st.state === 'paused' ||
+                 st.state === 'stopping' || st.state === 'done';
+    if (!active) return undefined;
+    var handler = function (e) { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return function () { window.removeEventListener('beforeunload', handler); };
+  }, [st.state]);
+
+  if (!ctrl || !ctrl.isSupported()) return null;
+  var recording = st.state === 'recording', paused = st.state === 'paused',
+      stopping = st.state === 'stopping', done = st.state === 'done';
+  if (!recording && !paused && !stopping && !done) return null;
+  var host = document.querySelector('.topbar .tb-right');
+  if (!host) return null;
+
+  var label = paused ? '一時停止' : (done ? '録音完了' : (stopping ? '停止中' : '録音中'));
+  var color = paused ? 'var(--ink4, #7a869c)' : '#d33';
+  var ui = React.createElement('div', {
+      className: 'rec-hdr',
+      style: { display: 'flex', alignItems: 'center', gap: 8, marginRight: 8 }
+    },
+    React.createElement('span', { style: {
+        width: 9, height: 9, borderRadius: '50%', flex: '0 0 auto',
+        background: paused ? '#bbb' : '#d33',
+        animation: recording ? 'recPulse 1s infinite' : 'none' } }),
+    React.createElement('span', { style: {
+        fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: color, whiteSpace: 'nowrap' } },
+      React.createElement('span', { className: 'rec-hdr-label-full' }, label + ' '),
+      ctrl.fmtElapsed(st.elapsedMs)),
+    recording && React.createElement('button', { className: 'tb-btn', type: 'button',
+      title: '一時停止', onClick: function () { ctrl.pause(); } }, '❚❚'),
+    paused && React.createElement('button', { className: 'tb-btn', type: 'button',
+      title: '再開', onClick: function () { ctrl.resume(); } }, '●'),
+    (recording || paused) && React.createElement('button', { className: 'tb-btn', type: 'button',
+      title: '停止', onClick: function () { ctrl.stop(); } }, '■'),
+    done && st.meta && st.meta.returnHash && React.createElement('button', { className: 'tb-btn', type: 'button',
+      style: { color: '#d33', fontWeight: 700 },
+      onClick: function () {
+        var h = st.meta.returnHash;
+        window.location.hash = (h && h.charAt(0) === '#') ? h.slice(1) : h;
+      } }, 'この録音を投稿'),
+    done && React.createElement('button', { className: 'tb-btn', type: 'button',
+      title: '破棄', onClick: function () {
+        try { if (window.confirm('この録音を破棄しますか？')) ctrl.discard(); } catch (e) { ctrl.discard(); }
+      } }, '✕')
+  );
+  return ReactDOM.createPortal(ui, host);
+};
+
 // ==================== PAGE: DASHBOARD ====================
 function PageDashboard(){
   // 全テーブルをまとめて取得
@@ -4399,12 +5631,50 @@ const {fmt, yen, clsx, fmtTime, fmtTimeRange, Spark, ChartCanvas, Kpi, QuickAct,
 
 // -------------------- 補助コンポーネント --------------------
 
-function MiniStat({label, value, sub, icon, color}){
+// (Quest Glow / Tier 2) QuestRing — dependency-free SVG stroke-dasharray
+// progress ring. No conic-gradient / @property / color-mix (max browser
+// robustness). Glow scales with value, night-only (CSS in primary <style>).
+// window-exposed below for cross-block use (mirrors window.MiniStat).
+function QuestRing({pct=0,size=64,stroke=7,sub,label,grad="xp"}){
+  const v=Math.max(0,Math.min(100,pct));
+  const r=(size-stroke)/2, C=2*Math.PI*r, off=C*(1-v/100);
+  const a=grad==="mint"?["#12B886","#1E9FBF"]:grad==="grape"?["#6B45E0","#E63B7A"]:["#FF7A1A","#E63B7A"];
+  const gid="qr-"+grad;
+  return (
+    <div className="quest-ring" style={{width:size,height:size,'--p':v}}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <defs><linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={a[0]}/><stop offset="1" stopColor={a[1]}/>
+        </linearGradient></defs>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--ring-track)" strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={`url(#${gid})`} strokeWidth={stroke}
+          strokeLinecap="round" strokeDasharray={C} strokeDashoffset={off}
+          transform={`rotate(-90 ${size/2} ${size/2})`}
+          style={{transition:"stroke-dashoffset .9s var(--ease-out)"}}/>
+      </svg>
+      <div className="quest-ring-cap">
+        <span className="qr-num">{Math.round(v)}<i>%</i></span>
+        {sub && <span className="qr-sub">{sub}</span>}
+      </div>
+      {label && <span className="sr-only">{label} {Math.round(v)}%</span>}
+    </div>
+  );
+}
+
+function MiniStat({label, value, sub, icon, color, pct, pctSub, pctGrad}){
   // (Phase 16.J9) Japan Blue Editorial スタイルに統一
   const isAccent = color === 'coral';
   const isBlue = color === 'indigo' || color === 'violet';
+  // (Quest Glow / Tier 2) optional progress ring — backward-compatible:
+  // omit `pct` (null/undefined) and this renders exactly as before.
+  const hasRing = pct !== undefined && pct !== null && pct !== '';
   return (
     <div className={`jb-stat ${isAccent ? 'jb-stat-accent' : isBlue ? 'jb-stat-blue' : ''}`}>
+      {hasRing && (
+        <div style={{float:'right',marginLeft:10}}>
+          <QuestRing pct={Number(pct)} size={52} stroke={6} sub={pctSub} grad={pctGrad || (isAccent ? 'grape' : 'xp')} label={label} />
+        </div>
+      )}
       <span className="jb-stat-label">{label}</span>
       <span className="jb-stat-value">{value}</span>
       <span className="jb-stat-meta">{sub}</span>
@@ -13072,6 +14342,7 @@ function SessionDayList({ sessions, stats, regs, participantMap, event, onReload
 window.PageEventAdminDetail = PageEventAdminDetail;
 // 他のスクリプトブロックから参照される共有コンポーネント (Phase 6 fix)
 window.MiniStat = MiniStat;
+window.QuestRing = QuestRing;   // (Quest Glow / Tier 2) cross-block availability
 window.EventCard = EventCard;
 window.EventCalendar = EventCalendar;
 window.EventMapEmbed = EventMapEmbed;
@@ -18789,7 +20060,7 @@ function PageMembersAdmin() {
                       <td style={{ fontSize: 12 }}>{m.grade || '—'}</td>
                       <td style={{ fontSize: 12 }}>{residence || '—'}</td>
                       <td><span className={clsx("badge", statusBadgeColor(m))}><span className="badge-dot"></span>{m.status}</span></td>
-                      <td>{(() => { const a = actMap[m.id]; const st = (a && a.current_status) || '在籍中'; if (st === '在籍中') return <span style={{ fontSize: 11, color: 'var(--ink5)' }}>在籍中</span>; const c = (typeof LLA_STATE_COLOR !== 'undefined' && LLA_STATE_COLOR[st]) || 'amber'; return <span className={`badge badge-${c}`}>{st}</span>; })()}</td>
+                      <td>{(() => { const a = actMap[m.id]; const st = (a && a.current_status) || '在籍中'; if (st === '在籍中') return <span style={{ fontSize: 11, color: 'var(--ink5)' }}>在籍中</span>; const c = ((window.LLA_STATE_COLOR || {})[st]) || 'amber'; return <span className={`badge badge-${c}`}>{st}</span>; })()}</td>
                       <td className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{(() => { const a = actMap[m.id]; return (a && a.effective_from) ? String(a.effective_from).slice(0, 10) : '—'; })()}</td>
                       <td style={{ textAlign: 'center' }}>{alertSet[m.id] ? <span title="要フォロー候補あり" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 8, background: 'var(--coral)' }}></span> : ''}</td>
                       <td className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{fmtDate(m.updatedAt)}</td>
@@ -18811,8 +20082,9 @@ window.PageMembersAdmin = PageMembersAdmin;
 
 // ============ メンバー管理: 構成員詳細 (Step1C 後半) ============
 // 構成員 変更申請モーダル (Step1D)
-function MemberChangeRequestModal({ member, depts, onClose, onSubmitted, onDeptsChanged }) {
-  const [type, setType] = useState('department_add');
+function MemberChangeRequestModal({ member, depts, onClose, onSubmitted, onDeptsChanged, initialType }) {
+  // (ITEM4) initialType で初期種別を指定可能 (マイページの退会/退部導線が利用)。既定は従来通り部署追加。
+  const [type, setType] = useState(initialType || 'department_add');
   const [beforeDept, setBeforeDept] = useState('');
   const [afterDept, setAfterDept] = useState('');
   // (FE-10) 役職: 空文字 '' = 現状維持。 department_add/role_change はメンバー既定、 department_change は未指定既定。
@@ -19087,6 +20359,8 @@ function PageMemberDetail() {
   const [ooForm, setOoForm] = useState(null);
   const [ooBusy, setOoBusy] = useState(false);
   const [ooErr, setOoErr] = useState('');
+  const [ooSub, setOoSub] = useState('1on1');   // (oneonone-hr-split) '1on1' | 'hr' サブタブ
+  const [ooShareBusy, setOoShareBusy] = useState('');   // 共有トグル中の logId
   const [weLoaded, setWeLoaded] = useState(false);
   const [weLoading, setWeLoading] = useState(false);
   const [weEvals, setWeEvals] = useState([]);
@@ -19157,6 +20431,7 @@ function PageMemberDetail() {
     setOoBusy(true);
     try {
       const base = { type: ooForm.type, date: ooForm.date, memo: ooForm.memo, minutesUrl: ooForm.minutesUrl, nextAction: ooForm.nextAction, nextDate: ooForm.nextDate };
+      if (ooForm.shareToManager !== undefined) base.shareToManager = !!ooForm.shareToManager;
       const res = ooForm.logId
         ? await window.postData('updateOneOnOne', Object.assign({ logId: ooForm.logId }, base))
         : await window.postData('createOneOnOne', Object.assign({ memberId: member.id }, base));
@@ -19166,12 +20441,25 @@ function PageMemberDetail() {
     finally { setOoBusy(false); }
   }
   async function deleteOo(logId) {
-    if (!window.confirm('この1on1記録を削除しますか？')) return;
+    if (!window.confirm('この記録を削除しますか？')) return;
     try {
       const res = await window.postData('deleteOneOnOne', { logId: logId });
       if (res && res.ok) { if (window.toast) window.toast.success('削除しました'); setOoLoaded(false); }
       else { if (window.toast) window.toast.error((res && res.error) || '削除に失敗しました'); }
     } catch (err) { if (window.toast) window.toast.error(err && err.message ? err.message : String(err)); }
+  }
+  // (oneonone-hr-split) 人事面談を担当マネージャーへ共有 / 解除する。
+  async function toggleOoShare(logId, on) {
+    setOoShareBusy(logId);
+    try {
+      const res = await window.postData('shareHrInterviewToManager', { logId: logId, share: on });
+      if (res && res.ok) {
+        if (window.toast) window.toast.success(on ? '担当マネージャーへ共有しました' : '共有を解除しました');
+        try { window.invalidateCache && window.invalidateCache('listOneOnOnes'); } catch (e) {}
+        setOoLoaded(false);
+      } else { if (window.toast) window.toast.error((res && res.error) || '共有に失敗しました'); }
+    } catch (err) { if (window.toast) window.toast.error(err && err.message ? err.message : String(err)); }
+    finally { setOoShareBusy(''); }
   }
 
   useEffect(() => {
@@ -19451,43 +20739,90 @@ function PageMemberDetail() {
               ))}
             </div></div>
           )}
-          {tab === 'oneonone' && (
+          {tab === 'oneonone' && (() => {
+            // (oneonone-hr-split) サーバが行単位で閲覧フィルタ済み。 FE は group で 1on1 / 人事面談 に振り分ける。
+            const ooList = oneonones.filter(o => o.group !== 'hr_interview');
+            const hrList = oneonones.filter(o => o.group === 'hr_interview');
+            const isHrViewer = !!(window.OO_isHrViewer && window.OO_isHrViewer());
+            const isMgrViewer = !!(window.hasRole && window.hasRole('マネージャー'));
+            // 人事面談サブタブは「共有/閲覧可能な行がある」か「人事/代表」のときのみ表示。
+            const showHrSub = hrList.length > 0 || isHrViewer;
+            const sub = (ooSub === 'hr' && showHrSub) ? 'hr' : '1on1';
+            const renderCard = (o, isHr) => (
+              <div key={o.logId} className="card" style={{ marginBottom: 10 }}>
+                <div className="card-body">
+                  <div className="row between" style={{ alignItems: 'center' }}>
+                    <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                      <span className={isHr ? "badge badge-violet" : "badge badge-indigo"}>{o.typeLabel}</span>
+                      <span className="mono" style={{ fontSize: 12 }}>{o.date || '日付未設定'}</span>
+                      {isHr && o.shareToManager && <span className="badge badge-green" style={{ fontSize: 11 }}>共有済み</span>}
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      {!isHr && isMgrViewer && (
+                        <button className="btn btn-ghost btn-sm" title="この面談をナレッジ化（下書き）" onClick={() => {
+                          window.postData('createKnowledgeFromOneOnOne', { logId: o.logId, memberId: id })
+                            .then(res => { if (window.toast) window.toast.success('ナレッジ下書きを作成しました'); if (res && res.id) window.location.hash = 'knowledge-create?id=' + encodeURIComponent(res.id); })
+                            .catch(e => { if (window.toast) window.toast.error((e && e.message) || 'ナレッジ化に失敗しました'); });
+                        }}>ナレッジ化</button>
+                      )}
+                      {o.canEdit && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setOoErr(''); setOoForm({ logId: o.logId, type: o.type || (isHr ? 'hr_interview' : 'manager_1on1'), group: isHr ? 'hr' : '1on1', shareToManager: !!o.shareToManager, date: o.date || '', memo: o.memo || '', minutesUrl: o.minutesUrl || '', nextAction: o.nextAction || '', nextDate: o.nextDate || '' }); }}><Icon n="edit" s={13} /></button>
+                      )}
+                      {o.canEdit && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => deleteOo(o.logId)}><Icon n="x" s={13} /></button>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 6 }}>面談担当: {o.interviewer}</div>
+                  {o.memo && <div style={{ fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap' }}>{o.memo}</div>}
+                  {o.minutesUrl && <div style={{ marginTop: 6 }}><a href={o.minutesUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--indigo)' }}>議事録を開く</a></div>}
+                  {o.nextAction && <div style={{ fontSize: 12, marginTop: 6 }}>次回アクション: {o.nextAction}</div>}
+                  {o.nextDate && <div style={{ fontSize: 12, marginTop: 2 }}>次回予定: {o.nextDate}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 6 }}>記録者: {o.creator}</div>
+                  {isHr && o.canShare && (
+                    <label className="row" style={{ gap: 6, fontSize: 12, marginTop: 8, alignItems: 'center' }}>
+                      <input type="checkbox" checked={!!o.shareToManager} disabled={ooShareBusy === o.logId}
+                        onChange={ev => toggleOoShare(o.logId, ev.target.checked)} />
+                      担当マネージャーへ共有
+                    </label>
+                  )}
+                  {isHr && o.shareToManager && o.sharedBy && <div style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 2 }}>共有: {o.sharedBy} {o.sharedAt}</div>}
+                </div>
+              </div>
+            );
+            return (
             <div className="card"><div className="card-body">
-              <div className="row between" style={{ alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontSize: 12, color: 'var(--ink3)' }}>面談記録（本人・担当マネージャー・代表のみ閲覧）</div>
-                {window.hasRole && window.hasRole('マネージャー') && <button className="btn btn-primary btn-sm" onClick={() => { setOoErr(''); setOoForm({ type: 'manager_1on1', date: '', memo: '', minutesUrl: '', nextAction: '', nextDate: '' }); }}><Icon n="plus" s={14} /> 1on1記録を追加</button>}
+              <div className="row" style={{ gap: 6, marginBottom: 12 }}>
+                <span className={clsx("chip", sub === '1on1' && "on")} onClick={() => setOoSub('1on1')}>1on1{ooAllowed ? ` (${ooList.length})` : ''}</span>
+                {showHrSub && <span className={clsx("chip", sub === 'hr' && "on")} onClick={() => setOoSub('hr')}>人事面談{ooAllowed ? ` (${hrList.length})` : ''}</span>}
               </div>
               {ooLoading && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>読み込み中...</div>}
               {!ooLoading && !ooAllowed && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>この記録を閲覧する権限がありません。</div>}
-              {!ooLoading && ooAllowed && oneonones.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>記録はありません。</div>}
-              {!ooLoading && ooAllowed && oneonones.map(o => (
-                <div key={o.logId} className="card" style={{ marginBottom: 10 }}>
-                  <div className="card-body">
-                    <div className="row between" style={{ alignItems: 'center' }}>
-                      <div className="row" style={{ gap: 8, alignItems: 'center' }}><span className="badge badge-indigo">{o.typeLabel}</span><span className="mono" style={{ fontSize: 12 }}>{o.date || '日付未設定'}</span></div>
-                      {window.hasRole && window.hasRole('マネージャー') && (
-                        <div className="row" style={{ gap: 6 }}>
-                          <button className="btn btn-ghost btn-sm" title="この面談をナレッジ化（下書き）" onClick={() => {
-                            window.postData('createKnowledgeFromOneOnOne', { logId: o.logId, memberId: id })
-                              .then(res => { if (window.toast) window.toast.success('ナレッジ下書きを作成しました'); if (res && res.id) window.location.hash = 'knowledge-create?id=' + encodeURIComponent(res.id); })
-                              .catch(e => { if (window.toast) window.toast.error((e && e.message) || 'ナレッジ化に失敗しました'); });
-                          }}>ナレッジ化</button>
-                          <button className="btn btn-ghost btn-sm" onClick={() => { setOoErr(''); setOoForm({ logId: o.logId, type: o.type || 'manager_1on1', date: o.date || '', memo: o.memo || '', minutesUrl: o.minutesUrl || '', nextAction: o.nextAction || '', nextDate: o.nextDate || '' }); }}><Icon n="edit" s={13} /></button>
-                          <button className="btn btn-ghost btn-sm" onClick={() => deleteOo(o.logId)}><Icon n="x" s={13} /></button>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 6 }}>面談担当: {o.interviewer}</div>
-                    {o.memo && <div style={{ fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap' }}>{o.memo}</div>}
-                    {o.minutesUrl && <div style={{ marginTop: 6 }}><a href={o.minutesUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--indigo)' }}>議事録を開く</a></div>}
-                    {o.nextAction && <div style={{ fontSize: 12, marginTop: 6 }}>次回アクション: {o.nextAction}</div>}
-                    {o.nextDate && <div style={{ fontSize: 12, marginTop: 2 }}>次回予定: {o.nextDate}</div>}
-                    <div style={{ fontSize: 11, color: 'var(--ink5)', marginTop: 6 }}>記録者: {o.creator}</div>
+
+              {!ooLoading && ooAllowed && sub === '1on1' && (
+                <div>
+                  <div className="row between" style={{ alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, color: 'var(--ink3)' }}>1on1（本人・担当マネージャー・代表が閲覧）</div>
+                    {isMgrViewer && <button className="btn btn-primary btn-sm" onClick={() => { setOoErr(''); setOoForm({ type: 'manager_1on1', group: '1on1', date: '', memo: '', minutesUrl: '', nextAction: '', nextDate: '' }); }}><Icon n="plus" s={14} /> 1on1記録を追加</button>}
                   </div>
+                  {ooList.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>記録はありません。</div>}
+                  {ooList.map(o => renderCard(o, false))}
                 </div>
-              ))}
+              )}
+
+              {!ooLoading && ooAllowed && sub === 'hr' && (
+                <div>
+                  <div className="row between" style={{ alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, color: 'var(--ink3)' }}>人事面談（本人・人事・代表が閲覧。共有した担当マネージャーのみ追加閲覧）</div>
+                    {isHrViewer && <button className="btn btn-primary btn-sm" onClick={() => { setOoErr(''); setOoForm({ type: 'hr_interview', group: 'hr', shareToManager: false, date: '', memo: '', minutesUrl: '', nextAction: '', nextDate: '' }); }}><Icon n="plus" s={14} /> 人事面談を記録</button>}
+                  </div>
+                  {hrList.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink4)' }}>記録はありません。</div>}
+                  {hrList.map(o => renderCard(o, true))}
+                </div>
+              )}
             </div></div>
-          )}
+            );
+          })()}
 
           {tab === 'evaluation' && (
             <div className="card"><div className="card-body">
@@ -19535,7 +20870,7 @@ function PageMemberDetail() {
               <div className="row between" style={{ alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                 <div className="row" style={{ gap: 8, alignItems: 'center' }}>
                   <span style={{ fontSize: 12, color: 'var(--ink4)' }}>現在の状態</span>
-                  <LlaStatusBadge status={(actStatus && actStatus.current_status) || '在籍中'} />
+                  <window.LlaStatusBadge status={(actStatus && actStatus.current_status) || '在籍中'} />
                   {actStatus && actStatus.return_expected_at && <span style={{ fontSize: 12, color: 'var(--ink4)' }}>復帰予定: {actStatus.return_expected_at}</span>}
                   {actStatus && actStatus.redacted && <span className="chip">理由 非共有</span>}
                 </div>
@@ -19632,7 +20967,7 @@ function PageMemberDetail() {
             <div key={a.id} className="row between" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 200, flex: 1 }}>
                 <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                  <LlaSevBadge severity={a.severity} />
+                  <window.LlaSevBadge severity={a.severity} />
                   <span className="chip">{a.typeLabel}</span>
                   <span className={clsx('badge', a.status === 'resolved' || a.status === 'dismissed' ? 'badge-green' : 'badge-amber')}>{a.status}</span>
                 </div>
@@ -19654,7 +20989,7 @@ function PageMemberDetail() {
             <div key={h.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
               <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: 'var(--ink5)' }}>{h.before_status || '—'} →</span>
-                <LlaStatusBadge status={h.after_status} />
+                <window.LlaStatusBadge status={h.after_status} />
                 <span style={{ fontSize: 11.5, color: 'var(--ink5)' }}>{(h.changed_at || '').toString().slice(0, 10)}</span>
               </div>
               {h.reason && <div style={{ fontSize: 12.5, color: 'var(--ink3)', marginTop: 3 }}>理由: {h.reason}</div>}
@@ -19706,20 +21041,34 @@ function PageMemberDetail() {
       {ooForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setOoForm(null)}>
           <div className="card" style={{ width: 520, maxWidth: '94%', maxHeight: '90vh', overflowY: 'auto' }} onClick={ev => ev.stopPropagation()}>
-            <div className="card-head"><div className="card-title">{ooForm.logId ? '1on1記録の編集' : '1on1記録の追加'}</div></div>
+            <div className="card-head"><div className="card-title">{(ooForm.group === 'hr') ? (ooForm.logId ? '人事面談の編集' : '人事面談を記録') : (ooForm.logId ? '1on1記録の編集' : '1on1記録の追加')}</div></div>
             <div className="card-body">
               {ooErr && <div className="error-banner"><Icon n="warn" s={14} cls="error-banner-icon" /><div>{ooErr}</div></div>}
               <div style={{ marginBottom: 10 }}>
                 <label className="field-label">面談種別</label>
-                <div className="select-wrap"><select className="input select" value={ooForm.type} onChange={ev => setOoForm(Object.assign({}, ooForm, { type: ev.target.value }))}>
-                  <option value="manager_1on1">マネージャー1on1</option>
-                  <option value="hr_interview">人事面談</option>
-                  <option value="career_interview">キャリア面談</option>
-                  <option value="onboarding">オンボーディング</option>
-                  <option value="offboarding">オフボーディング</option>
-                  <option value="other">その他</option>
-                </select></div>
+                {ooForm.group === 'hr' ? (
+                  // (oneonone-hr-split) 人事面談サブタブからは hr_interview に固定。
+                  <div className="select-wrap"><select className="input select" value="hr_interview" disabled>
+                    <option value="hr_interview">人事面談</option>
+                  </select></div>
+                ) : (
+                  <div className="select-wrap"><select className="input select" value={ooForm.type === 'hr_interview' ? 'manager_1on1' : ooForm.type} onChange={ev => setOoForm(Object.assign({}, ooForm, { type: ev.target.value }))}>
+                    <option value="manager_1on1">マネージャー1on1</option>
+                    <option value="career_interview">キャリア面談</option>
+                    <option value="onboarding">オンボーディング</option>
+                    <option value="offboarding">オフボーディング</option>
+                    <option value="other">その他</option>
+                  </select></div>
+                )}
               </div>
+              {ooForm.group === 'hr' && (
+                <div style={{ marginBottom: 10 }}>
+                  <label className="row" style={{ gap: 6, fontSize: 13, alignItems: 'center' }}>
+                    <input type="checkbox" checked={!!ooForm.shareToManager} onChange={ev => setOoForm(Object.assign({}, ooForm, { shareToManager: ev.target.checked }))} />
+                    担当マネージャーへ共有する
+                  </label>
+                </div>
+              )}
               <div style={{ marginBottom: 10 }}>
                 <label className="field-label">面談日 <span className="field-req">*</span></label>
                 <input className="input" type="date" value={ooForm.date} onChange={ev => setOoForm(Object.assign({}, ooForm, { date: ev.target.value }))} />
@@ -19965,6 +21314,19 @@ function PageMyPage() {
   const [actForm, setActForm] = useState(null);        // { kind: 'leave'|'low'|'return'|'interview', ... }
   const [actBusy, setActBusy] = useState(false);
   const [actErr, setActErr] = useState('');
+  // (ITEM4) 退会申請 / 部署退部 — メンバー変更申請フロー (MemberChangeRequestModal) を本人スコープで再利用。
+  const [reqOpen, setReqOpen] = useState(false);
+  const [reqType, setReqType] = useState('full_withdrawal');
+  const [myDepts, setMyDepts] = useState([]);
+  function loadMyDepts() {
+    window.fetchData('listScopedDepartments')
+      .then(d => {
+        const arr = (d && Array.isArray(d.departments)) ? d.departments : (Array.isArray(d) ? d : []);
+        setMyDepts(arr.filter(x => x && x.inMaster !== false && (x.deptId != null && x.deptId !== '')).map(x => ({ id: x.deptId, name: x.label || x.key, key: x.key })));
+      })
+      .catch(() => {});
+  }
+  useEffect(() => { loadMyDepts(); }, []);
 
   async function load() {
     if (!myId) { setLoading(false); return; }
@@ -20208,7 +21570,7 @@ function PageMyPage() {
                       {[prof.school, prof.grade].filter(Boolean).length > 0 &&
                         <span style={{ fontSize: 12, color: 'var(--ink3)' }}>{[prof.school, prof.grade].filter(Boolean).join(' ')}</span>}
                       {/* (休会・低稼働) 活動状態バッジ — getMemberActivityStatus(本人) を反映。 */}
-                      {(() => { const st = (actStatus && actStatus.current_status) || '在籍中'; const c = LLA_STATE_COLOR[st] || 'green'; return <span className={`badge badge-${c}`}><span className="badge-dot"></span>{st}</span>; })()}
+                      {(() => { const st = (actStatus && actStatus.current_status) || '在籍中'; const c = (window.LLA_STATE_COLOR || {})[st] || 'green'; return <span className={`badge badge-${c}`}><span className="badge-dot"></span>{st}</span>; })()}
                     </div>
                   </div>
                 </div>
@@ -20228,7 +21590,7 @@ function PageMyPage() {
                   <div className="row between" style={{ alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
                     <div className="row" style={{ gap: 8, alignItems: 'center' }}>
                       <span style={{ fontSize: 12, color: 'var(--ink4)' }}>現在の状態</span>
-                      {(() => { const st = (actStatus && actStatus.current_status) || '在籍中'; const c = LLA_STATE_COLOR[st] || 'green'; return <span className={`badge badge-${c}`}><span className="badge-dot"></span>{st}</span>; })()}
+                      {(() => { const st = (actStatus && actStatus.current_status) || '在籍中'; const c = (window.LLA_STATE_COLOR || {})[st] || 'green'; return <span className={`badge badge-${c}`}><span className="badge-dot"></span>{st}</span>; })()}
                       {actStatus && actStatus.return_expected_at && <span style={{ fontSize: 12, color: 'var(--ink4)' }}>復帰予定: {actStatus.return_expected_at}</span>}
                     </div>
                   </div>
@@ -20238,6 +21600,14 @@ function PageMyPage() {
                     <button className="btn btn-sm" onClick={() => { setActErr(''); setActForm({ kind: 'low' }); }}>低稼働を申告</button>
                     <button className="btn btn-sm" onClick={() => { setActErr(''); setActForm({ kind: 'return' }); }}>復帰予定の変更</button>
                     <button className="btn btn-sm btn-ghost" onClick={() => { setActErr(''); setActForm({ kind: 'interview' }); }}>面談を希望</button>
+                  </div>
+                  {/* (ITEM4) 退会申請 (完全退会) / 部署退部 — メンバー変更申請フローを再利用 */}
+                  <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12 }}>
+                    <p style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 8 }}>続けるのが難しいときは、退部・退会の申請ができます。申請後は代表・人事の承認をお待ちください（すぐに脱退にはなりません）。</p>
+                    <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                      <button className="btn btn-sm btn-ghost" onClick={() => { setReqType('department_leave'); setReqOpen(true); }}>部署退部を申請</button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => { setReqType('full_withdrawal'); setReqOpen(true); }}>退会を申請</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -20520,6 +21890,24 @@ function PageMyPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* (ITEM4) 退会申請 (full_withdrawal) / 部署退部 (department_leave) — メンバー変更申請フローを本人スコープで再利用。
+          member は getMemberDetail(本人) の affiliations を使う (deptId/deptName/isPrimary を含む)。
+          applicant/memberId はサーバがセッションから導出するが、modal は memberId を送るため本人 id を渡す。 */}
+      {reqOpen && myId && (
+        <MemberChangeRequestModal
+          member={{
+            id: myId,
+            name: (prof && (prof.name || prof.氏名)) || (me && me.name) || 'あなた',
+            affiliations: (detail && Array.isArray(detail.affiliations)) ? detail.affiliations : [],
+          }}
+          depts={myDepts}
+          initialType={reqType}
+          onClose={() => setReqOpen(false)}
+          onSubmitted={() => { setReqOpen(false); if (window.toast) window.toast.success('申請しました（代表/人事の承認待ち）'); load(); }}
+          onDeptsChanged={loadMyDepts}
+        />
       )}
     </div>
   );
@@ -21464,11 +22852,61 @@ function recruitNextActorHint(a) {
 }
 
 // 面談録音アップロード (ブラウザ→Drive 直送 → 議事録パイプライン + 状態を判断待ちへ)
+//   (ITEM5) ファイル選択に加え、その場録音 (MediaRecorder) に対応。MinutesUploadView と同じ録音パターンを踏襲。
+//   録音停止後の Blob は submit() で既存のアップロードフロー (createMinutesUploadSession → PUT → recruitFinalizeInterviewUpload) にそのまま流す。
+//   MediaRecorder 非対応 (Safari/iOS 等) では録音UIを無効化しファイル選択にフォールバックする。
 function RecruitInterviewUpload({ appId, stage, onDone }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const meetingType = stage === 'primary' ? '一次面接' : '二次面接';
+  // (global-recording) 録音は window.RecordingController に一本化。
+  const [recBlob, setRecBlob] = useState(null);
+  const [recMime, setRecMime] = useState('');
+  const ctrl = window.RecordingController;
+  const recSupported = !!(ctrl && ctrl.isSupported());
+  const [recCtl, setRecCtl] = useState(ctrl ? ctrl.getState() : { state: 'idle' });
+  useEffect(() => { if (!ctrl) return undefined; return ctrl.subscribe(setRecCtl); }, []);
+  // この録音がこのフォームの面接 (context==='recruit' かつ同じ appId/stage) か
+  const isMine = recCtl.meta && recCtl.meta.context === 'recruit' &&
+                 String(recCtl.meta.appId) === String(appId) && recCtl.meta.stage === stage;
+  const recState = (recCtl.state === 'recording' || recCtl.state === 'paused' || recCtl.state === 'stopping')
+    ? recCtl.state : (recBlob ? 'done' : 'idle');
+
+  const fmtTime = (s) => {
+    s = Math.max(0, Math.floor(s || 0));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    const p = (n) => String(n).padStart(2, '0');
+    return (h > 0 ? p(h) + ':' : '') + p(m) + ':' + p(sec);
+  };
+
+  // (global-recording) コントローラが done・未投稿で、このフォーム発の録音なら Blob を引き取る
+  useEffect(() => {
+    if (!ctrl) return;
+    if (recCtl.state === 'done' && recCtl.hasBlob && recCtl.meta && recCtl.meta.context === 'recruit' &&
+        String(recCtl.meta.appId) === String(appId) && recCtl.meta.stage === stage && !recBlob) {
+      const taken = ctrl.takeBlob();
+      if (taken && taken.blob) { setRecBlob(taken.blob); setRecMime(taken.mimeType || 'audio/webm'); }
+    }
+  }, [recCtl.state, recCtl.hasBlob]);
+
+  const startRec = () => {
+    if (!ctrl) { setMsg('この端末は録音非対応です。下のファイル選択をご利用ください。'); return; }
+    setRecBlob(null); setRecMime('');
+    ctrl.start({ context: 'recruit', appId: appId, stage: stage, label: meetingType,
+                 returnHash: '#recruit-detail?id=' + appId })
+      .catch((e) => {
+        const m = (e && e.message) || String(e);
+        if (window.toast && window.toast.error) window.toast.error(m); else setMsg('⚠️ ' + m);
+      });
+  };
+  const discardRec = () => {
+    if (ctrl && (recCtl.state === 'recording' || recCtl.state === 'paused' || recCtl.state === 'stopping' || (recCtl.state === 'done' && isMine))) {
+      ctrl.discard();
+    }
+    setRecBlob(null); setRecMime('');
+  };
+
   const putToDrive = (uploadUrl, blob, mimeType, onProgress) => new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl, true);
@@ -21485,16 +22923,20 @@ function RecruitInterviewUpload({ appId, stage, onDone }) {
     xhr.send(blob);
   });
   async function submit() {
+    // (ITEM5) 選択ファイル優先、無ければ録音 Blob をアップロード
+    let blob = null, filename = '';
     const f = fileRef.current && fileRef.current.files && fileRef.current.files[0];
-    if (!f) { setMsg('録音ファイルを選択してください'); return; }
-    const mimeType = f.type || 'application/octet-stream';
-    const mb = (f.size / (1024 * 1024)).toFixed(0);
+    if (f) { blob = f; filename = f.name; }
+    else if (recBlob) { blob = recBlob; filename = 'interview-' + stage + '.' + (recMime.indexOf('mp4') >= 0 ? 'm4a' : 'webm'); }
+    if (!blob) { setMsg('録音するか、録音ファイルを選択してください'); return; }
+    const mimeType = blob.type || 'application/octet-stream';
+    const mb = (blob.size / (1024 * 1024)).toFixed(0);
     setBusy(true); setMsg('アップロード準備中…');
     try {
-      const sess = await window.postData('createMinutesUploadSession', { filename: f.name, mimeType: mimeType, sizeBytes: f.size, origin: window.location.origin });
+      const sess = await window.postData('createMinutesUploadSession', { filename: filename, mimeType: mimeType, sizeBytes: blob.size, origin: window.location.origin });
       const uploadUrl = (sess && (sess.uploadUrl || (sess.data && sess.data.uploadUrl))) || '';
       if (!uploadUrl) { setMsg('⚠️ アップロードセッションの発行に失敗しました'); setBusy(false); return; }
-      const fileId = await putToDrive(uploadUrl, f, mimeType, (p) => { setMsg('アップロード中… ' + Math.round(p * 100) + '%（' + mb + 'MB）'); });
+      const fileId = await putToDrive(uploadUrl, blob, mimeType, (p) => { setMsg('アップロード中… ' + Math.round(p * 100) + '%（' + mb + 'MB）'); });
       if (!fileId) { setMsg('⚠️ アップロードは完了しましたが fileId を取得できませんでした'); setBusy(false); return; }
       setMsg('登録中…');
       const res = await window.postData('recruitFinalizeInterviewUpload', { appId: appId, stage: stage, fileId: fileId, meeting_type: meetingType });
@@ -21503,6 +22945,7 @@ function RecruitInterviewUpload({ appId, stage, onDone }) {
         setMsg('');
         if (window.toast) window.toast.success('録音をアップロードしました。議事録は数分後に自動生成され、判断依頼を送りました');
         if (fileRef.current) fileRef.current.value = '';
+        discardRec();
         if (onDone) onDone();
       } else { setMsg('⚠️ 登録に失敗しました: ' + ((res && res.error) || JSON.stringify(res))); }
     } catch (e) { setMsg('⚠️ エラー: ' + (e && e.message || e)); }
@@ -21510,8 +22953,26 @@ function RecruitInterviewUpload({ appId, stage, onDone }) {
   }
   return (
     <div>
+      {/* (ITEM5) その場録音 (MediaRecorder 対応端末のみ) */}
+      {recSupported && (
+        <div style={{ border: '1px solid var(--line, #e3e8f2)', borderRadius: 8, padding: 10, marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {recState === 'idle'
+            && <button className="btn btn-sm" type="button" onClick={startRec} disabled={busy}>● 録音開始</button>}
+          {(recState === 'recording' || recState === 'paused' || recState === 'stopping') &&
+            <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: recState === 'paused' ? 'var(--ink4, #7a869c)' : '#d33', display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: recState === 'paused' ? '#bbb' : '#d33', display: 'inline-block' }} />
+              {recState === 'paused' ? '一時停止' : (recState === 'stopping' ? '停止中' : '録音中')} {fmtTime((recCtl.elapsedMs || 0) / 1000)}
+              <span style={{ fontWeight: 400, color: 'var(--ink4, #7a869c)' }}>（操作はヘッダーの録音バーから）</span>
+            </span>}
+          {recState === 'done' && recBlob && <>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal, #0ea5a4)' }}>✓ 録音あり ({Math.round(recBlob.size / 1024)}KB)</span>
+            <button className="btn btn-sm btn-ghost" type="button" onClick={discardRec} disabled={busy}>録り直す</button>
+          </>}
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: 'var(--ink4)', marginBottom: 4 }}>{recSupported ? 'または既存ファイルを選択:' : '録音ファイルを選択:'}</div>
       <input ref={fileRef} type="file" accept="audio/*,video/*" disabled={busy} style={{ marginBottom: 10, display: 'block', fontSize: 13 }} />
-      <button className="btn btn-primary" onClick={submit} disabled={busy}>録音をアップロードして議事録を生成</button>
+      <button className="btn btn-primary" onClick={submit} disabled={busy || (recState === 'recording' || recState === 'paused' || recState === 'stopping')}>録音をアップロードして議事録を生成</button>
       {msg && <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 8 }}>{msg}</div>}
     </div>
   );
@@ -24691,20 +26152,45 @@ function PageNotifications(){
     }
   }
 
-  // (Phase 17.S-fix) 通知 → 詳細画面 遷移
-  //   - REG-/R- → 該当 reg の event を fetch → イベント詳細 + 申込モーダル 自動オープン
-  //   - EVT- → イベント詳細
-  //   - kpi → KPI レポート
-  async function navigateToDetail(n) {
-    if (!n || !n.relatedId) return;
-    const rid = String(n.relatedId);
-    const kind = String(n.type || n.kind || '');
+  // (ITEM3) 通知 → 遷移先を type / relatedId から導出する純粋ヘルパ。
+  //   通知行 (Notifications シート) には link 列が無く relatedId も多くは空のため、
+  //   FE 側で type からデフォルト遷移先を決める (バックエンド変更を避ける方針)。
+  //   relatedId が EVT-/E- 等を含む場合はそれを優先。
+  //   reg (REG-/R-) は event の追加 fetch が要るため navigateToDetail 側で非同期処理する。
+  function _notifLink(n) {
+    if (!n) return null;
+    if (n.link) return String(n.link);  // 将来 link 列が付いた場合に備える
+    const rid  = String(n.relatedId || '');
+    const kind = String(n.type || n.kind || '').toLowerCase();
 
-    // KPI レポート
-    if (/kpi_report|kpi/i.test(kind)) {
-      window.location.hash = 'analytics';
-      return;
-    }
+    // relatedId が明示的な ID を持つ場合
+    if (/^evt-|^e-/i.test(rid)) return 'event-detail?id=' + encodeURIComponent(rid);
+
+    // type からの導出 (前方一致で互換 — 例: knowledge_general, survey_reminder)
+    if (kind.indexOf('kpi') === 0 || kind === 'kpi_report' || kind === 'nps') return 'analytics';
+    if (kind.indexOf('payment') === 0 || kind === 'refund') return 'applications';
+    if (kind.indexOf('reg') === 0 || kind === 'registration_new' || kind === 'orphan_reg' || kind === 'reg_no_app' || kind === 'duplicate_session') return 'applications';
+    if (kind === 'event_full' || kind === 'event_reminder') return rid ? ('event-detail?id=' + encodeURIComponent(rid)) : 'events';
+    if (kind.indexOf('task') === 0 || kind === 'todo' || kind === 'todo_reminder') return 'todo';
+    if (kind.indexOf('mail') === 0) return 'mail';
+    if (kind.indexOf('chat') === 0) return 'chat';
+    if (kind.indexOf('approval') === 0) return 'approvals';
+    if (kind.indexOf('leave') === 0 || kind === 'follow_up') return 'leave-management';
+    if (kind.indexOf('survey') === 0 || kind === 'survey_attention' || kind === 'survey_reminder' || kind === 'scale' || kind === 'free' || kind === 'text') return 'survey-summary';
+    if (kind.indexOf('knowledge') === 0) return rid ? ('knowledge-detail?id=' + encodeURIComponent(rid)) : 'knowledge';
+    if (kind.indexOf('interview') === 0 || kind === 'hr_interview' || kind === 'pre_interview_reminder' || kind.indexOf('recruit') === 0) return 'recruit';
+    // 既定: 警告/システム/その他は通知センターに留まる代わりにダッシュボードへ
+    if (kind === 'warn' || kind === 'warning') return 'dashboard';
+    return 'dashboard';
+  }
+  window._notifLink = _notifLink;
+
+  // (Phase 17.S-fix / ITEM3) 通知 → 詳細画面 遷移
+  //   - REG-/R- → 該当 reg の event を fetch → イベント詳細 + 申込モーダル 自動オープン
+  //   - それ以外は _notifLink(n) で導出した遷移先へ (必ずどこかへ遷移する)
+  async function navigateToDetail(n) {
+    if (!n) return;
+    const rid = String(n.relatedId || '');
 
     // RegID (= R- or REG-) → reg の event を 取得 して モーダル指定 で 遷移
     if (/^R-|^REG-/.test(rid)) {
@@ -24722,16 +26208,9 @@ function PageNotifications(){
       return;
     }
 
-    // EventID → イベント詳細
-    if (/^EVT-|^E-/.test(rid) || /event_full|event_reminder/i.test(kind)) {
-      window.location.hash = 'event-detail?id=' + encodeURIComponent(rid);
-      return;
-    }
-
-    // フォールバック
-    if (/registration|payment/i.test(kind)) {
-      window.location.hash = 'applications';
-    }
+    // type / relatedId から導出した遷移先へ
+    const dest = _notifLink(n);
+    if (dest) window.location.hash = dest;
   }
 
   // (Phase 17.S-fix) クリック動作 — 既読化 + 詳細遷移
@@ -36890,28 +38369,30 @@ function MinutesUploadView({ presetDept } = {}) {
   const [members, setMembers] = useState([]);   // (出欠) 役割スコープ済みメンバー
   const [roster, setRoster] = useState([]);     // (出欠) 参加者ロスター
   const [project, setProject] = useState('');
+  // (global-recording) 録音は window.RecordingController に一本化。
+  // recBlob はファイル選択フォールバック互換のための「コントローラから取得済み Blob」のローカル退避。
   const [recBlob, setRecBlob] = useState(null);
   const [recMime, setRecMime] = useState('');
-  const [recState, setRecState] = useState('idle');
-  const [recInfo, setRecInfo] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const recRef = React.useRef(null);
-  const chunksRef = React.useRef([]);
   const fileRef = React.useRef(null);
-  const [elapsed, setElapsed] = useState(0);    // (録音) 経過秒数(一時停止中は加算停止)
-  const timerRef = React.useRef(null);
   const MAX_BYTES = 25 * 1024 * 1024 * 1024; // 25GB(ブラウザ→Drive 直送のため doPost 上限に縛られない)
 
+  const ctrl = window.RecordingController;
+  const recSupported = !!(ctrl && ctrl.isSupported());
+  // (global-recording) コントローラ状態を購読 (ヘッダー/別フォームからの操作も反映)
+  const [recCtl, setRecCtl] = useState(ctrl ? ctrl.getState() : { state: 'idle' });
+  useEffect(() => { if (!ctrl) return undefined; return ctrl.subscribe(setRecCtl); }, []);
+  // この録音がこのフォーム発か (context==='minutes')
+  const isMine = recCtl.meta && recCtl.meta.context === 'minutes';
+  const recState = (recCtl.state === 'recording' || recCtl.state === 'paused' || recCtl.state === 'stopping')
+    ? recCtl.state : (recBlob ? 'done' : 'idle');
   const fmtTime = (s) => {
     s = Math.max(0, Math.floor(s || 0));
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     const p = (n) => String(n).padStart(2, '0');
     return (h > 0 ? p(h) + ':' : '') + p(m) + ':' + p(sec);
   };
-  const startTimer = () => { stopTimer(); timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000); };
-  const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
-  useEffect(() => () => stopTimer(), []);   // アンマウント時にタイマー解放
   useEffect(() => { if (presetDept) setDept(presetDept); }, [presetDept]);  // 部署ページから固定部署を反映
 
   useEffect(() => {
@@ -36925,52 +38406,33 @@ function MinutesUploadView({ presetDept } = {}) {
     }).catch(() => {});
   }, []);
 
-  const pickMime = () => {
-    if (typeof MediaRecorder === 'undefined') return null;
-    const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
-    for (let i = 0; i < cands.length; i++) {
-      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cands[i])) return cands[i];
+  // (global-recording) コントローラが「停止済み(done)・未投稿」かつこのフォーム発の録音なら、Blob を引き取る
+  useEffect(() => {
+    if (!ctrl) return;
+    if (recCtl.state === 'done' && recCtl.hasBlob && recCtl.meta && recCtl.meta.context === 'minutes' && !recBlob) {
+      const taken = ctrl.takeBlob();
+      if (taken && taken.blob) {
+        setRecBlob(taken.blob); setRecMime(taken.mimeType || 'audio/webm');
+        setMsg('録音を取り込みました (' + Math.round(taken.blob.size / 1024) + 'KB)。「投稿する」で送信できます。');
+      }
     }
-    return '';
-  };
+  }, [recCtl.state, recCtl.hasBlob]);
 
-  const startRec = async () => {
-    const mime = pickMime();
-    if (mime === null) { setRecInfo('この端末は録音非対応です。下のファイル選択をご利用ください。'); return; }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const opt = { audioBitsPerSecond: 16000 };
-      if (mime) opt.mimeType = mime;
-      const mr = new MediaRecorder(stream, opt);
-      chunksRef.current = [];
-      mr.ondataavailable = e => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        const b = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
-        setRecBlob(b); setRecMime(mime || 'audio/webm');
-        setRecInfo('録音完了 (' + fmtTime(elapsedAtStopRef.current) + ' / ' + Math.round(b.size / 1024) + 'KB)');
-        stream.getTracks().forEach(t => t.stop());
-      };
-      setElapsed(0); mr.start(); recRef.current = mr; setRecState('recording'); setRecInfo('録音中…'); startTimer();
-    } catch (e) { setRecInfo('マイク取得に失敗: ' + (e && e.message || e)); }
+  const startRec = () => {
+    if (!ctrl) { setMsg('この端末は録音非対応です。下のファイル選択をご利用ください。'); return; }
+    setRecBlob(null); setRecMime('');
+    ctrl.start({ context: 'minutes', dept: dept, label: (name || dept || '会議') + ' 会議',
+                 returnHash: '#minutes?tab=upload' })
+      .catch((e) => {
+        const m = (e && e.message) || String(e);
+        if (window.toast && window.toast.error) window.toast.error(m); else setMsg('⚠️ ' + m);
+      });
   };
-  const elapsedAtStopRef = React.useRef(0);
-  const pauseRec = () => {
-    const mr = recRef.current;
-    if (mr && mr.state === 'recording' && typeof mr.pause === 'function') {
-      mr.pause(); stopTimer(); setRecState('paused'); setRecInfo('一時停止中…');
+  const discardRec = () => {
+    if (ctrl && (recCtl.state === 'recording' || recCtl.state === 'paused' || recCtl.state === 'stopping' || (recCtl.state === 'done' && isMine))) {
+      ctrl.discard();
     }
-  };
-  const resumeRec = () => {
-    const mr = recRef.current;
-    if (mr && mr.state === 'paused' && typeof mr.resume === 'function') {
-      mr.resume(); startTimer(); setRecState('recording'); setRecInfo('録音中…');
-    }
-  };
-  const stopRec = () => {
-    elapsedAtStopRef.current = elapsed;
-    stopTimer();
-    if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop();
-    setRecState('done');
+    setRecBlob(null); setRecMime(''); setMsg('');
   };
 
   const blobToB64 = (blob) => new Promise((resolve, reject) => {
@@ -37030,7 +38492,7 @@ function MinutesUploadView({ presetDept } = {}) {
       const ok = res && (res.ok || res.intake_id || (res.data && (res.data.ok || res.data.intake_id)));
       if (ok) {
         setMsg('✅ 投稿しました。議事録は数分後に自動生成され、この議事録ページに掲載されます。出欠・連絡は「出欠・連絡」タブで後から編集できます。');
-        setRecBlob(null); setRecState('idle'); setRecInfo(''); setRoster([]);
+        setRecBlob(null); setRecMime(''); setRoster([]);
         if (fileRef.current) fileRef.current.value = '';
       } else { setMsg('⚠️ 登録に失敗しました: ' + JSON.stringify(res)); }
     } catch (e) { setMsg('⚠️ エラー: ' + (e && e.message || e)); }
@@ -37063,24 +38525,24 @@ function MinutesUploadView({ presetDept } = {}) {
           <AttendeeRosterEditor dept={dept} members={members} value={roster} onChange={setRoster} />
         </div>
         <input placeholder="案件名(任意・案件管理部署のみ)" value={project} onChange={e => setProject(e.target.value)} style={fld} />
+        {recSupported && (
         <div style={{ margin: '12px 0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {(recState === 'idle' || recState === 'done')
+          {recState === 'idle'
             && <button className="jb-btn" onClick={startRec} disabled={busy}>● 録音開始</button>}
-          {recState === 'recording' && <>
-            <button className="jb-btn" onClick={pauseRec}>❚❚ 一時停止</button>
-            <button className="jb-btn" onClick={stopRec}>■ 停止</button>
-          </>}
-          {recState === 'paused' && <>
-            <button className="jb-btn" onClick={resumeRec}>● 再開</button>
-            <button className="jb-btn" onClick={stopRec}>■ 停止</button>
-          </>}
-          {(recState === 'recording' || recState === 'paused') &&
-            <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: recState === 'paused' ? 'var(--ink4, #7a869c)' : '#d33', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {(recState === 'recording' || recState === 'paused' || recState === 'stopping') &&
+            <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: recState === 'paused' ? 'var(--ink4, #7a869c)' : '#d33', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 9, height: 9, borderRadius: '50%', background: recState === 'paused' ? '#bbb' : '#d33', display: 'inline-block' }} />
-              {fmtTime(elapsed)}
+              {recState === 'paused' ? '一時停止' : (recState === 'stopping' ? '停止中' : '録音中')} {fmtTime((recCtl.elapsedMs || 0) / 1000)}
+              <span style={{ fontWeight: 400, color: 'var(--ink4, #7a869c)', marginLeft: 4 }}>（操作はヘッダーの録音バーから）</span>
             </span>}
-          <span style={{ fontSize: 12, color: 'var(--ink4, #7a869c)' }}>{recInfo}</span>
-        </div>
+          {recState === 'done' && recBlob &&
+            <>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal, #0ea5a4)' }}>
+                ✓ 録音あり ({Math.round(recBlob.size / 1024)}KB)
+              </span>
+              <button className="jb-btn" type="button" onClick={discardRec} disabled={busy}>録り直す</button>
+            </>}
+        </div>)}
         <div style={{ margin: '12px 0', fontSize: 12, color: 'var(--ink4, #7a869c)' }}>
           または既存ファイル: <input type="file" accept="audio/*,video/*" ref={fileRef} />
           <div style={{ marginTop: 4 }}>数百MB〜GB級の長尺もそのままアップロードできます（ブラウザから直接Driveへ送信）。</div>
@@ -37726,30 +39188,53 @@ function MinutesOneOnOneView({ deptFilter, memberPool } = {}) {
       {loading && <div className="empty">読込中…</div>}
       {!loading && !err && !data.allowed && <div className="empty">この相手の 1on1・面談記録を閲覧する権限がありません</div>}
       {!loading && !err && data.allowed && data.logs.length === 0 && <div className="empty">記録がありません</div>}
-      {!loading && !err && data.allowed && data.logs.map(log => {
-        const urls = parseUrls(log.minutesUrl);
-        return (
-          <div className="card" key={log.logId} style={{ marginBottom: 10, padding: '14px 16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0, flex: '1 1 60%' }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>
-                  {log.typeLabel || '面談'}
-                  <span style={{ fontWeight: 400, color: 'var(--ink4, #7a869c)', marginLeft: 8 }}>{log.date || '日時未設定'}</span>
+      {!loading && !err && data.allowed && (() => {
+        // (oneonone-hr-split) group で 1on1 / 人事面談 を分けて見出し付きで表示。
+        const ooLogs = data.logs.filter(l => l.group !== 'hr_interview');
+        const hrLogs = data.logs.filter(l => l.group === 'hr_interview');
+        const renderLog = (log) => {
+          const urls = parseUrls(log.minutesUrl);
+          const isHr = log.group === 'hr_interview';
+          return (
+            <div className="card" key={log.logId} style={{ marginBottom: 10, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0, flex: '1 1 60%' }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    {log.typeLabel || '面談'}
+                    <span style={{ fontWeight: 400, color: 'var(--ink4, #7a869c)', marginLeft: 8 }}>{log.date || '日時未設定'}</span>
+                    {isHr && log.shareToManager && <span className="badge badge-green" style={{ fontSize: 11, marginLeft: 8 }}>共有</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)', marginTop: 3 }}>担当: {log.interviewer || '—'}</div>
+                  {log.memo && <div style={{ fontSize: 13, color: 'var(--ink2, #3a4661)', marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{log.memo}</div>}
+                  {log.nextAction && <div style={{ fontSize: 12, color: 'var(--ink3, #6b7689)', marginTop: 6 }}>次回: {log.nextAction}{log.nextDate ? '（' + log.nextDate + '）' : ''}</div>}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--ink4, #7a869c)', marginTop: 3 }}>担当: {log.interviewer || '—'}</div>
-                {log.memo && <div style={{ fontSize: 13, color: 'var(--ink2, #3a4661)', marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{log.memo}</div>}
-                {log.nextAction && <div style={{ fontSize: 12, color: 'var(--ink3, #6b7689)', marginTop: 6 }}>次回: {log.nextAction}{log.nextDate ? '（' + log.nextDate + '）' : ''}</div>}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-                {urls.length === 0 && <span style={{ fontSize: 12, color: 'var(--ink5, #9aa4b8)' }}>議事録リンクなし</span>}
-                {urls.map((u, i) => (/^https?:\/\//i.test(u)
-                  ? <a key={i} className="jb-btn" href={u} target="_blank" rel="noopener">議事録{urls.length > 1 ? (' ' + (i + 1)) : ''}</a>
-                  : <span key={i} style={{ fontSize: 12, color: 'var(--ink5, #9aa4b8)' }}>{u}</span>))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                  {urls.length === 0 && <span style={{ fontSize: 12, color: 'var(--ink5, #9aa4b8)' }}>議事録リンクなし</span>}
+                  {urls.map((u, i) => (/^https?:\/\//i.test(u)
+                    ? <a key={i} className="jb-btn" href={u} target="_blank" rel="noopener">議事録{urls.length > 1 ? (' ' + (i + 1)) : ''}</a>
+                    : <span key={i} style={{ fontSize: 12, color: 'var(--ink5, #9aa4b8)' }}>{u}</span>))}
+                </div>
               </div>
             </div>
+          );
+        };
+        return (
+          <div>
+            {ooLogs.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink3, #6b7689)', marginBottom: 8 }}>1on1</div>
+                {ooLogs.map(renderLog)}
+              </div>
+            )}
+            {hrLogs.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink3, #6b7689)', marginBottom: 8 }}>人事面談</div>
+                {hrLogs.map(renderLog)}
+              </div>
+            )}
           </div>
         );
-      })}
+      })()}
     </div>
   );
 }
@@ -37836,6 +39321,10 @@ function LlaSevBadge({ severity }) {
   const lbl = { high: '高', warn: '注意', info: '情報' };
   return <span className={`badge badge-${map[severity] || 'indigo'}`}>{lbl[severity] || severity}</span>;
 }
+// 別の text/babel ブロック (メンバー管理/メンバー詳細/マイページ) からも参照するため window へ公開
+window.LLA_STATE_COLOR = LLA_STATE_COLOR;
+window.LlaStatusBadge = LlaStatusBadge;
+window.LlaSevBadge = LlaSevBadge;
 
 function PageLeaveLowActivity() {
   const [loading, setLoading] = useState(true);
@@ -37968,7 +39457,7 @@ function PageLeaveLowActivity() {
             <div key={a.id} className="row between" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 220, flex: 1 }}>
                 <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                  <LlaSevBadge severity={a.severity} />
+                  <window.LlaSevBadge severity={a.severity} />
                   <span style={{ fontWeight: 600 }}>{a.memberName}</span>
                   <span className="chip">{a.typeLabel}</span>
                 </div>
@@ -37991,7 +39480,7 @@ function PageLeaveLowActivity() {
                 <div className="row" style={{ gap: 8, alignItems: 'center' }}>
                   <span style={{ fontWeight: 600 }}>{c.memberName}</span>
                   <span style={{ fontSize: 12, color: 'var(--ink5)' }}>{c.before_status || '—'} →</span>
-                  <LlaStatusBadge status={c.after_status} />
+                  <window.LlaStatusBadge status={c.after_status} />
                 </div>
                 <span style={{ fontSize: 11.5, color: 'var(--ink5)' }}>{(c.changed_at || '').toString().slice(0, 10)}</span>
               </div>
@@ -41672,14 +43161,23 @@ function AuthGate(){
         setState('signin');
         return;
       }
+      // 永続キャッシュをハイドレート (リロード後スピナーを消す): memberId 別キーから読み、 全 entry を stale 扱い → SWR が即返し + 裏 revalidate
+      try { if (window.hydrateCacheFromStorage) window.hydrateCacheFromStorage(); } catch (e) {}
       // 自動ログイン: whoami で memberId の有効性を確認
       const data = await window.fetchData('whoami');
       if (data && data.member) {
         setUser(data);
         window.currentUser = data;
         setState('authed');
+        // セッション復帰: 主要データセットを並列プリフェッチ (fire-and-forget)
+        try { if (window.warmCache) window.warmCache(); } catch (e) {}
       } else {
-        // memberId が無効 (退会など) → サインイン画面
+        // memberId が無効 (退会など) → サインイン画面。
+        // hydrateCacheFromStorage で既に旧 memberId の entry をメモリへ載せているため、
+        // logout / __handleUnauthorized__ と同様に永続キャッシュ + メモリを必ずクリアする
+        // (= data-at-rest 保持の穴を塞ぐ。 memberId クリア前に呼ぶ → 現在 mid のキーも掃除)。
+        try { if (window.clearPersistentCache) window.clearPersistentCache(); } catch (e) {}
+        try { if (window._dataCache) window._dataCache.clear(); if (window._inflightRequests) window._inflightRequests.clear(); if (window._dataListeners) window._dataListeners.clear(); } catch (e) {}
         window.setStoredMemberId('');
         window.setStoredToken('');
         setState('signin');
@@ -41696,14 +43194,18 @@ function AuthGate(){
     setUser(userData);
     window.currentUser = userData;
     setState('authed');
+    // ログイン直後: 主要データセットを並列プリフェッチ (fire-and-forget)。 SigninGate.finish も onLogin 経由でここを通る。
+    try { if (window.warmCache) window.warmCache(); } catch (e) {}
   }
 
   function handleLogout() {
+    // 永続キャッシュも消す (memberId クリア前に呼ぶ → 現在 mid のキーも掃除される)
+    try { if (window.clearPersistentCache) window.clearPersistentCache(); } catch (e) {}
     window.setStoredMemberId('');
     window.setStoredToken('');
     window.currentUser = null;
     // identity を跨いだスコープデータ漏れを防ぐためキャッシュを全クリア
-    try { if (window._dataCache) window._dataCache.clear(); if (window._inflightRequests) window._inflightRequests.clear(); } catch (e) {}
+    try { if (window._dataCache) window._dataCache.clear(); if (window._inflightRequests) window._inflightRequests.clear(); if (window._dataListeners) window._dataListeners.clear(); } catch (e) {}
     setUser(null);
     setState('signin');
   }
@@ -42116,12 +43618,15 @@ function App({user, onLogout}){
   const Comp = PAGES[nav] || PAGES.dashboard;
   const ToastContainerComp = window.ToastContainer;
   const ConfirmDialogHostComp = window.ConfirmDialogHost;
+  // (global-recording) ヘッダー録音インジケータ。nav で差し替わらない安定兄弟として 1 回だけマウント。
+  const RecordingHeaderWidgetComp = window.RecordingHeaderWidget;
   return (
     <AppFragment>
       <Comp/>
       <ToastContainerComp/>
       <ConfirmDialogHostComp/>
       <NotificationSidePanel/>
+      {RecordingHeaderWidgetComp && <RecordingHeaderWidgetComp/>}
     </AppFragment>
   );
 }
@@ -42181,12 +43686,10 @@ function NotificationSidePanel() {
 
   const unreadCount = notifs.filter(n => n.unread).length;
 
-  // 詳細遷移 (= PageNotifications と同じロジック)
+  // (ITEM3) 詳細遷移 (= PageNotifications と同じロジック / window._notifLink を共有)
   async function navigateToDetail(n) {
-    if (!n || !n.relatedId) return;
-    const rid = String(n.relatedId);
-    const kind = String(n.type || n.kind || '');
-    if (/kpi_report|kpi/i.test(kind)) { window.location.hash = 'analytics'; return; }
+    if (!n) return;
+    const rid = String(n.relatedId || '');
     if (/^R-|^REG-/.test(rid)) {
       try {
         const reg = await window.fetchData('getRegistrationById', { regId: rid });
@@ -42198,11 +43701,18 @@ function NotificationSidePanel() {
       window.location.hash = 'applications';
       return;
     }
-    if (/^EVT-|^E-/.test(rid) || /event_full|event_reminder/i.test(kind)) {
-      window.location.hash = 'event-detail?id=' + encodeURIComponent(rid);
-      return;
+    // type / relatedId から導出 (PageNotifications と同一ヘルパを共有)
+    let dest = null;
+    if (typeof window._notifLink === 'function') {
+      dest = window._notifLink(n);
+    } else {
+      // フォールバック (ヘルパ未読込時): 最低限 type で振り分け
+      const kind = String(n.type || n.kind || '').toLowerCase();
+      if (kind.indexOf('payment') === 0 || kind.indexOf('reg') === 0) dest = 'applications';
+      else if (kind.indexOf('task') === 0) dest = 'todo';
+      else dest = 'dashboard';
     }
-    if (/registration|payment/i.test(kind)) window.location.hash = 'applications';
+    if (dest) window.location.hash = dest;
   }
 
   async function handleClick(n) {
